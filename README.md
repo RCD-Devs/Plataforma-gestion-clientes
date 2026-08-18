@@ -13,12 +13,17 @@ En desarrollo el acceso es de demo: en `/login` se elige un usuario del equipo. 
 
 ## Stack
 
-Next.js 15, React 19, TypeScript, Tailwind CSS 4, Prisma 6 y SQLite.
+Next.js 15, React 19, TypeScript, Tailwind CSS 4, Prisma 6 y PostgreSQL.
+
+Prisma funciona en Vercel. SQLite no: el filesystem del deploy es efímero y no persiste `dev.db`.
 
 ## Cómo correrlo
 
+1. Copia `.env.example` a `.env`.
+2. Completa `DATABASE_URL` y `DIRECT_URL` con tu Postgres (Neon, Vercel Postgres o Supabase). Si no usas pooler, pon la misma URI en ambas.
+3. Instala y sincroniza:
+
 ```bash
-cp .env.example .env
 npm install
 npm run db:push
 npm run db:seed
@@ -30,8 +35,10 @@ La app queda en [http://localhost:3000](http://localhost:3000).
 | Script | Uso |
 | --- | --- |
 | `npm run dev` | Servidor de desarrollo |
-| `npm run db:push` | Sincroniza el esquema con SQLite |
+| `npm run db:push` | Sincroniza el esquema con PostgreSQL |
 | `npm run db:seed` | Carga equipos, clientes y solicitudes de ejemplo |
 | `npm run db:reset` | Borra la base y vuelve a sembrar |
 
-La URL de la base se define en `DATABASE_URL` (por defecto `file:./dev.db`).
+## Deploy en Vercel
+
+En el proyecto de Vercel agrega las mismas variables (`DATABASE_URL` y `DIRECT_URL`). Luego, desde tu máquina y con esas URLs en `.env`, corre `npm run db:push` y `npm run db:seed` una vez para crear tablas y datos de demo.

@@ -1,14 +1,16 @@
 // Plataforma de gestión de clientes — Grupo Revo / Rompecabeza
-// SQLite en desarrollo (migrable a PostgreSQL en producción).
-// Nota: SQLite no soporta enums de Prisma; usamos String + constantes en la app.
+// PostgreSQL (Vercel / Neon / Supabase). Los estados y roles siguen en String.
+// DATABASE_URL: pooler (app). DIRECT_URL: conexión directa (db push / migrate).
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Client {
