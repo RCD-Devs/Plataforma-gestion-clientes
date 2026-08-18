@@ -1,0 +1,143 @@
+"use client";
+
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { STATUSES, PRIORITIES, ROLES } from "@/lib/constants";
+
+type Opt = { id: string; name: string };
+
+export function Filters({
+  clients,
+  users,
+  teams,
+}: {
+  clients: Opt[];
+  users: Opt[];
+  teams: Opt[];
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const sp = useSearchParams();
+
+  function setParam(key: string, value: string) {
+    const params = new URLSearchParams(sp.toString());
+    if (value) params.set(key, value);
+    else params.delete(key);
+    router.push(`${pathname}?${params.toString()}`);
+  }
+
+  const cls =
+    "h-8 rounded-md border border-[#e4e8ec] bg-white px-2 text-sm text-[#374151] outline-none focus:border-[#0bdbcf]";
+  const hasFilters = [...sp.keys()].length > 0;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <input
+        defaultValue={sp.get("q") ?? ""}
+        placeholder="Buscar…"
+        className={`${cls} w-44`}
+        onKeyDown={(e) => {
+          if (e.key === "Enter")
+            setParam("q", (e.target as HTMLInputElement).value);
+        }}
+      />
+      <select
+        className={cls}
+        value={sp.get("cliente") ?? ""}
+        onChange={(e) => setParam("cliente", e.target.value)}
+      >
+        <option value="">Cliente</option>
+        {clients.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+      <select
+        className={cls}
+        value={sp.get("responsable") ?? ""}
+        onChange={(e) => setParam("responsable", e.target.value)}
+      >
+        <option value="">Responsable</option>
+        {users.map((u) => (
+          <option key={u.id} value={u.id}>
+            {u.name}
+          </option>
+        ))}
+      </select>
+      <select
+        className={cls}
+        value={sp.get("equipo") ?? ""}
+        onChange={(e) => setParam("equipo", e.target.value)}
+      >
+        <option value="">Equipo</option>
+        {teams.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.name}
+          </option>
+        ))}
+      </select>
+      <select
+        className={cls}
+        value={sp.get("rol") ?? ""}
+        onChange={(e) => setParam("rol", e.target.value)}
+      >
+        <option value="">Rol</option>
+        {ROLES.filter((r) => r.key !== "CLIENTE" && r.key !== "ADMIN").map((r) => (
+          <option key={r.key} value={r.key}>
+            {r.label}
+          </option>
+        ))}
+      </select>
+      <select
+        className={cls}
+        value={sp.get("estado") ?? ""}
+        onChange={(e) => setParam("estado", e.target.value)}
+      >
+        <option value="">Estado</option>
+        {STATUSES.map((s) => (
+          <option key={s.key} value={s.key}>
+            {s.label}
+          </option>
+        ))}
+      </select>
+      <select
+        className={cls}
+        value={sp.get("prioridad") ?? ""}
+        onChange={(e) => setParam("prioridad", e.target.value)}
+      >
+        <option value="">Prioridad</option>
+        {PRIORITIES.map((p) => (
+          <option key={p.key} value={p.key}>
+            {p.label}
+          </option>
+        ))}
+      </select>
+      <label className="flex items-center gap-1 text-xs text-[#6b7280]">
+        Desde
+        <input
+          type="date"
+          className={cls}
+          defaultValue={sp.get("desde") ?? ""}
+          onChange={(e) => setParam("desde", e.target.value)}
+        />
+      </label>
+      <label className="flex items-center gap-1 text-xs text-[#6b7280]">
+        Hasta
+        <input
+          type="date"
+          className={cls}
+          defaultValue={sp.get("hasta") ?? ""}
+          onChange={(e) => setParam("hasta", e.target.value)}
+        />
+      </label>
+      {hasFilters && (
+        <button
+          className={`${cls} text-[#e2532a]`}
+          onClick={() => router.push(pathname)}
+        >
+          Limpiar
+        </button>
+      )}
+    </div>
+  );
+}

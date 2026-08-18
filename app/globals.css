@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+/* ── Marca REVO (Brandbook 2024) ─────────────────────────────
+   Primaria:   #081826 navy · #0BDBCF turquesa · blanco
+   Secundaria: #FB693B naranja · #FDA565 naranja claro · #7F7F7F gris
+   Tipografías: Mortend (títulos) · Open Sans (textos)            */
+:root {
+  --navy: #081826;
+  --navy-800: #0e2436;
+  --navy-700: #16324a;
+  --turquesa: #0bdbcf;
+  --turquesa-dark: #08a89f;
+  --turquesa-soft: #e0fbf9;
+  --naranja: #fb693b;
+  --naranja-claro: #fda565;
+  --naranja-soft: #feede6;
+  --gris: #7f7f7f;
+
+  --bg: #f4f6f8;
+  --panel: #ffffff;
+  --border: #e4e8ec;
+  --text: #081826;
+  --muted: #5d6b77;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-opensans), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Títulos de página con la tipografía de marca */
+.font-brand {
+  font-family: var(--font-mortend), var(--font-opensans), sans-serif;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* Scrollbars discretos para las columnas del tablero */
+.thin-scroll::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: #ccd4da;
+  border-radius: 8px;
+}
+.thin-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}

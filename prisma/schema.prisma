@@ -1,0 +1,153 @@
+// Plataforma de gestión de clientes — Grupo Revo / Rompecabeza
+// SQLite en desarrollo (migrable a PostgreSQL en producción).
+// Nota: SQLite no soporta enums de Prisma; usamos String + constantes en la app.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Client {
+  id              String   @id @default(cuid())
+  name            String
+  code            String?
+  contactEmail    String?
+  contractedHours Float    @default(0)
+  color           String?
+  createdAt       DateTime @default(now())
+
+  requests Request[]
+  users    User[]
+}
+
+model Team {
+  id    String  @id @default(cuid())
+  name  String
+  color String?
+
+  members  User[]
+  requests Request[]
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  role      String   @default("COORDINADOR_CUENTA")
+  color     String?
+  createdAt DateTime @default(now())
+
+  teamId String?
+  team   Team?   @relation(fields: [teamId], references: [id])
+
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id])
+
+  assigned    Request[]   @relation("assignee")
+  timeEntries TimeEntry[]
+  comments    Comment[]
+}
+
+model Request {
+  id             String    @id @default(cuid())
+  key            String    @unique
+  title          String
+  type           String    @default("Solicitud")
+  description    String    @default("")
+  status         String    @default("POR_HACER")
+  priority       String    @default("MEDIA")
+  clientPriority Int?
+  dueDate        DateTime?
+  requesterEmail String    @default("")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  finalizedAt    DateTime?
+
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  assigneeId String?
+  assignee   User?   @relation("assignee", fields: [assigneeId], references: [id])
+
+  teamId String?
+  team   Team?   @relation(fields: [teamId], references: [id])
+
+  attachments Attachment[]
+  comments    Comment[]
+  timeEntries TimeEntry[]
+  activities  Activity[]
+
+  @@index([clientId])
+  @@index([assigneeId])
+  @@index([status])
+}
+
+model Attachment {
+  id        String   @id @default(cuid())
+  kind      String   @default("url")
+  name      String
+  url       String
+  createdAt DateTime @default(now())
+
+  requestId String
+  request   Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+}
+
+model Comment {
+  id         String   @id @default(cuid())
+  body       String
+  isClient   Boolean  @default(false)
+  authorName String?
+  createdAt  DateTime @default(now())
+
+  requestId String
+  request   Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  authorId String?
+  author   User?   @relation(fields: [authorId], references: [id])
+}
+
+model TimeEntry {
+  id        String   @id @default(cuid())
+  hours     Float
+  note      String?
+  date      DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  requestId String
+  request   Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([requestId])
+  @@index([userId])
+}
+
+model Activity {
+  id        String   @id @default(cuid())
+  type      String
+  message   String
+  actorName String?
+  createdAt DateTime @default(now())
+
+  requestId String
+  request   Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id             String   @id @default(cuid())
+  recipientEmail String
+  requestId      String?
+  title          String
+  body           String
+  channel        String   @default("inapp")
+  read           Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  @@index([recipientEmail])
+}
