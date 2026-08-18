@@ -41,4 +41,4 @@ La app queda en [http://localhost:3000](http://localhost:3000).
 
 ## Deploy en Vercel
 
-En el proyecto de Vercel agrega las mismas variables (`DATABASE_URL` y `DIRECT_URL`). Luego, desde tu máquina y con esas URLs en `.env`, corre `npm run db:push` y `npm run db:seed` una vez para crear tablas y datos de demo.
+En el proyecto de Vercel agrega `DATABASE_URL` y `DIRECT_URL` (si solo hay una URI, usa la misma en ambas). El build crea las tablas y, si la base está vacía, carga el demo. Los deploys siguientes no vuelven a sembrar.

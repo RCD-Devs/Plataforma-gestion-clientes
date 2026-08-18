@@ -8,6 +8,12 @@ const ago = (d: number) => new Date(now - d * DAY);
 const ahead = (d: number) => new Date(now + d * DAY);
 
 async function main() {
+  const existing = await prisma.user.count();
+  if (existing > 0) {
+    console.log("Seed omitido: la base ya tiene usuarios.");
+    return;
+  }
+
   // Limpieza (respetando llaves foráneas)
   await prisma.timeEntry.deleteMany();
   await prisma.comment.deleteMany();
