@@ -41,4 +41,4 @@ La app queda en [http://localhost:3000](http://localhost:3000).
 
 ## Deploy en Vercel
 
-En el proyecto de Vercel agrega `DATABASE_URL` y `DIRECT_URL` (si solo hay una URI, usa la misma en ambas). El build crea las tablas y, si la base está vacía, carga el demo. Los deploys siguientes no vuelven a sembrar.
+En Vercel define `DATABASE_URL` (y `DIRECT_URL` si aplica) como URI `postgresql://...`, sin comillas. El workflow de GitHub Actions baja esas variables, crea las tablas, siembra el demo si la base está vacía y luego publica el build.
