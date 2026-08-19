@@ -42,3 +42,5 @@ La app queda en [http://localhost:3000](http://localhost:3000).
 ## Deploy en Vercel
 
 En el proyecto de Vercel agrega `DATABASE_URL` y `DIRECT_URL` (si solo hay una URI, usa la misma en ambas). El build crea las tablas y, si la base está vacía, carga el demo. Los deploys siguientes no vuelven a sembrar.
+
+hola qué hace
