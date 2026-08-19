@@ -41,6 +41,4 @@ La app queda en [http://localhost:3000](http://localhost:3000).
 
 ## Deploy en Vercel
 
-En el proyecto de Vercel agrega `DATABASE_URL` y `DIRECT_URL` (si solo hay una URI, usa la misma en ambas). El build crea las tablas y, si la base está vacía, carga el demo. Los deploys siguientes no vuelven a sembrar.
-
-hola qué hace
+El workflow publica con `vercel deploy` para que el build corra **en Vercel**, donde `DATABASE_URL` y `DIRECT_URL` están disponibles (si están marcadas como Sensitive, `vercel env pull` en GitHub no entrega la URI real). Ahí se crean las tablas y, si la base está vacía, se carga el demo.
