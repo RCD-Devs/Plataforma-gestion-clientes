@@ -12,6 +12,7 @@ import {
 } from "@/lib/password";
 import { sendPasswordReset } from "@/lib/email";
 import { isTeamRole, isManager, canActOnRequest } from "@/lib/authz";
+import { sniffFile, MAX_FILE_SIZE_BYTES } from "@/lib/files";
 import crypto from "crypto";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
@@ -576,27 +577,23 @@ export async function submitClientRequest(formData: FormData) {
     },
   });
 
-  if (file && file.size > 0) {
+  if (file && file.size > 0 && file.size <= MAX_FILE_SIZE_BYTES) {
     const bytes = Buffer.from(await file.arrayBuffer());
-    const dir = path.join(process.cwd(), "uploads");
-    await mkdir(dir, { recursive: true });
-    const id = crypto.randomUUID();
-    const ext = path.extname(file.name) || "";
-    await writeFile(path.join(dir, id + ext), bytes);
-    const mime = file.type || "";
-    const kind = mime.includes("pdf")
-      ? "pdf"
-      : mime.includes("image")
-        ? "png"
-        : "file";
-    await prisma.attachment.create({
-      data: {
-        requestId: req.id,
-        kind,
-        name: file.name,
-        url: `/api/files/${id}${ext}`,
-      },
-    });
+    const sig = sniffFile(bytes);
+    if (sig) {
+      const dir = path.join(process.cwd(), "uploads");
+      await mkdir(dir, { recursive: true });
+      const id = crypto.randomUUID();
+      await writeFile(path.join(dir, id + sig.ext), bytes);
+      await prisma.attachment.create({
+        data: {
+          requestId: req.id,
+          kind: sig.kind,
+          name: file.name,
+          url: `/api/files/${id}${sig.ext}`,
+        },
+      });
+    }
   }
 
   await prisma.activity.create({

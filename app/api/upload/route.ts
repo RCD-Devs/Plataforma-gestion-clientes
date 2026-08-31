@@ -5,6 +5,7 @@ import crypto from "crypto";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { canActOnRequest } from "@/lib/authz";
+import { sniffFile, MAX_FILE_SIZE_BYTES } from "@/lib/files";
 
 export async function POST(req: NextRequest) {
   const form = await req.formData();
@@ -12,7 +13,7 @@ export async function POST(req: NextRequest) {
   const requestId = String(form.get("requestId") || "");
   const back = new URL(req.headers.get("referer") || "/", req.url);
 
-  if (!file || !requestId || file.size === 0) {
+  if (!file || !requestId || file.size === 0 || file.size > MAX_FILE_SIZE_BYTES) {
     return NextResponse.redirect(back, { status: 303 });
   }
 
@@ -23,26 +24,23 @@ export async function POST(req: NextRequest) {
   }
 
   const bytes = Buffer.from(await file.arrayBuffer());
+  const sig = sniffFile(bytes);
+  if (!sig) {
+    return NextResponse.redirect(back, { status: 303 });
+  }
+
   const dir = path.join(process.cwd(), "uploads");
   await mkdir(dir, { recursive: true });
 
   const id = crypto.randomUUID();
-  const ext = path.extname(file.name) || "";
-  await writeFile(path.join(dir, id + ext), bytes);
-
-  const type = file.type || "";
-  const kind = type.includes("pdf")
-    ? "pdf"
-    : type.includes("image")
-      ? "png"
-      : "file";
+  await writeFile(path.join(dir, id + sig.ext), bytes);
 
   await prisma.attachment.create({
     data: {
       requestId,
-      kind,
+      kind: sig.kind,
       name: file.name,
-      url: `/api/files/${id}${ext}`,
+      url: `/api/files/${id}${sig.ext}`,
     },
   });
 
