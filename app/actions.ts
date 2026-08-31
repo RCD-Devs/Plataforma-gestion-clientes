@@ -14,6 +14,7 @@ import { sendPasswordReset } from "@/lib/email";
 import { isTeamRole, isManager, canActOnRequest } from "@/lib/authz";
 import { sniffFile, MAX_FILE_SIZE_BYTES } from "@/lib/files";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
+import { logAudit } from "@/lib/audit";
 import crypto from "crypto";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
@@ -76,6 +77,7 @@ export async function login(formData: FormData) {
 
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user || !user.isActive || !user.passwordHash) {
+    await logAudit({ type: "login_failed", actorEmail: email, ip, detail: `target=${target}, motivo=usuario` });
     redirect(`${failPath}?error=credenciales`);
   }
 
@@ -85,19 +87,31 @@ export async function login(formData: FormData) {
   } catch {
     valid = false;
   }
-  if (!valid) redirect(`${failPath}?error=credenciales`);
+  if (!valid) {
+    await logAudit({ type: "login_failed", actorId: user.id, actorEmail: email, ip, detail: `target=${target}, motivo=password` });
+    redirect(`${failPath}?error=credenciales`);
+  }
 
   // El portal solo es para usuarios-cliente; el login de equipo, al revés.
   const isClientUser = user.role === "CLIENTE";
-  if (target === "portal" && !isClientUser) redirect(`${failPath}?error=credenciales`);
-  if (target === "login" && isClientUser) redirect(`${failPath}?error=credenciales`);
+  if (target === "portal" && !isClientUser) {
+    await logAudit({ type: "login_failed", actorId: user.id, actorEmail: email, ip, detail: "target=portal, motivo=rol_no_cliente" });
+    redirect(`${failPath}?error=credenciales`);
+  }
+  if (target === "login" && isClientUser) {
+    await logAudit({ type: "login_failed", actorId: user.id, actorEmail: email, ip, detail: "target=login, motivo=rol_cliente" });
+    redirect(`${failPath}?error=credenciales`);
+  }
 
   await createSession(user.id);
+  await logAudit({ type: "login_success", actorId: user.id, actorEmail: user.email, ip, detail: `target=${target}` });
   redirect(user.mustChangePassword ? "/cambiar-clave" : redirectForRole(user));
 }
 
 export async function logout() {
+  const user = await getSessionUser();
   await destroySession();
+  if (user) await logAudit({ type: "logout", actorId: user.id, actorEmail: user.email });
   redirect("/login");
 }
 
@@ -138,6 +152,7 @@ export async function changePassword(formData: FormData) {
   }
 
   await rotateUserPassword(user.id, newPassword, user.passwordHash);
+  await logAudit({ type: "password_changed", actorId: user.id, actorEmail: user.email });
   redirect(redirectForRole(user));
 }
 
@@ -154,6 +169,13 @@ export async function requestPasswordReset(formData: FormData) {
   const allowed = rateLimit(`reset:${ip}`, 5, 10 * 60 * 1000);
 
   const user = allowed ? await prisma.user.findUnique({ where: { email } }) : null;
+  await logAudit({
+    type: "password_reset_requested",
+    actorId: user?.id,
+    actorEmail: email,
+    ip,
+    detail: !allowed ? "rate_limited" : user?.isActive ? "encontrado" : "no_encontrado",
+  });
   if (user?.isActive) {
     const rawToken = crypto.randomBytes(32).toString("hex");
     await prisma.passwordResetToken.updateMany({
@@ -215,6 +237,11 @@ export async function resetPassword(formData: FormData) {
   await prisma.passwordResetToken.update({
     where: { id: record.id },
     data: { usedAt: new Date() },
+  });
+  await logAudit({
+    type: "password_reset_completed",
+    actorId: record.userId,
+    actorEmail: record.user.email,
   });
   const dest = record.user.role === "CLIENTE" ? "/portal" : "/login";
   redirect(`${dest}?reset=ok`);

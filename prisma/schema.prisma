@@ -174,3 +174,19 @@ model Notification {
 
   @@index([recipientEmail])
 }
+
+// Bitácora de seguridad — login, cambios de contraseña, etc. Separada de
+// Activity (que es el feed de negocio visible a usuarios) porque tiene otro
+// dueño (seguridad, no el cliente) y otro ciclo de vida.
+model AuditLog {
+  id         String   @id @default(cuid())
+  type       String
+  actorId    String?
+  actorEmail String?
+  ip         String?
+  detail     String?
+  createdAt  DateTime @default(now())
+
+  @@index([type])
+  @@index([createdAt])
+}
