@@ -13,6 +13,7 @@ import {
 import { sendPasswordReset } from "@/lib/email";
 import { isTeamRole, isManager, canActOnRequest } from "@/lib/authz";
 import { sniffFile, MAX_FILE_SIZE_BYTES } from "@/lib/files";
+import { rateLimit, clientIp } from "@/lib/rateLimit";
 import crypto from "crypto";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
@@ -67,6 +68,11 @@ export async function login(formData: FormData) {
   const target = String(formData.get("target") || "login"); // "login" | "portal"
   const failPath = target === "portal" ? "/portal" : "/login";
   if (!email || !password) redirect(`${failPath}?error=credenciales`);
+
+  const ip = await clientIp();
+  if (!rateLimit(`login:${ip}`, 10, 10 * 60 * 1000)) {
+    redirect(`${failPath}?error=rate_limit`);
+  }
 
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user || !user.isActive || !user.passwordHash) {
@@ -144,7 +150,10 @@ export async function requestPasswordReset(formData: FormData) {
       : "/login?reset=enviado";
   if (!email) redirect(okPath);
 
-  const user = await prisma.user.findUnique({ where: { email } });
+  const ip = await clientIp();
+  const allowed = rateLimit(`reset:${ip}`, 5, 10 * 60 * 1000);
+
+  const user = allowed ? await prisma.user.findUnique({ where: { email } }) : null;
   if (user?.isActive) {
     const rawToken = crypto.randomBytes(32).toString("hex");
     await prisma.passwordResetToken.updateMany({
@@ -497,6 +506,17 @@ export async function markTeamAlertsRead() {
 }
 
 export async function submitRequest(formData: FormData) {
+  // Honeypot: campo oculto que un humano nunca completa. Si viene lleno,
+  // es un bot — se responde como si hubiera funcionado, sin crear nada,
+  // para no revelar que fue detectado.
+  const honeypot = String(formData.get("website") || "").trim();
+  if (honeypot) redirect("/solicitar/gracias");
+
+  const ip = await clientIp();
+  if (!rateLimit(`solicitar:${ip}`, 5, 10 * 60 * 1000)) {
+    redirect("/solicitar?error=rate_limit");
+  }
+
   const clientId = String(formData.get("clientId") || "");
   const requesterEmail = String(formData.get("requesterEmail") || "").trim();
   const type = String(formData.get("type") || "Solicitud");

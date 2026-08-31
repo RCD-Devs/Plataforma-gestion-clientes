@@ -9,8 +9,13 @@ export const dynamic = "force-dynamic";
 const inputCls =
   "w-full rounded-lg border border-[#e6e8eb] px-3 py-2 text-sm outline-none focus:border-[#0bdbcf]";
 
-export default async function SolicitarPage() {
+export default async function SolicitarPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
   const clients = await prisma.client.findMany({ orderBy: { name: "asc" } });
+  const { error } = await searchParams;
 
   return (
     <div className="min-h-screen bg-[#f4f6f8] py-10">
@@ -29,6 +34,20 @@ export default async function SolicitarPage() {
           action={submitRequest}
           className="space-y-4 rounded-2xl border border-[#e6e8eb] bg-white p-6"
         >
+          {error === "rate_limit" && (
+            <div className="rounded-lg border border-[#fda565] bg-[#fdf1e3] px-3 py-2 text-sm text-[#9a5a25]">
+              Demasiados envíos seguidos. Espera unos minutos e intenta de
+              nuevo.
+            </div>
+          )}
+          <input
+            type="text"
+            name="website"
+            tabIndex={-1}
+            autoComplete="off"
+            aria-hidden="true"
+            className="absolute left-[-9999px] h-0 w-0 opacity-0"
+          />
           <Field label="Empresa / Cliente">
             <select
               name="clientId"

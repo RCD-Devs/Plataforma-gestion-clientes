@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { canActOnRequest } from "@/lib/authz";
 import { sniffFile, MAX_FILE_SIZE_BYTES } from "@/lib/files";
+import { rateLimit } from "@/lib/rateLimit";
 
 export async function POST(req: NextRequest) {
   const form = await req.formData();
@@ -21,6 +22,9 @@ export async function POST(req: NextRequest) {
   const target = await prisma.request.findUnique({ where: { id: requestId } });
   if (!user || !target || !canActOnRequest(user, target)) {
     return new NextResponse("No autorizado", { status: 403 });
+  }
+  if (!rateLimit(`upload:${user.id}`, 30, 10 * 60 * 1000)) {
+    return new NextResponse("Demasiadas subidas seguidas, espera unos minutos", { status: 429 });
   }
 
   const bytes = Buffer.from(await file.arrayBuffer());
