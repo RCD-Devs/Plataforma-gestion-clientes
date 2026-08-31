@@ -2,8 +2,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { getPortalSession } from "@/lib/portal";
-import { addComment, portalLogout } from "@/app/actions";
+import { getSessionUser } from "@/lib/session";
+import { addComment, logout } from "@/app/actions";
 import { StatusBadge, PriorityTag } from "@/components/ui";
 import { ClientPriorityStars } from "@/components/controls";
 import { longDate, relative } from "@/lib/format";
@@ -16,9 +16,11 @@ export default async function PortalRequestDetail({
   params: Promise<{ key: string }>;
 }) {
   const { key } = await params;
-  const session = await getPortalSession();
-  if (!session) redirect("/portal");
-  const { email, client } = session;
+  const user = await getSessionUser();
+  if (!user || user.role !== "CLIENTE" || !user.client) redirect("/portal");
+  if (user.mustChangePassword) redirect("/cambiar-clave");
+  const email = user.email;
+  const client = user.client;
 
   const req = await prisma.request.findUnique({
     where: { key },
@@ -47,7 +49,7 @@ export default async function PortalRequestDetail({
               <div className="text-sm font-semibold">{client.name}</div>
               <div className="text-xs text-[#5d6b77]">{email}</div>
             </div>
-            <form action={portalLogout}>
+            <form action={logout}>
               <button className="rounded-lg border border-[#e4e8ec] px-3 py-1.5 text-xs text-[#5d6b77] hover:bg-[#f4f6f8]">
                 Salir
               </button>

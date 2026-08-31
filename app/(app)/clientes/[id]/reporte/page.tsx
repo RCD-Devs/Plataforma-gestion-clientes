@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/session";
+import { isManager } from "@/lib/authz";
 import { STATUSES, STATUS_MAP, REQUEST_TYPES } from "@/lib/constants";
 import { StatCard } from "@/components/ui";
 import { hoursLabel, shortDate, longDate } from "@/lib/format";
@@ -34,6 +36,10 @@ export default async function ClientReportPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ desde?: string; hasta?: string }>;
 }) {
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+  if (!isManager(user.role)) redirect("/mi-espacio");
+
   const { id } = await params;
   const sp = await searchParams;
 

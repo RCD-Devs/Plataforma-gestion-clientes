@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { getSessionUser } from "@/lib/session";
 import { STATUSES } from "@/lib/constants";
 import { StatusSelect } from "@/components/controls";
 import { StatusBadge, PriorityTag, ClientTag } from "@/components/ui";
@@ -34,7 +34,7 @@ export default async function MiEspacioPage({
 }: {
   searchParams: Promise<{ vista?: string }>;
 }) {
-  const user = await getCurrentUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
   const { vista } = await searchParams;
   const asList = vista === "lista";

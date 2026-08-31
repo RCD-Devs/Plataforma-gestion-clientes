@@ -1,11 +1,18 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/session";
+import { isManager } from "@/lib/authz";
 import { Bar } from "@/components/ui";
 import { hoursLabel } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
 export default async function ClientesPage() {
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+  if (!isManager(user.role)) redirect("/mi-espacio");
+
   const clients = await prisma.client.findMany({
     include: {
       requests: { include: { timeEntries: { select: { hours: true } } } },

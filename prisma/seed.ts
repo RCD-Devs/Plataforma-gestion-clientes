@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
@@ -6,6 +7,10 @@ const DAY = 86400000;
 const now = Date.now();
 const ago = (d: number) => new Date(now - d * DAY);
 const ahead = (d: number) => new Date(now + d * DAY);
+
+// Contraseña demo compartida — todos los usuarios sembrados quedan con
+// mustChangePassword: true, así que es solo para el primer ingreso.
+const DEMO_PASSWORD = "Revo1234!";
 
 async function main() {
   const existing = await prisma.user.count();
@@ -21,9 +26,12 @@ async function main() {
   await prisma.activity.deleteMany();
   await prisma.notification.deleteMany();
   await prisma.request.deleteMany();
+  await prisma.passwordResetToken.deleteMany();
   await prisma.user.deleteMany();
   await prisma.team.deleteMany();
   await prisma.client.deleteMany();
+
+  const demoPasswordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
 
   // --- Equipos ---
   const tCuentas = await prisma.team.create({
@@ -44,6 +52,7 @@ async function main() {
     data: {
       name: "José Luis Fuentes",
       email: "speedboat@rompecabeza.cl",
+      passwordHash: demoPasswordHash,
       role: "LIDER_AREA",
       color: "#08a89f",
       teamId: tCuentas.id,
@@ -53,6 +62,7 @@ async function main() {
     data: {
       name: "Camila Araya",
       email: "camila@rompecabeza.cl",
+      passwordHash: demoPasswordHash,
       role: "COORDINADOR_CUENTA",
       color: "#16324a",
       teamId: tCuentas.id,
@@ -62,6 +72,7 @@ async function main() {
     data: {
       name: "Matías Vera",
       email: "matias@rompecabeza.cl",
+      passwordHash: demoPasswordHash,
       role: "DESARROLLADOR",
       color: "#fb693b",
       teamId: tDesarrollo.id,
@@ -71,6 +82,7 @@ async function main() {
     data: {
       name: "Nicolás Vidal",
       email: "nicolas@rompecabeza.cl",
+      passwordHash: demoPasswordHash,
       role: "DESARROLLADOR",
       color: "#146a8f",
       teamId: tDesarrollo.id,
@@ -80,6 +92,7 @@ async function main() {
     data: {
       name: "Valentina Rojas",
       email: "valentina@rompecabeza.cl",
+      passwordHash: demoPasswordHash,
       role: "DISENADOR_UXUI",
       color: "#e2532a",
       teamId: tDiseno.id,
@@ -89,6 +102,7 @@ async function main() {
     data: {
       name: "Diego Soto",
       email: "diego@rompecabeza.cl",
+      passwordHash: demoPasswordHash,
       role: "SEO",
       color: "#0e9f6e",
       teamId: tSeo.id,
@@ -123,6 +137,19 @@ async function main() {
       },
     });
     clients[c.code] = { id: created.id, email: c.email };
+    // Usuario-cliente para el portal (login con contraseña) — hasta que
+    // exista la pantalla de administración (Fase 1), el alta de clientes
+    // nuevos pasa por aquí o directo en la base.
+    await prisma.user.create({
+      data: {
+        name: c.name,
+        email: c.email,
+        role: "CLIENTE",
+        color: c.color,
+        clientId: created.id,
+        passwordHash: demoPasswordHash,
+      },
+    });
   }
 
   // --- Solicitudes (recreadas del tablero de Jira) ---
@@ -394,7 +421,7 @@ async function main() {
 
   const counts = {
     equipos: 4,
-    usuarios: 6,
+    usuarios: 6 + clientsData.length,
     clientes: clientsData.length,
     solicitudes: requests.length,
     horas: timeData.reduce((a, t) => a + t.hours, 0),

@@ -1,13 +1,15 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { getSessionUser } from "@/lib/session";
 import { Sidebar } from "@/components/Nav";
 
 export const dynamic = "force-dynamic";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
-  const user = await getCurrentUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
+  if (user.role === "CLIENTE") redirect("/portal");
+  if (user.mustChangePassword) redirect("/cambiar-clave");
   return (
     <div className="flex">
       <Sidebar

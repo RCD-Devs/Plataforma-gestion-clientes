@@ -1,16 +1,18 @@
 import Image from "next/image";
-import { prisma } from "@/lib/db";
+import Link from "next/link";
 import { login } from "@/app/actions";
-import { Avatar } from "@/components/ui";
-import { ROLE_MAP } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
-export default async function LoginPage() {
-  const users = await prisma.user.findMany({
-    where: { role: { not: "CLIENTE" } },
-    orderBy: { name: "asc" },
-  });
+const inputCls =
+  "w-full rounded-lg border border-[#e4e8ec] px-3 py-2 text-sm outline-none focus:border-[#0bdbcf]";
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; reset?: string }>;
+}) {
+  const { error, reset } = await searchParams;
 
   return (
     <div className="flex min-h-screen">
@@ -64,24 +66,60 @@ export default async function LoginPage() {
             </span>
           </button>
 
-          <div className="mb-3 text-center text-[10px] uppercase tracking-widest text-[#7f7f7f]">
-            Acceso de demo
-          </div>
-          <div className="space-y-2">
-            {users.map((u) => (
-              <form key={u.id} action={login}>
-                <input type="hidden" name="userId" value={u.id} />
-                <button className="flex w-full items-center gap-3 rounded-lg border border-[#e4e8ec] p-2.5 text-left hover:border-[#0bdbcf] hover:bg-[#f0fdfc]">
-                  <Avatar name={u.name} color={u.color} size={34} />
-                  <div>
-                    <div className="text-sm font-medium">{u.name}</div>
-                    <div className="text-xs text-[#5d6b77]">
-                      {ROLE_MAP[u.role]?.label ?? u.role}
-                    </div>
-                  </div>
-                </button>
-              </form>
-            ))}
+          {error === "credenciales" && (
+            <div className="mb-4 rounded-lg border border-[#fda565] bg-[#feede6] px-3 py-2 text-sm text-[#9a4a1e]">
+              Correo o contraseña incorrectos.
+            </div>
+          )}
+          {reset === "enviado" && (
+            <div className="mb-4 rounded-lg border border-[#0bdbcf] bg-[#e0fbf9] px-3 py-2 text-sm text-[#065f5a]">
+              Si el correo está registrado, te enviamos instrucciones para
+              restablecer la contraseña.
+            </div>
+          )}
+          {reset === "ok" && (
+            <div className="mb-4 rounded-lg border border-[#0bdbcf] bg-[#e0fbf9] px-3 py-2 text-sm text-[#065f5a]">
+              Contraseña actualizada. Ya puedes iniciar sesión.
+            </div>
+          )}
+
+          <form action={login} className="space-y-3">
+            <input type="hidden" name="target" value="login" />
+            <div>
+              <label className="mb-1 block text-sm font-semibold">
+                Correo
+              </label>
+              <input
+                name="email"
+                type="email"
+                required
+                placeholder="nombre@revo.cl"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-semibold">
+                Contraseña
+              </label>
+              <input
+                name="password"
+                type="password"
+                required
+                placeholder="••••••••"
+                className={inputCls}
+              />
+            </div>
+            <button className="w-full rounded-lg bg-[#0bdbcf] py-2.5 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]">
+              Ingresar
+            </button>
+          </form>
+          <div className="mt-4 text-center text-xs text-[#7f7f7f]">
+            <Link
+              href="/recuperar-contrasena?target=login"
+              className="hover:text-[#08a89f] hover:underline"
+            >
+              ¿Olvidaste tu contraseña?
+            </Link>
           </div>
         </div>
       </div>

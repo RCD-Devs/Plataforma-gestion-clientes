@@ -2,15 +2,27 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
+import bcrypt from "bcryptjs";
+import { prisma } from "@/lib/db";
+import { getSessionUser, createSession, destroySession, redirectForRole } from "@/lib/session";
+import {
+  assertNewPasswordAllowed,
+  rotateUserPassword,
+  PasswordPolicyError,
+} from "@/lib/password";
+import { sendPasswordReset } from "@/lib/email";
+import { isTeamRole, isManager, canActOnRequest } from "@/lib/authz";
+import crypto from "crypto";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
-import crypto from "crypto";
-import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
-import { findClientByEmail, getPortalSession } from "@/lib/portal";
 import { notifyClient, notifyTeam } from "@/lib/email";
 import { STATUS_MAP, PRIORITY_MAP } from "@/lib/constants";
+
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
+
+function hashResetToken(token: string) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
 
 // Un input type=date entrega "YYYY-MM-DD"; new Date() lo interpretaría como
 // medianoche UTC (día anterior en Chile). Se fija mediodía local.
@@ -49,36 +61,164 @@ function refreshLists(key?: string) {
 }
 
 export async function login(formData: FormData) {
-  const userId = String(formData.get("userId") || "");
-  if (!userId) return;
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  const store = await cookies();
-  store.set("revo_uid", userId, {
-    httpOnly: true,
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  });
-  redirect(
-    user?.role === "LIDER_AREA" || user?.role === "ADMIN"
-      ? "/equipo"
-      : "/mi-espacio",
-  );
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const password = String(formData.get("password") || "");
+  const target = String(formData.get("target") || "login"); // "login" | "portal"
+  const failPath = target === "portal" ? "/portal" : "/login";
+  if (!email || !password) redirect(`${failPath}?error=credenciales`);
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user || !user.isActive || !user.passwordHash) {
+    redirect(`${failPath}?error=credenciales`);
+  }
+
+  let valid = false;
+  try {
+    valid = await bcrypt.compare(password, user.passwordHash);
+  } catch {
+    valid = false;
+  }
+  if (!valid) redirect(`${failPath}?error=credenciales`);
+
+  // El portal solo es para usuarios-cliente; el login de equipo, al revés.
+  const isClientUser = user.role === "CLIENTE";
+  if (target === "portal" && !isClientUser) redirect(`${failPath}?error=credenciales`);
+  if (target === "login" && isClientUser) redirect(`${failPath}?error=credenciales`);
+
+  await createSession(user.id);
+  redirect(user.mustChangePassword ? "/cambiar-clave" : redirectForRole(user));
 }
 
 export async function logout() {
-  const store = await cookies();
-  store.delete("revo_uid");
+  await destroySession();
   redirect("/login");
 }
 
+export async function changePassword(formData: FormData) {
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+  const currentPassword = String(formData.get("currentPassword") || "");
+  const newPassword = String(formData.get("newPassword") || "");
+  const confirmPassword = String(formData.get("confirmPassword") || "");
+
+  if (newPassword !== confirmPassword) {
+    redirect("/cambiar-clave?error=no_coincide");
+  }
+
+  let currentValid = false;
+  try {
+    currentValid = await bcrypt.compare(currentPassword, user.passwordHash || "");
+  } catch {
+    currentValid = false;
+  }
+  // Si es el primer acceso y aún no tiene contraseña propia, no exigimos
+  // la "actual". Si ya tiene una, sí debe demostrar que la conoce.
+  if (user.passwordHash && !currentValid) {
+    redirect("/cambiar-clave?error=actual_incorrecta");
+  }
+
+  try {
+    await assertNewPasswordAllowed(
+      newPassword,
+      user.passwordHash,
+      user.previousPasswordHash,
+    );
+  } catch (err) {
+    if (err instanceof PasswordPolicyError) {
+      redirect(`/cambiar-clave?error=${encodeURIComponent(err.message)}`);
+    }
+    throw err;
+  }
+
+  await rotateUserPassword(user.id, newPassword, user.passwordHash);
+  redirect(redirectForRole(user));
+}
+
+export async function requestPasswordReset(formData: FormData) {
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const target = String(formData.get("target") || "login");
+  const okPath =
+    target === "portal"
+      ? "/portal?reset=enviado"
+      : "/login?reset=enviado";
+  if (!email) redirect(okPath);
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (user?.isActive) {
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    await prisma.passwordResetToken.updateMany({
+      where: { userId: user.id, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+    await prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        tokenHash: hashResetToken(rawToken),
+        expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS),
+      },
+    });
+    await sendPasswordReset({
+      to: user.email,
+      name: user.name,
+      resetUrl: `/restablecer-contrasena?token=${rawToken}`,
+    });
+  }
+  // Siempre responde igual, exista o no el correo, para no filtrar cuentas.
+  redirect(okPath);
+}
+
+export async function resetPassword(formData: FormData) {
+  const token = String(formData.get("token") || "");
+  const password = String(formData.get("password") || "");
+  const confirmPassword = String(formData.get("confirmPassword") || "");
+  const fail = (error: string) =>
+    redirect(`/restablecer-contrasena?token=${encodeURIComponent(token)}&error=${encodeURIComponent(error)}`);
+
+  if (!token) fail("El enlace de recuperación no es válido o ya expiró");
+  if (password !== confirmPassword) fail("Las contraseñas no coinciden");
+
+  const tokenHash = hashResetToken(token);
+  const record = await prisma.passwordResetToken.findUnique({
+    where: { tokenHash },
+    include: { user: true },
+  });
+  if (!record || record.usedAt || record.expiresAt < new Date()) {
+    fail("El enlace de recuperación no es válido o ya expiró");
+    return;
+  }
+
+  try {
+    await assertNewPasswordAllowed(
+      password,
+      record.user.passwordHash,
+      record.user.previousPasswordHash,
+    );
+  } catch (err) {
+    if (err instanceof PasswordPolicyError) {
+      fail(err.message);
+      return;
+    }
+    throw err;
+  }
+
+  await rotateUserPassword(record.userId, password, record.user.passwordHash);
+  await prisma.passwordResetToken.update({
+    where: { id: record.id },
+    data: { usedAt: new Date() },
+  });
+  const dest = record.user.role === "CLIENTE" ? "/portal" : "/login";
+  redirect(`${dest}?reset=ok`);
+}
+
 export async function changeStatus(requestId: string, status: string) {
-  const user = await getCurrentUser();
+  const user = await getSessionUser();
   if (!user || !STATUS_MAP[status]) return;
   const req = await prisma.request.findUnique({
     where: { id: requestId },
     include: { client: true },
   });
   if (!req || req.status === status) return;
+  if (!canActOnRequest(user, req)) return;
   // finalizedAt marca el cierre real de la solicitud — es la fecha que se
   // usa para calcular el SLA (finalizedAt − createdAt) en el reporte del
   // cliente. Se limpia si la solicitud se reabre.
@@ -111,8 +251,8 @@ export async function changeStatus(requestId: string, status: string) {
 }
 
 export async function assignRequest(requestId: string, assigneeId: string) {
-  const user = await getCurrentUser();
-  if (!user) return;
+  const user = await getSessionUser();
+  if (!user || !isManager(user.role)) return;
   const assignee = assigneeId
     ? await prisma.user.findUnique({ where: { id: assigneeId } })
     : null;
@@ -135,8 +275,8 @@ export async function assignRequest(requestId: string, assigneeId: string) {
 }
 
 export async function updatePriority(requestId: string, priority: string) {
-  const user = await getCurrentUser();
-  if (!user || !PRIORITY_MAP[priority]) return;
+  const user = await getSessionUser();
+  if (!user || !isManager(user.role) || !PRIORITY_MAP[priority]) return;
   const req = await prisma.request.update({
     where: { id: requestId },
     data: { priority },
@@ -145,8 +285,8 @@ export async function updatePriority(requestId: string, priority: string) {
 }
 
 export async function logHours(formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) return;
+  const user = await getSessionUser();
+  if (!user || !isTeamRole(user.role)) return;
   const requestId = String(formData.get("requestId") || "");
   const hours = parseFloat(String(formData.get("hours") || "0"));
   const note = String(formData.get("note") || "");
@@ -176,7 +316,7 @@ export async function logHours(formData: FormData) {
 }
 
 export async function addComment(formData: FormData) {
-  const user = await getCurrentUser();
+  const user = await getSessionUser();
   const requestId = String(formData.get("requestId") || "");
   const body = String(formData.get("body") || "").trim();
   const isClient = String(formData.get("isClient") || "") === "1";
@@ -192,11 +332,10 @@ export async function addComment(formData: FormData) {
   // equipo exige sesión interna. El autor sale de la sesión, no del form.
   let authorName: string;
   if (isClient) {
-    const portal = await getPortalSession();
-    if (!portal || portal.client.id !== req.clientId) return;
-    authorName = portal.email;
+    if (!user || user.role !== "CLIENTE" || user.clientId !== req.clientId) return;
+    authorName = user.email;
   } else {
-    if (!user) return;
+    if (!user || !isTeamRole(user.role)) return;
     authorName = user.name;
   }
 
@@ -243,28 +382,28 @@ export async function addComment(formData: FormData) {
 }
 
 export async function addUrlAttachment(formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) return;
+  const user = await getSessionUser();
   const requestId = String(formData.get("requestId") || "");
   const name = String(formData.get("name") || "Enlace").trim();
   const url = String(formData.get("url") || "").trim();
   if (!requestId || !url) return;
+  const req = await prisma.request.findUnique({ where: { id: requestId } });
+  if (!user || !req || !canActOnRequest(user, req)) return;
   await prisma.attachment.create({
     data: { requestId, kind: "url", name: name || url, url },
   });
-  const req = await prisma.request.findUnique({ where: { id: requestId } });
-  if (req) revalidatePath(`/solicitudes/${req.key}`);
+  revalidatePath(`/solicitudes/${req.key}`);
 }
 
 export async function setClientPriority(requestId: string, value: number) {
-  const portal = await getPortalSession();
+  const user = await getSessionUser();
   const v = Math.round(value);
-  if (!portal || v < 1 || v > 5) return;
+  if (!user || user.role !== "CLIENTE" || v < 1 || v > 5) return;
   const existing = await prisma.request.findUnique({
     where: { id: requestId },
     select: { clientId: true },
   });
-  if (!existing || existing.clientId !== portal.client.id) return;
+  if (!existing || existing.clientId !== user.clientId) return;
   const req = await prisma.request.update({
     where: { id: requestId },
     data: { clientPriority: v },
@@ -288,7 +427,7 @@ export async function setClientPriority(requestId: string, value: number) {
 // colaborador que la recibe; al cliente solo se le informa si además cambia
 // el estado (nunca "Finalizada" desde aquí — eso ocurre al terminar de verdad).
 export async function handoffRequest(formData: FormData) {
-  const user = await getCurrentUser();
+  const user = await getSessionUser();
   if (!user) return;
   const requestId = String(formData.get("requestId") || "");
   const toUserId = String(formData.get("toUserId") || "");
@@ -304,6 +443,7 @@ export async function handoffRequest(formData: FormData) {
     }),
   ]);
   if (!to || !req) return;
+  if (!canActOnRequest(user, req)) return;
 
   const statusChanges =
     newStatus !== "KEEP" &&
@@ -346,8 +486,8 @@ export async function handoffRequest(formData: FormData) {
 }
 
 export async function markTeamAlertsRead() {
-  const user = await getCurrentUser();
-  if (!user) return;
+  const user = await getSessionUser();
+  if (!user || !isTeamRole(user.role)) return;
   await prisma.notification.updateMany({
     where: { recipientEmail: user.email, channel: "team", read: false },
     data: { read: true },
@@ -400,33 +540,14 @@ export async function submitRequest(formData: FormData) {
 }
 
 // ── Portal del cliente ──────────────────────────────────────────
-
-export async function portalLogin(formData: FormData) {
-  const email = String(formData.get("email") || "")
-    .trim()
-    .toLowerCase();
-  if (!email || !email.includes("@")) redirect("/portal?error=invalido");
-  const client = await findClientByEmail(email);
-  if (!client) redirect(`/portal?error=desconocido&email=${encodeURIComponent(email)}`);
-  const store = await cookies();
-  store.set("revo_client_email", email, {
-    httpOnly: true,
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  });
-  redirect("/portal");
-}
-
-export async function portalLogout() {
-  const store = await cookies();
-  store.delete("revo_client_email");
-  redirect("/portal");
-}
+// El login del portal usa la misma acción `login` (arriba) con
+// target="portal"; logout usa la misma `logout`.
 
 export async function submitClientRequest(formData: FormData) {
-  const session = await getPortalSession();
-  if (!session) redirect("/portal");
-  const { email, client } = session;
+  const user = await getSessionUser();
+  if (!user || user.role !== "CLIENTE" || !user.client) redirect("/portal");
+  const email = user.email;
+  const client = user.client;
 
   const type = String(formData.get("type") || "Otro");
   const description = String(formData.get("description") || "").trim();

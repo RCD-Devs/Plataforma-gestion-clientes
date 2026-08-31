@@ -1,4 +1,7 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/session";
+import { isManager } from "@/lib/authz";
 import { STATUSES } from "@/lib/constants";
 import { StatCard } from "@/components/ui";
 import { hoursLabel } from "@/lib/format";
@@ -6,6 +9,10 @@ import { hoursLabel } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+  if (!isManager(user.role)) redirect("/mi-espacio");
+
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 

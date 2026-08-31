@@ -43,15 +43,36 @@ model User {
   color     String?
   createdAt DateTime @default(now())
 
+  isActive              Boolean   @default(true)
+  passwordHash          String?
+  previousPasswordHash  String?
+  mustChangePassword    Boolean   @default(true)
+  passwordChangedAt     DateTime?
+
   teamId String?
   team   Team?   @relation(fields: [teamId], references: [id])
 
   clientId String?
   client   Client? @relation(fields: [clientId], references: [id])
 
-  assigned    Request[]   @relation("assignee")
-  timeEntries TimeEntry[]
-  comments    Comment[]
+  assigned      Request[]           @relation("assignee")
+  timeEntries   TimeEntry[]
+  comments      Comment[]
+  resetTokens   PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model Request {

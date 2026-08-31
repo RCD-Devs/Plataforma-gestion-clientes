@@ -6,16 +6,17 @@ import { usePathname } from "next/navigation";
 import { logout } from "@/app/actions";
 import { Avatar } from "./ui";
 import { ROLE_MAP } from "@/lib/constants";
+import { isManager } from "@/lib/authz";
 
 const items = [
   { href: "/mi-espacio", label: "Mi espacio", icon: "▣" },
   { href: "/equipo", label: "Mi equipo", icon: "♟", leader: true },
   { href: "/tablero", label: "Tablero", icon: "▦" },
   { href: "/solicitudes", label: "Solicitudes", icon: "☰" },
-  { href: "/clientes", label: "Clientes", icon: "◎" },
-  { href: "/bolsa", label: "Bolsa de horas", icon: "◷" },
-  { href: "/dashboard", label: "Dashboard", icon: "▤" },
-  { href: "/notificaciones", label: "Notificaciones", icon: "✷" },
+  { href: "/clientes", label: "Clientes", icon: "◎", manager: true },
+  { href: "/bolsa", label: "Bolsa de horas", icon: "◷", manager: true },
+  { href: "/dashboard", label: "Dashboard", icon: "▤", manager: true },
+  { href: "/notificaciones", label: "Notificaciones", icon: "✷", manager: true },
 ];
 
 export function Sidebar({
@@ -43,6 +44,7 @@ export function Sidebar({
         {items.map((it) => {
           if (it.leader && user.role !== "LIDER_AREA" && user.role !== "ADMIN")
             return null;
+          if (it.manager && !isManager(user.role)) return null;
           const active =
             pathname === it.href || pathname.startsWith(it.href + "/");
           return (

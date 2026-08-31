@@ -3,6 +3,8 @@ import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import crypto from "crypto";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/session";
+import { canActOnRequest } from "@/lib/authz";
 
 export async function POST(req: NextRequest) {
   const form = await req.formData();
@@ -12,6 +14,12 @@ export async function POST(req: NextRequest) {
 
   if (!file || !requestId || file.size === 0) {
     return NextResponse.redirect(back, { status: 303 });
+  }
+
+  const user = await getSessionUser();
+  const target = await prisma.request.findUnique({ where: { id: requestId } });
+  if (!user || !target || !canActOnRequest(user, target)) {
+    return new NextResponse("No autorizado", { status: 403 });
   }
 
   const bytes = Buffer.from(await file.arrayBuffer());

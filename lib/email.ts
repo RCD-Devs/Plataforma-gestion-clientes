@@ -1,5 +1,9 @@
 import { prisma } from "./db";
 
+function appBaseUrl() {
+  return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+}
+
 // Notificación interna para colaboradores (campana en "Mi espacio"):
 // traspasos de tareas, cambios de prioridad del cliente, feedback, etc.
 export async function notifyTeam(opts: {
@@ -50,5 +54,28 @@ export async function notifyClient(opts: {
         channel: "inapp",
       },
     ],
+  });
+}
+
+// Recuperación de contraseña — mismo patrón stub: se registra en consola y
+// como notificación in-app hasta que se conecte un proveedor real
+// (Resend/SMTP, Rec. #41). El link no debe llegar nunca por otro canal que
+// no sea el correo real, así que por ahora solo queda visible en el log del
+// servidor para poder probar el flujo en desarrollo.
+export async function sendPasswordReset(opts: {
+  to: string;
+  name: string;
+  resetUrl: string;
+}) {
+  const fullUrl = `${appBaseUrl()}${opts.resetUrl}`;
+  // eslint-disable-next-line no-console
+  console.log(`\n🔑  [recuperar contraseña → ${opts.to}]\n    ${fullUrl}\n`);
+  await prisma.notification.create({
+    data: {
+      recipientEmail: opts.to,
+      title: "Recupera tu contraseña",
+      body: `Hola ${opts.name}, usa este enlace para elegir una nueva contraseña: ${fullUrl}`,
+      channel: "email",
+    },
   });
 }

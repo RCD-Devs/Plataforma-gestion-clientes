@@ -1,14 +1,10 @@
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { getSessionUser, redirectForRole } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const user = await getCurrentUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
-  redirect(
-    user.role === "LIDER_AREA" || user.role === "ADMIN"
-      ? "/equipo"
-      : "/mi-espacio",
-  );
+  redirect(redirectForRole(user));
 }

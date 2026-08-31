@@ -1,9 +1,16 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/session";
+import { isManager } from "@/lib/authz";
 import { relative } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
 export default async function NotificacionesPage() {
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+  if (!isManager(user.role)) redirect("/mi-espacio");
+
   const [notifs, activities] = await Promise.all([
     prisma.notification.findMany({
       where: { channel: "email" },

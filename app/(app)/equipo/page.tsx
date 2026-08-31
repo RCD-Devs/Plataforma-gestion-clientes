@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { getSessionUser } from "@/lib/session";
 import { ROLE_MAP } from "@/lib/constants";
 import { Avatar, StatusBadge, StatCard } from "@/components/ui";
 import { hoursLabel, shortDate } from "@/lib/format";
@@ -15,7 +15,7 @@ export default async function EquipoPage({
 }: {
   searchParams: Promise<{ desde?: string; hasta?: string; equipo?: string }>;
 }) {
-  const user = await getCurrentUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
   if (user.role !== "LIDER_AREA" && user.role !== "ADMIN")
     redirect("/mi-espacio");
