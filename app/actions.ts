@@ -681,6 +681,11 @@ export async function createClient(formData: FormData) {
       code: String(formData.get("code") || "").trim() || null,
       contactEmail: String(formData.get("contactEmail") || "").trim() || null,
       contractedHours: Number(formData.get("contractedHours") || 0) || 0,
+      cycleMonths: Math.max(1, Number(formData.get("cycleMonths") || 1) || 1),
+      cycleStartDate: (() => {
+        const s = String(formData.get("cycleStartDate") || "");
+        return s ? parseLocalDate(s) : null;
+      })(),
       color: String(formData.get("color") || "").trim() || null,
       accountManagerId: String(formData.get("accountManagerId") || "") || null,
       isActive: formData.get("isActive") === "on",
@@ -710,6 +715,11 @@ export async function updateClient(id: string, formData: FormData) {
       code: String(formData.get("code") || "").trim() || null,
       contactEmail: String(formData.get("contactEmail") || "").trim() || null,
       contractedHours: Number(formData.get("contractedHours") || 0) || 0,
+      cycleMonths: Math.max(1, Number(formData.get("cycleMonths") || 1) || 1),
+      cycleStartDate: (() => {
+        const s = String(formData.get("cycleStartDate") || "");
+        return s ? parseLocalDate(s) : null;
+      })(),
       color: String(formData.get("color") || "").trim() || null,
       accountManagerId: String(formData.get("accountManagerId") || "") || null,
       isActive: formData.get("isActive") === "on",
@@ -736,6 +746,33 @@ export async function setClientActive(id: string, isActive: boolean) {
     detail: `clientId=${id}`,
   });
   revalidateAdmin();
+}
+
+export async function createHoursAdjustment(clientId: string, formData: FormData) {
+  const user = await getSessionUser();
+  if (!user || user.role !== "ADMIN") redirect("/mi-espacio");
+
+  const hours = Number(formData.get("hours") || 0);
+  if (!hours) redirect(`/admin/clientes/${clientId}?error=ajuste_invalido`);
+
+  await prisma.hoursAdjustment.create({
+    data: {
+      clientId,
+      hours,
+      note: String(formData.get("note") || "").trim() || null,
+      actorId: user.id,
+      actorName: user.name,
+    },
+  });
+  await logAudit({
+    type: "admin_hours_adjustment",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `clientId=${clientId}, hours=${hours}`,
+  });
+  revalidateAdmin();
+  revalidatePath(`/admin/clientes/${clientId}`);
+  redirect(`/admin/clientes/${clientId}`);
 }
 
 export async function createUser(formData: FormData) {

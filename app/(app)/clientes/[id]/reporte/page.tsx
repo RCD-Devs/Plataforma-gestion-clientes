@@ -6,6 +6,7 @@ import { isManager } from "@/lib/authz";
 import { STATUSES, STATUS_MAP, REQUEST_TYPES } from "@/lib/constants";
 import { StatCard } from "@/components/ui";
 import { hoursLabel, shortDate, longDate } from "@/lib/format";
+import { getHoursSummaries } from "@/lib/hoursLedger";
 import { toDateInput, endOfToday } from "@/lib/dates";
 import {
   slaDays,
@@ -85,6 +86,7 @@ export default async function ClientReportPage({
   const tasaOptima =
     slaList.length > 0 ? round1((rangeCounts.OPTIMO / slaList.length) * 100) : 0;
   const horasTotales = timeEntries.reduce((a, t) => a + t.hours, 0);
+  const ledger = (await getHoursSummaries([client])).get(client.id)!;
 
   // --- Evolución mensual (agrupado por mes de INGRESO) ---
   const months = monthRange(desde, hasta);
@@ -257,9 +259,14 @@ export default async function ClientReportPage({
             value={hoursLabel(horasTotales)}
             hint={
               client.contractedHours > 0
-                ? `de ${hoursLabel(client.contractedHours)} contratadas`
+                ? `de ${hoursLabel(client.contractedHours)} por ciclo`
                 : "en el período"
             }
+          />
+          <StatCard
+            label="Saldo disponible hoy"
+            value={hoursLabel(ledger.available)}
+            hint={ledger.extraHours > 0 ? `+${hoursLabel(ledger.extraHours)} extra` : "con arrastre de 3 meses"}
           />
         </div>
 

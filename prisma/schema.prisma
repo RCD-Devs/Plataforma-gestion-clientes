@@ -14,20 +14,44 @@ datasource db {
 }
 
 model Client {
-  id              String   @id @default(cuid())
-  name            String
-  code            String?
-  contactEmail    String?
-  contractedHours Float    @default(0)
-  isActive        Boolean  @default(true)
+  id           String  @id @default(cuid())
+  name         String
+  code         String?
+  contactEmail String?
+  // Horas que otorga cada ciclo de la bolsa (Rec. #36) — no es un total
+  // fijo de por vida, se renueva solo cada cycleMonths meses.
+  contractedHours Float     @default(0)
+  cycleMonths     Int       @default(1)
+  // Ancla del ciclo (cuándo partió el contrato). Null = usa createdAt
+  // (cubre clientes ya sembrados antes de Rec. #36).
+  cycleStartDate  DateTime?
+  isActive        Boolean   @default(true)
   color           String?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime  @default(now())
 
   accountManagerId String?
   accountManager   User?   @relation("clientAccountManager", fields: [accountManagerId], references: [id])
 
-  requests Request[]
-  users    User[]   @relation("clientUsers")
+  requests          Request[]
+  users             User[]            @relation("clientUsers")
+  hoursAdjustments  HoursAdjustment[]
+}
+
+// Ajuste manual a la bolsa de horas de un cliente (Rec. #36) — a
+// diferencia de los ciclos automáticos (derivados, no se guardan),
+// esto es un dato real que alguien ingresó a mano y no vence.
+model HoursAdjustment {
+  id        String   @id @default(cuid())
+  hours     Float
+  note      String?
+  actorId   String?
+  actorName String?
+  createdAt DateTime @default(now())
+
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
 }
 
 model Team {

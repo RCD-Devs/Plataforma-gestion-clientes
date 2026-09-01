@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/session";
 import { isManager, requestVisibilityWhere, clientVisibilityWhere } from "@/lib/authz";
 import { Avatar, Bar } from "@/components/ui";
 import { hoursLabel, shortDate } from "@/lib/format";
+import { getHoursSummaries } from "@/lib/hoursLedger";
 
 export const dynamic = "force-dynamic";
 
@@ -28,14 +29,14 @@ export default async function BolsaPage() {
       take: 25,
     }),
   ]);
+  const summaries = await getHoursSummaries(clients);
 
   const rows = clients.map((c) => {
     const all = c.requests.flatMap((r) => r.timeEntries);
-    const consumed = all.reduce((a, t) => a + t.hours, 0);
     const month = all
       .filter((t) => new Date(t.date) >= monthStart)
       .reduce((a, t) => a + t.hours, 0);
-    return { c, consumed, month, saldo: c.contractedHours - consumed };
+    return { c, month, ledger: summaries.get(c.id)! };
   });
 
   return (
@@ -43,7 +44,7 @@ export default async function BolsaPage() {
       <header className="border-b border-[#e6e8eb] bg-white px-6 py-3">
         <h1 className="font-brand text-base font-semibold">Bolsa de horas</h1>
         <p className="text-xs text-[#6b7280]">
-          Consumo por cliente y registro de horas (timesheet)
+          Saldo por cliente (con arrastre de hasta 3 meses) y registro de horas
         </p>
       </header>
       <div className="flex-1 space-y-6 overflow-y-auto p-6">
@@ -52,18 +53,18 @@ export default async function BolsaPage() {
             <thead>
               <tr className="border-b border-[#e6e8eb] text-left text-xs text-[#6b7280]">
                 <th className="px-4 py-2.5 font-medium">Cliente</th>
-                <th className="px-4 py-2.5 font-medium">Contratadas</th>
+                <th className="px-4 py-2.5 font-medium">Por ciclo</th>
                 <th className="px-4 py-2.5 font-medium">Este mes</th>
-                <th className="px-4 py-2.5 font-medium">Consumidas</th>
-                <th className="px-4 py-2.5 font-medium">Saldo</th>
+                <th className="px-4 py-2.5 font-medium">Disponible</th>
+                <th className="px-4 py-2.5 font-medium">Extra</th>
                 <th className="w-40 px-4 py-2.5 font-medium">Uso</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map(({ c, consumed, month, saldo }) => {
-                const pct =
+              {rows.map(({ c, month, ledger }) => {
+                const pctRemaining =
                   c.contractedHours > 0
-                    ? (consumed / c.contractedHours) * 100
+                    ? Math.min(100, (ledger.available / c.contractedHours) * 100)
                     : 0;
                 return (
                   <tr
@@ -73,26 +74,28 @@ export default async function BolsaPage() {
                     <td className="px-4 py-3 font-medium">{c.name}</td>
                     <td className="px-4 py-3">
                       {c.contractedHours > 0
-                        ? hoursLabel(c.contractedHours)
+                        ? `${hoursLabel(c.contractedHours)} / ${c.cycleMonths === 1 ? "mes" : `${c.cycleMonths}m`}`
                         : "—"}
                     </td>
                     <td className="px-4 py-3">{hoursLabel(month)}</td>
-                    <td className="px-4 py-3">{hoursLabel(consumed)}</td>
                     <td className="px-4 py-3">
-                      <span
-                        style={{ color: saldo < 0 ? "#d21f3c" : "#0e9f6e" }}
-                      >
-                        {c.contractedHours > 0 ? hoursLabel(saldo) : "—"}
-                      </span>
+                      {c.contractedHours > 0 ? hoursLabel(ledger.available) : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      {ledger.extraHours > 0 ? (
+                        <span style={{ color: "#d21f3c" }}>+{hoursLabel(ledger.extraHours)}</span>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       {c.contractedHours > 0 ? (
                         <Bar
-                          pct={pct}
+                          pct={pctRemaining}
                           color={
-                            pct > 90
+                            pctRemaining < 10
                               ? "#d21f3c"
-                              : pct > 70
+                              : pctRemaining < 30
                                 ? "#c97416"
                                 : "#0e9f6e"
                           }

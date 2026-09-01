@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SubmitButton } from "@/components/SubmitButton";
+import { toDateInput } from "@/lib/dates";
 
 const inputCls =
   "w-full rounded-lg border border-[#e4e8ec] px-3 py-2 text-sm outline-none focus:border-[#0bdbcf]";
@@ -21,6 +22,9 @@ export function ClientForm({
     code: string | null;
     contactEmail: string | null;
     contractedHours: number;
+    cycleMonths: number;
+    cycleStartDate: Date | null;
+    createdAt: Date;
     color: string | null;
     accountManagerId: string | null;
     isActive: boolean;
@@ -63,7 +67,7 @@ export function ClientForm({
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className={labelCls}>Bolsa de horas contratada</label>
+          <label className={labelCls}>Horas por ciclo</label>
           <input
             name="contractedHours"
             type="number"
@@ -72,6 +76,34 @@ export function ClientForm({
             defaultValue={client?.contractedHours ?? 0}
             className={inputCls}
           />
+        </div>
+        <div>
+          <label className={labelCls}>Se renueva cada</label>
+          <select
+            name="cycleMonths"
+            defaultValue={String(client?.cycleMonths ?? 1)}
+            className={inputCls}
+          >
+            {[1, 2, 3, 4, 5, 6].map((n) => (
+              <option key={n} value={n}>
+                {n} {n === 1 ? "mes" : "meses"}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className={labelCls}>Inicio del contrato</label>
+          <input
+            name="cycleStartDate"
+            type="date"
+            defaultValue={toDateInput(client?.cycleStartDate ?? client?.createdAt ?? new Date())}
+            className={inputCls}
+          />
+          <p className="mt-1 text-[11px] text-[#9aa5ad]">
+            Ancla del ciclo — desde acá se cuentan las renovaciones automáticas.
+          </p>
         </div>
         <div>
           <label className={labelCls}>Color</label>

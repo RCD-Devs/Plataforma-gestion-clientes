@@ -5,6 +5,7 @@ import { isManager, requestVisibilityWhere, clientVisibilityWhere } from "@/lib/
 import { STATUSES } from "@/lib/constants";
 import { StatCard } from "@/components/ui";
 import { hoursLabel } from "@/lib/format";
+import { getHoursSummaries } from "@/lib/hoursLedger";
 
 export const dynamic = "force-dynamic";
 
@@ -27,9 +28,6 @@ export default async function DashboardPage() {
     }),
     prisma.client.findMany({
       where: clientVisibilityWhere(user),
-      include: {
-        requests: { include: { timeEntries: { select: { hours: true } } } },
-      },
     }),
   ]);
 
@@ -37,14 +35,13 @@ export default async function DashboardPage() {
   const monthHours = entries
     .filter((t) => new Date(t.date) >= monthStart)
     .reduce((a, t) => a + t.hours, 0);
-  const totalContracted = clients.reduce((a, c) => a + c.contractedHours, 0);
-  const totalConsumed = clients.reduce(
-    (a, c) =>
-      a +
-      c.requests.reduce(
-        (x, r) => x + r.timeEntries.reduce((y, t) => y + t.hours, 0),
-        0,
-      ),
+  const summaries = await getHoursSummaries(clients);
+  const totalAvailable = clients.reduce(
+    (a, c) => a + (summaries.get(c.id)?.available ?? 0),
+    0,
+  );
+  const totalExtra = clients.reduce(
+    (a, c) => a + (summaries.get(c.id)?.extraHours ?? 0),
     0,
   );
   const counts: Record<string, number> = Object.fromEntries(
@@ -70,8 +67,8 @@ export default async function DashboardPage() {
           />
           <StatCard
             label="Saldo total de bolsas"
-            value={hoursLabel(Math.max(0, totalContracted - totalConsumed))}
-            hint={`${hoursLabel(totalConsumed)} de ${hoursLabel(totalContracted)}`}
+            value={hoursLabel(totalAvailable)}
+            hint={totalExtra > 0 ? `+${hoursLabel(totalExtra)} extra` : undefined}
           />
           <StatCard label="Clientes activos" value={clients.length} />
         </div>
@@ -103,33 +100,37 @@ export default async function DashboardPage() {
           </div>
 
           <div className="rounded-xl border border-[#e6e8eb] bg-white p-5">
-            <h2 className="mb-4 text-sm font-semibold">Consumo por cliente</h2>
+            <h2 className="mb-4 text-sm font-semibold">Saldo por cliente</h2>
             <div className="space-y-3">
               {clients
                 .filter((c) => c.contractedHours > 0)
                 .map((c) => {
-                  const consumed = c.requests.reduce(
-                    (x, r) =>
-                      x + r.timeEntries.reduce((y, t) => y + t.hours, 0),
-                    0,
+                  const ledger = summaries.get(c.id)!;
+                  const pctRemaining = Math.min(
+                    100,
+                    (ledger.available / c.contractedHours) * 100,
                   );
-                  const pct = (consumed / c.contractedHours) * 100;
                   return (
                     <div key={c.id}>
                       <div className="mb-1 flex justify-between text-xs">
                         <span>{c.name}</span>
                         <span className="text-[#6b7280]">
-                          {hoursLabel(consumed)} / {hoursLabel(c.contractedHours)}
+                          {hoursLabel(ledger.available)} / {hoursLabel(c.contractedHours)}
+                          {ledger.extraHours > 0 && (
+                            <span className="ml-1 font-semibold text-[#d21f3c]">
+                              +{hoursLabel(ledger.extraHours)}
+                            </span>
+                          )}
                         </span>
                       </div>
                       <div className="h-2 overflow-hidden rounded bg-[#f3f4f6]">
                         <div
                           style={{
-                            width: `${Math.min(100, pct)}%`,
+                            width: `${pctRemaining}%`,
                             background:
-                              pct > 90
+                              pctRemaining < 10
                                 ? "#d21f3c"
-                                : pct > 70
+                                : pctRemaining < 30
                                   ? "#c97416"
                                   : "#0e9f6e",
                           }}
