@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { login, logout, submitClientRequest } from "@/app/actions";
 import { StatusBadge, PriorityTag } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 import { REQUEST_TYPES, PRIORITIES } from "@/lib/constants";
 import { shortDate } from "@/lib/format";
 
@@ -109,9 +110,12 @@ export default async function PortalPage({
               placeholder="••••••••"
               className={inputCls}
             />
-            <button className="mt-4 w-full rounded-lg bg-[#0bdbcf] py-2.5 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]">
+            <SubmitButton
+              className="mt-4 w-full rounded-lg bg-[#0bdbcf] py-2.5 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]"
+              pendingLabel="Ingresando…"
+            >
               Ingresar al portal
-            </button>
+            </SubmitButton>
             <div className="mt-3 text-center text-xs text-[#7f7f7f]">
               <Link
                 href="/recuperar-contrasena?target=portal"
@@ -224,9 +228,12 @@ export default async function PortalPage({
                   className="w-full text-sm text-[#5d6b77] file:mr-3 file:rounded-lg file:border-0 file:bg-[#e0fbf9] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-[#065f5a]"
                 />
               </Field>
-              <button className="w-full rounded-lg bg-[#0bdbcf] py-2.5 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]">
+              <SubmitButton
+                className="w-full rounded-lg bg-[#0bdbcf] py-2.5 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]"
+                pendingLabel="Enviando…"
+              >
                 Enviar solicitud
-              </button>
+              </SubmitButton>
             </form>
           </section>
 
