@@ -17,18 +17,20 @@ No se marca nada como CONFIRMADA solo porque quede bien en el documento — si n
 **Estado:** CONFIRMADA (ya documentada)
 **Motivo:** El README indica explícitamente que "en desarrollo el acceso es de demo" y que Google SSO y el envío real de correos están pendientes. No es una decisión de producto, es un estado transitorio conocido.
 
-### ADR-003 — Codia Task se integra como motor de tareas dentro de la Plataforma de clientes (no al revés)
-**Estado:** CONFIRMADA (decisión directa del dueño del proyecto, 2026-08-31)
+### ADR-003 — Codia Task se integra como motor de tareas dentro de la Plataforma de clientes (no al revés) — la plataforma resultante se llama RGC (Revo Gestión de Clientes)
+**Estado:** CONFIRMADA (decisión directa del dueño del proyecto, 2026-08-31) — **precisada 2026-09-01**
 **Motivo:** Codia Task ya resolvió, de forma probada en producción, la mayoría de los P0 de seguridad y autorización que la Plataforma de clientes tiene pendientes (auth real, roles server-side, protección de archivos, sanitización XSS, protección IDOR). Reconstruir eso en Prisma sería duplicar trabajo ya hecho.
 **Alternativa descartada:** portar las funcionalidades de Codia Task una a una hacia el modelo Prisma de la Plataforma de clientes. Se descarta porque implica reimplementar subtareas, campos custom, estados configurables por tablero y todo el trabajo de seguridad ya hecho.
+**Precisión (2026-09-01):** confirmado explícitamente que la dirección es "traer lo que sirva de Codia Task hacia Gestión de Clientes" — no al revés. La plataforma resultante pasa a llamarse **RGC**. Ver ADR-004 para la implicancia técnica concreta de esto (qué codebase sobrevive).
 **Cuándo se implementa:** en una sesión de planificación aparte — es una fusión de dos bases de datos y dos codebases completas, no algo para arrancar sin su propio diseño dedicado. Esta decisión solo fija la dirección.
 
-### ADR-004 — Base de datos única sobre el esquema de Codia Task
-**Estado:** CONFIRMADA con matiz (decisión directa del dueño del proyecto, 2026-08-31)
-**Motivo:** El esquema SQL de Codia Task (`backend/src/db/schema.sql`) ya modela multi-rol (`user_roles`), subtareas (`parent_id`), campos custom y estados configurables — cosas que el esquema Prisma actual no tiene. Adaptar Prisma hacia ese esquema es menos trabajo que llevar todo Codia Task a Prisma.
-**El matiz:** lo que se confirma como requisito duro es **un solo proyecto Supabase para ambos sistemas** (ya no dos bases separadas). Si el esquema final termina siendo exactamente el de Codia Task o uno adaptado es secundario y se resuelve con la prueba técnica de migración que este mismo ADR ya pedía — no es una condición para avanzar.
-**Riesgo a mitigar:** la Plataforma de clientes pierde `Activity` (bitácora) y `Notification` (canal in-app), que Codia Task no tiene — hay que decidir si se mantienen como tablas propias sobre la BBDD compartida o se descartan.
-**Quién debe confirmarla en detalle:** quien lidere el desarrollo, junto con la prueba técnica de migración, en la misma sesión aparte que ADR-003.
+### ADR-004 — RGC (Next.js + Prisma + Postgres) es la base técnica que sobrevive; se extiende con lo que sirva de Codia Task
+**Estado:** CONFIRMADA (decisión directa del dueño del proyecto, 2026-09-01 — resuelve el matiz que este ADR dejaba abierto desde el 2026-08-31)
+**Motivo:** Directo de ADR-003: si "todo debe vivir dentro de RGC", el código/schema de RGC (este repo, Next.js + Prisma + Postgres) es la base que se queda. Lo útil de Codia Task —el esquema SQL de `backend/src/db/schema.sql` ya modela multi-rol (`user_roles`), subtareas (`parent_id`), múltiples asignados por tarea (`task_assignees`), campos custom y estados configurables por tablero, cosas que el schema Prisma actual no tiene— se agrega como modelos Prisma **nuevos** dentro de RGC, no se migra RGC hacia el schema SQL crudo de Codia Task.
+**Qué pasa con el backend de Codia Task:** el Express + SQL crudo (`RCD CodiaTask/backend`) se apaga una vez que se haya portado a RGC todo lo que sirva. No queda como servicio permanente ni como fuente de verdad.
+**Ya confirmado desde antes, sigue vigente:** un solo proyecto Supabase para todo (Postgres + Storage) — ya es así hoy, RGC ya corre sobre Supabase desde ADR-010/Rec. #37.
+**Riesgo a mitigar:** ninguno nuevo — `Activity` (bitácora de negocio) y `AuditLog` (bitácora de seguridad) de RGC no tienen equivalente en Codia Task y se mantienen tal cual, al ser RGC quien sobrevive.
+**Pendiente de definir en la sesión de fusión:** el detalle campo a campo de qué se porta primero (ver auditoría técnica de Codia Task, 2026-09-01, para el inventario completo de brechas) y en qué orden — eso es trabajo de esa sesión, no de esta ADR.
 
 ### ADR-011 — Roles y permisos como datos editables (Admin, Líder de área y Coordinador de cuenta), no hardcodeados
 **Estado:** CONFIRMADA como requisito (decisión directa del dueño del proyecto, 2026-08-31) — implementación diferida
@@ -37,15 +39,15 @@ No se marca nada como CONFIRMADA solo porque quede bien en el documento — si n
 **Mientras tanto:** `Rec. #21` (Diseño/SEO/Desarrollo ven solo lo asignado) y `Rec. #22` (Coordinador ve solo sus clientes) quedan resueltos hoy de forma hardcodeada en `lib/authz.ts` (`requestVisibilityWhere`, `clientVisibilityWhere`, `canActOnRequest`) — cierran la brecha real de seguridad sin esperar al sistema completo, y se reemplazan sin drama cuando llegue `ADR-011`.
 **Extensión (2026-09-01):** el mismo criterio de "hardcodeado por ahora, editable cuando llegue `ADR-011`" se aplica también a las pantallas de administración de `Rec. #27-#30` (clientes, usuarios, equipos) — `/admin` queda restringido a `ADMIN` únicamente, no a todo `isManager()`, porque crear logins, desactivar personas y editar horas contratadas es más sensible que solo ver datos. Líder de área y Coordinador de cuenta ganan estas capacidades recién en la fusión con Codia Task, junto con el resto de `ADR-011`.
 
-### ADR-005 — El rol `CLIENTE` del modelo `User` de Prisma se retira en favor de `client_id` + rol de Codia Task
-**Estado:** PROPUESTA
-**Motivo:** Codia Task ya resuelve "un usuario es de un cliente y tiene rol Cliente" de forma más completa (portal separado, permisos acotados a sus propias tareas). Mantener dos formas de representar lo mismo genera inconsistencia.
-**Relacionado:** [Rec. #24], [Rmap #22] — ambos ya señalaban esto como pendiente de definir, independiente de la integración.
+### ADR-005 — El rol `CLIENTE` del modelo `User` de Prisma se retira en favor de un modelo multi-rol tipo `user_roles`, portado a RGC
+**Estado:** PROPUESTA — **reformulada 2026-09-01 tras ADR-004**
+**Motivo:** Codia Task modela "un usuario es de un cliente y tiene uno o más roles" de forma más completa (`users.client_id` + `user_roles` multi-rol, confirmado en la auditoría técnica del 2026-09-01). Como Codia Task no sobrevive como servicio (ADR-004), esto no es "adoptar el rol de Codia Task" sino portar ese patrón de datos a Prisma dentro de RGC.
+**Relacionado:** [Rec. #24], [Rmap #22] — ambos ya señalaban esto como pendiente de definir, independiente de la integración. También se cruza con ADR-011 (roles/permisos editables).
 
-### ADR-006 — Un solo dominio público para shell + motor de tareas
-**Estado:** PROPUESTA
-**Motivo:** Codia Task ya resolvió este problema para sí mismo (`vercel.json` sirve Next.js y Express bajo el mismo dominio, `/api` y `/uploads` enrutados al backend). Reutilizar ese patrón evita configurar SSO cruzado entre dos dominios distintos.
-**Alternativa a evaluar en Fase 0:** si por infraestructura conviene mantener Codia Task en su propio dominio/servicio (por ejemplo, backend en Render como ya está configurado hoy), la identidad se unifica vía token compartido en vez de mismo dominio. Ambas opciones son técnicamente viables; la decisión es de infraestructura/costos, no de producto.
+### ADR-006 — Un solo dominio público (probablemente ya resuelto por ADR-004)
+**Estado:** PROPUESTA — **probablemente innecesaria tras ADR-004**
+**Motivo original:** evitar SSO cruzado entre dos dominios si Codia Task seguía viviendo como servicio aparte.
+**Por qué ya no aplica en la práctica:** ADR-004 (2026-09-01) confirmó que el backend Express de Codia Task se apaga una vez portado lo útil a RGC — no queda un segundo servicio con el que compartir dominio. Se deja como PROPUESTA en vez de borrarla por si la sesión de fusión revela una razón real para mantener algo aparte (ej. una etapa transitoria de convivencia entre ambos sistemas mientras se porta todo).
 
 ### ADR-007 — Login diferenciado: SSO para el equipo interno, usuario y contraseña para clientes
 **Estado:** CONFIRMADA (decisión directa del dueño del proyecto, 2026-08-28) — **secuencia actualizada 2026-08-31**
