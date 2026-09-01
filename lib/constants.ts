@@ -1,29 +1,6 @@
-export type StatusKey =
-  | "TAREAS_RECURRENTES"
-  | "POR_HACER"
-  | "EN_PAUSA"
-  | "EN_DESARROLLO"
-  | "EN_REVISION"
-  | "FINALIZADA";
-
-// Colores alineados a la paleta REVO:
-// navy #081826 · turquesa #0BDBCF · naranja #FB693B · naranja claro #FDA565 · gris #7F7F7F
-export const STATUSES: {
-  key: StatusKey;
-  label: string;
-  color: string;
-  soft: string;
-}[] = [
-  { key: "TAREAS_RECURRENTES", label: "Tareas recurrentes", color: "#7f7f7f", soft: "#f1f3f4" },
-  { key: "POR_HACER", label: "Por hacer", color: "#16324a", soft: "#e8eef3" },
-  { key: "EN_PAUSA", label: "En pausa", color: "#c97416", soft: "#fdf1e3" },
-  { key: "EN_DESARROLLO", label: "En desarrollo", color: "#08a89f", soft: "#e0fbf9" },
-  { key: "EN_REVISION", label: "En revisión", color: "#e2532a", soft: "#feede6" },
-  { key: "FINALIZADA", label: "Finalizada", color: "#0e9f6e", soft: "#e6f7f0" },
-];
-
-export const STATUS_MAP: Record<string, (typeof STATUSES)[number]> =
-  Object.fromEntries(STATUSES.map((s) => [s.key, s]));
+// Los estados de tablero (antes hardcodeados acá) ahora son editables por
+// Admin — ver lib/statuses.ts (getStatuses/getStatusMap, respaldados en la
+// tabla Status) y /admin/estados.
 
 export const PRIORITIES = [
   { key: "BAJA", label: "Baja", color: "#7f7f7f" },

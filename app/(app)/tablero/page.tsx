@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { requestVisibilityWhere } from "@/lib/authz";
-import { STATUSES } from "@/lib/constants";
+import { getStatuses } from "@/lib/statuses";
 import { Avatar, PriorityTag, ClientTag } from "@/components/ui";
 import { hoursLabel } from "@/lib/format";
 
@@ -13,15 +13,18 @@ export default async function TableroPage() {
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
-  const requests = await prisma.request.findMany({
-    where: { ...requestVisibilityWhere(user), archivedAt: null },
-    include: {
-      client: true,
-      assignee: true,
-      timeEntries: { select: { hours: true } },
-    },
-    orderBy: { updatedAt: "desc" },
-  });
+  const [requests, statuses] = await Promise.all([
+    prisma.request.findMany({
+      where: { ...requestVisibilityWhere(user), archivedAt: null },
+      include: {
+        client: true,
+        assignee: true,
+        timeEntries: { select: { hours: true } },
+      },
+      orderBy: { updatedAt: "desc" },
+    }),
+    getStatuses(),
+  ]);
 
   return (
     <div className="flex h-full flex-col">
@@ -40,10 +43,10 @@ export default async function TableroPage() {
       </header>
 
       <div className="thin-scroll flex flex-1 gap-4 overflow-x-auto p-6">
-        {STATUSES.map((s) => {
-          const items = requests.filter((r) => r.status === s.key);
+        {statuses.map((s) => {
+          const items = requests.filter((r) => r.status === s.code);
           return (
-            <div key={s.key} className="flex w-72 shrink-0 flex-col">
+            <div key={s.code} className="flex w-72 shrink-0 flex-col">
               <div className="mb-3 flex items-center gap-2">
                 <span
                   style={{ background: s.color }}

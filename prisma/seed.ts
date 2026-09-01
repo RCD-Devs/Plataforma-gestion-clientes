@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { seedStatuses } from "../scripts/seed-statuses";
 
 const prisma = new PrismaClient();
 
@@ -13,6 +14,8 @@ const ahead = (d: number) => new Date(now + d * DAY);
 const DEMO_PASSWORD = "Revo1234!";
 
 async function main() {
+  await seedStatuses(prisma);
+
   const existing = await prisma.user.count();
   if (existing > 0) {
     console.log("Seed omitido: la base ya tiene usuarios.");

@@ -6,6 +6,7 @@ import { isManager, clientVisibilityWhere } from "@/lib/authz";
 import { Bar } from "@/components/ui";
 import { hoursLabel } from "@/lib/format";
 import { getHoursSummaries } from "@/lib/hoursLedger";
+import { getStatuses } from "@/lib/statuses";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,8 @@ export default async function ClientesPage() {
     orderBy: { name: "asc" },
   });
   const summaries = await getHoursSummaries(clients);
+  const statuses = await getStatuses();
+  const finalCodes = new Set(statuses.filter((s) => s.isFinal).map((s) => s.code));
 
   return (
     <div className="flex h-full flex-col">
@@ -40,7 +43,7 @@ export default async function ClientesPage() {
                 ? Math.min(100, (ledger.available / c.contractedHours) * 100)
                 : 0;
             const open = c.requests.filter(
-              (r) => r.status !== "FINALIZADA",
+              (r) => !finalCodes.has(r.status),
             ).length;
             return (
               <div

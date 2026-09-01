@@ -2,7 +2,8 @@
 
 import { useRef, useState, useTransition } from "react";
 import { handoffRequest } from "@/app/actions";
-import { STATUSES, ROLE_MAP } from "@/lib/constants";
+import { ROLE_MAP } from "@/lib/constants";
+import type { StatusInfo } from "@/lib/statuses";
 
 // Traspaso de tarea a otro perfil (etapas: diseño → desarrollo → …).
 // "Finalizada" no es opción aquí: la tarea se finaliza cuando el último
@@ -10,9 +11,11 @@ import { STATUSES, ROLE_MAP } from "@/lib/constants";
 export function HandoffPanel({
   requestId,
   teammates,
+  statuses,
 }: {
   requestId: string;
   teammates: { id: string; name: string; role: string }[];
+  statuses: StatusInfo[];
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -66,8 +69,8 @@ export function HandoffPanel({
               className="w-full rounded-md border border-[#e4e8ec] px-2 py-1.5 text-xs outline-none focus:border-[#0bdbcf]"
             >
               <option value="KEEP">Mantener estado actual</option>
-              {STATUSES.filter((s) => s.key !== "FINALIZADA").map((s) => (
-                <option key={s.key} value={s.key}>
+              {statuses.filter((s) => !s.isFinal).map((s) => (
+                <option key={s.code} value={s.code}>
                   Pasar a: {s.label}
                 </option>
               ))}

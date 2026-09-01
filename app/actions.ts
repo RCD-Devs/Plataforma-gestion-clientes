@@ -17,7 +17,8 @@ import { logAudit } from "@/lib/audit";
 import { storeUploadedFile } from "@/lib/attachments";
 import crypto from "crypto";
 import { notifyClient, notifyTeam } from "@/lib/email";
-import { STATUS_MAP, PRIORITY_MAP } from "@/lib/constants";
+import { PRIORITY_MAP } from "@/lib/constants";
+import { getStatusMap } from "@/lib/statuses";
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
@@ -255,7 +256,8 @@ export async function resetPassword(formData: FormData) {
 
 export async function changeStatus(requestId: string, status: string) {
   const user = await getSessionUser();
-  if (!user || !STATUS_MAP[status]) return;
+  const statusMap = await getStatusMap();
+  if (!user || !statusMap[status]) return;
   const req = await prisma.request.findUnique({
     where: { id: requestId },
     include: { client: true, collaborators: true },
@@ -269,10 +271,10 @@ export async function changeStatus(requestId: string, status: string) {
     where: { id: requestId },
     data: {
       status,
-      finalizedAt: status === "FINALIZADA" ? new Date() : null,
+      finalizedAt: statusMap[status]?.isFinal ? new Date() : null,
     },
   });
-  const label = STATUS_MAP[status]?.label ?? status;
+  const label = statusMap[status]?.label ?? status;
   await prisma.activity.create({
     data: {
       requestId,
@@ -624,6 +626,87 @@ export async function setCustomFieldActive(fieldId: string, isActive: boolean) {
   revalidatePath("/admin/campos");
 }
 
+function statusFormValues(formData: FormData, fallbackSortOrder: number) {
+  const label = String(formData.get("label") || "").trim();
+  const color = String(formData.get("color") || "#7f7f7f").trim();
+  const isFinal = formData.get("isFinal") === "on";
+  const sortOrderRaw = formData.get("sortOrder");
+  const sortOrder =
+    sortOrderRaw !== null && sortOrderRaw !== ""
+      ? Number(sortOrderRaw)
+      : fallbackSortOrder;
+  return { label, color, isFinal, sortOrder };
+}
+
+export async function createStatus(formData: FormData) {
+  const user = await getSessionUser();
+  if (!user || user.role !== "ADMIN") redirect("/mi-espacio");
+
+  const code = String(formData.get("code") || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  const count = await prisma.status.count();
+  const { label, color, isFinal, sortOrder } = statusFormValues(formData, count);
+  if (!code || !label) redirect("/admin/estados?error=datos");
+
+  const existing = await prisma.status.findUnique({ where: { code } });
+  if (existing) redirect("/admin/estados?error=code_existente");
+
+  const status = await prisma.status.create({
+    data: { code, label, color, isFinal, sortOrder },
+  });
+  await logAudit({
+    type: "admin_status_created",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `statusId=${status.id}, code=${status.code}`,
+  });
+  refreshLists();
+  revalidatePath("/admin/estados");
+  redirect("/admin/estados");
+}
+
+export async function updateStatus(statusId: string, formData: FormData) {
+  const user = await getSessionUser();
+  if (!user || user.role !== "ADMIN") redirect("/mi-espacio");
+
+  const { label, color, isFinal, sortOrder } = statusFormValues(formData, 0);
+  if (!label) redirect("/admin/estados?error=datos");
+
+  await prisma.status.update({
+    where: { id: statusId },
+    data: { label, color, isFinal, sortOrder },
+  });
+  await logAudit({
+    type: "admin_status_updated",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `statusId=${statusId}`,
+  });
+  refreshLists();
+  revalidatePath("/admin/estados");
+  redirect("/admin/estados");
+}
+
+export async function setStatusActive(statusId: string, isActive: boolean) {
+  const user = await getSessionUser();
+  if (!user || user.role !== "ADMIN") return;
+  await prisma.status.update({
+    where: { id: statusId },
+    data: { archivedAt: isActive ? null : new Date() },
+  });
+  await logAudit({
+    type: isActive ? "admin_status_reactivated" : "admin_status_archived",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `statusId=${statusId}`,
+  });
+  refreshLists();
+  revalidatePath("/admin/estados");
+}
+
 export async function logHours(formData: FormData) {
   const user = await getSessionUser();
   if (!user || !isTeamRole(user.role)) return;
@@ -788,10 +871,11 @@ export async function handoffRequest(formData: FormData) {
   if (!to || !req) return;
   if (!canActOnRequest(user, req)) return;
 
+  const statusMap = await getStatusMap();
   const statusChanges =
     newStatus !== "KEEP" &&
-    newStatus !== "FINALIZADA" &&
-    !!STATUS_MAP[newStatus] &&
+    !statusMap[newStatus]?.isFinal &&
+    !!statusMap[newStatus] &&
     newStatus !== req.status;
   await prisma.request.update({
     where: { id: requestId },
@@ -816,7 +900,7 @@ export async function handoffRequest(formData: FormData) {
     body: `"${req.title}" (${req.client.name})${note ? ` — ${note}` : ""}`,
   });
   if (statusChanges && req.requesterEmail) {
-    const label = STATUS_MAP[newStatus]?.label ?? newStatus;
+    const label = statusMap[newStatus]?.label ?? newStatus;
     await notifyClient({
       to: req.requesterEmail,
       requestId,

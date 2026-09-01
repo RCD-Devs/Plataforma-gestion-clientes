@@ -300,6 +300,21 @@ model Notification {
   @@index([recipientEmail])
 }
 
+// Estados de tablero editables (Rec. #36 fusión, entrega 2, 2026-09-01).
+// Request.status sigue siendo un String libre (el "code" acá) — no se
+// convierte a FK a propósito, así ningún dato existente necesita
+// migrarse. isFinal reemplaza la comparación hardcodeada contra el
+// string literal "FINALIZADA" en el cálculo de SLA y los reportes.
+model Status {
+  id         String    @id @default(cuid())
+  code       String    @unique
+  label      String
+  color      String
+  sortOrder  Int       @default(0)
+  isFinal    Boolean   @default(false)
+  archivedAt DateTime?
+}
+
 // Bitácora de seguridad — login, cambios de contraseña, etc. Separada de
 // Activity (que es el feed de negocio visible a usuarios) porque tiene otro
 // dueño (seguridad, no el cliente) y otro ciclo de vida.

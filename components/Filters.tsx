@@ -1,7 +1,8 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { STATUSES, PRIORITIES, ROLES } from "@/lib/constants";
+import { PRIORITIES, ROLES } from "@/lib/constants";
+import type { StatusInfo } from "@/lib/statuses";
 
 type Opt = { id: string; name: string };
 
@@ -10,11 +11,13 @@ export function Filters({
   users,
   teams,
   projects,
+  statuses,
 }: {
   clients: Opt[];
   users: Opt[];
   teams: Opt[];
   projects: Opt[];
+  statuses: StatusInfo[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -108,8 +111,8 @@ export function Filters({
         onChange={(e) => setParam("estado", e.target.value)}
       >
         <option value="">Estado</option>
-        {STATUSES.map((s) => (
-          <option key={s.key} value={s.key}>
+        {statuses.map((s) => (
+          <option key={s.code} value={s.code}>
             {s.label}
           </option>
         ))}

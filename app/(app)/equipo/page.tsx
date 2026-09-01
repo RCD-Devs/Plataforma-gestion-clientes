@@ -7,6 +7,7 @@ import { ROLE_MAP } from "@/lib/constants";
 import { Avatar, StatusBadge, StatCard } from "@/components/ui";
 import { hoursLabel, shortDate } from "@/lib/format";
 import { daysFromToday, endOfToday, toDateInput } from "@/lib/dates";
+import { getStatuses } from "@/lib/statuses";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +51,7 @@ export default async function EquipoPage({
         }
       : {};
 
-  const [tasks, entries] = await Promise.all([
+  const [tasks, entries, statuses] = await Promise.all([
     prisma.request.findMany({
       where: taskWhere,
       include: { client: true, assignee: true },
@@ -63,9 +64,11 @@ export default async function EquipoPage({
       },
       include: { user: true, request: { include: { client: true } } },
     }),
+    getStatuses(),
   ]);
+  const finalCodes = new Set(statuses.filter((s) => s.isFinal).map((s) => s.code));
 
-  const open = tasks.filter((t) => t.status !== "FINALIZADA");
+  const open = tasks.filter((t) => !finalCodes.has(t.status));
   const overdue = open.filter(
     (t) => t.dueDate && daysFromToday(t.dueDate) < 0,
   );

@@ -23,7 +23,7 @@ import { RequestEditPanel } from "@/components/RequestEditPanel";
 import { ArchiveButton } from "@/components/ArchiveButton";
 import { CollaboratorsPanel } from "@/components/CollaboratorsPanel";
 import { SubmitButton } from "@/components/SubmitButton";
-import { STATUS_MAP } from "@/lib/constants";
+import { getStatusMap, getStatuses, softBg } from "@/lib/statuses";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +59,7 @@ export default async function RequestDetail({
   if (!req) notFound();
   if (!canViewRequest(user, req)) notFound();
 
-  const [users, projects, customFields] = await Promise.all([
+  const [users, projects, customFields, statuses, statusMap] = await Promise.all([
     prisma.user.findMany({
       where: { role: { not: "CLIENTE" } },
       orderBy: { name: "asc" },
@@ -72,6 +72,8 @@ export default async function RequestDetail({
       where: { archivedAt: null },
       orderBy: { sortOrder: "asc" },
     }),
+    getStatuses(),
+    getStatusMap(),
   ]);
   const totalHours = req.timeEntries.reduce((a, t) => a + t.hours, 0);
   const customFieldValueMap = new Map(
@@ -222,11 +224,13 @@ export default async function RequestDetail({
                   <span
                     className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium"
                     style={{
-                      background: STATUS_MAP[s.status]?.soft,
-                      color: STATUS_MAP[s.status]?.color,
+                      background: statusMap[s.status]
+                        ? softBg(statusMap[s.status].color)
+                        : undefined,
+                      color: statusMap[s.status]?.color,
                     }}
                   >
-                    {STATUS_MAP[s.status]?.label ?? s.status}
+                    {statusMap[s.status]?.label ?? s.status}
                   </span>
                 </Link>
               ))}
@@ -364,7 +368,7 @@ export default async function RequestDetail({
           <div className="rounded-xl border border-[#e6e8eb] bg-white p-4">
             <div className="space-y-3 text-sm">
               <Row label="Estado">
-                <StatusSelect requestId={req.id} value={req.status} />
+                <StatusSelect requestId={req.id} value={req.status} statuses={statuses} />
               </Row>
               <Row label="Responsable">
                 <AssigneeSelect

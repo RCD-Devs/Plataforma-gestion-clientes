@@ -8,6 +8,7 @@ import { Filters } from "@/components/Filters";
 import { Avatar, StatusBadge, PriorityTag, ClientTag } from "@/components/ui";
 import { hoursLabel, relative } from "@/lib/format";
 import { getUnreadRequestIds } from "@/lib/commentReads";
+import { getStatuses } from "@/lib/statuses";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +48,7 @@ export default async function SolicitudesPage({
     where.createdAt = range;
   }
 
-  const [requests, clients, users, teams, projects] = await Promise.all([
+  const [requests, clients, users, teams, projects, statuses] = await Promise.all([
     prisma.request.findMany({
       where,
       include: {
@@ -64,6 +65,7 @@ export default async function SolicitudesPage({
     }),
     prisma.team.findMany({ orderBy: { name: "asc" } }),
     prisma.project.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" } }),
+    getStatuses(),
   ]);
 
   const unreadIds =
@@ -92,7 +94,7 @@ export default async function SolicitudesPage({
             + Nueva solicitud
           </Link>
         </div>
-        <Filters clients={clients} users={users} teams={teams} projects={projects} />
+        <Filters clients={clients} users={users} teams={teams} projects={projects} statuses={statuses} />
       </header>
 
       <div className="flex-1 overflow-y-auto p-6">

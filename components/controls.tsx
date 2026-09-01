@@ -1,7 +1,8 @@
 "use client";
 
 import { useTransition } from "react";
-import { STATUSES, PRIORITIES } from "@/lib/constants";
+import { PRIORITIES } from "@/lib/constants";
+import type { StatusInfo } from "@/lib/statuses";
 import {
   changeStatus,
   assignRequest,
@@ -15,9 +16,11 @@ const selectCls =
 export function StatusSelect({
   requestId,
   value,
+  statuses,
 }: {
   requestId: string;
   value: string;
+  statuses: StatusInfo[];
 }) {
   const [pending, start] = useTransition();
   return (
@@ -30,8 +33,8 @@ export function StatusSelect({
         start(() => changeStatus(requestId, v));
       }}
     >
-      {STATUSES.map((s) => (
-        <option key={s.key} value={s.key}>
+      {statuses.map((s) => (
+        <option key={s.code} value={s.code}>
           {s.label}
         </option>
       ))}

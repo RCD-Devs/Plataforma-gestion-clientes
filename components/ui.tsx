@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
-import { STATUS_MAP, PRIORITY_MAP } from "@/lib/constants";
+import { PRIORITY_MAP } from "@/lib/constants";
 import { initials } from "@/lib/format";
+import { getStatusMap, softBg } from "@/lib/statuses";
 
 export function Avatar({
   name,
@@ -27,12 +28,13 @@ export function Avatar({
   );
 }
 
-export function StatusBadge({ status }: { status: string }) {
-  const s = STATUS_MAP[status];
+export async function StatusBadge({ status }: { status: string }) {
+  const map = await getStatusMap();
+  const s = map[status];
   if (!s) return <span className="text-xs">{status}</span>;
   return (
     <span
-      style={{ background: s.soft, color: s.color }}
+      style={{ background: softBg(s.color), color: s.color }}
       className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
     >
       <span style={{ background: s.color }} className="h-1.5 w-1.5 rounded-full" />

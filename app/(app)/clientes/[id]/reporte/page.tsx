@@ -3,7 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { isManager } from "@/lib/authz";
-import { STATUSES, STATUS_MAP, REQUEST_TYPES } from "@/lib/constants";
+import { REQUEST_TYPES } from "@/lib/constants";
+import { getStatuses, getStatusMap, softBg } from "@/lib/statuses";
 import { StatCard } from "@/components/ui";
 import { hoursLabel, shortDate, longDate } from "@/lib/format";
 import { getHoursSummaries } from "@/lib/hoursLedger";
@@ -56,7 +57,7 @@ export default async function ClientReportPage({
     : new Date(now.getFullYear(), now.getMonth() - 11, 1);
   const hasta = sp.hasta ? new Date(`${sp.hasta}T23:59:59`) : endOfToday();
 
-  const [requests, timeEntries] = await Promise.all([
+  const [requests, timeEntries, statuses, statusMap] = await Promise.all([
     prisma.request.findMany({
       where: { clientId: id, createdAt: { gte: desde, lte: hasta } },
       include: {
@@ -72,11 +73,14 @@ export default async function ClientReportPage({
       },
       include: { user: true, request: { select: { type: true } } },
     }),
+    getStatuses(),
+    getStatusMap(),
   ]);
+  const finalCodes = new Set(statuses.filter((s) => s.isFinal).map((s) => s.code));
 
   // --- KPIs ---
   const finalizadas = requests.filter(
-    (r) => r.status === "FINALIZADA" && r.finalizedAt,
+    (r) => finalCodes.has(r.status) && r.finalizedAt,
   );
   const slaList = finalizadas.map((r) => slaDays(r.createdAt, r.finalizedAt!));
   const slaPromedio = round1(mean(slaList));
@@ -101,14 +105,14 @@ export default async function ClientReportPage({
   const evolPromedio = months.map((m) => {
     const f = byMonth
       .get(m)!
-      .filter((r) => r.status === "FINALIZADA" && r.finalizedAt)
+      .filter((r) => finalCodes.has(r.status) && r.finalizedAt)
       .map((r) => slaDays(r.createdAt, r.finalizedAt!));
     return round1(mean(f));
   });
   const evolMediana = months.map((m) => {
     const f = byMonth
       .get(m)!
-      .filter((r) => r.status === "FINALIZADA" && r.finalizedAt)
+      .filter((r) => finalCodes.has(r.status) && r.finalizedAt)
       .map((r) => slaDays(r.createdAt, r.finalizedAt!));
     return round1(median(f));
   });
@@ -172,8 +176,8 @@ export default async function ClientReportPage({
   const perUser = [...hoursByUser.values()].sort((a, b) => b.hours - a.hours);
 
   // --- Distribución de estado ---
-  const statusCounts = STATUSES.map(
-    (s) => requests.filter((r) => r.status === s.key).length,
+  const statusCounts = statuses.map(
+    (s) => requests.filter((r) => r.status === s.code).length,
   );
 
   const fmt = toDateInput;
@@ -378,9 +382,9 @@ export default async function ClientReportPage({
             </p>
             {requests.length > 0 ? (
               <ReportDoughnut
-                labels={STATUSES.map((s) => s.label)}
+                labels={statuses.map((s) => s.label)}
                 values={statusCounts}
-                colors={STATUSES.map((s) => s.color)}
+                colors={statuses.map((s) => s.color)}
               />
             ) : (
               <div className="py-10 text-center text-sm text-[#7f7f7f]">
@@ -435,7 +439,7 @@ export default async function ClientReportPage({
                 {requests.map((r) => {
                   const hrs = r.timeEntries.reduce((a, t) => a + t.hours, 0);
                   const sla =
-                    r.status === "FINALIZADA" && r.finalizedAt
+                    finalCodes.has(r.status) && r.finalizedAt
                       ? round1(slaDays(r.createdAt, r.finalizedAt))
                       : null;
                   const range = sla != null ? classifySla(sla) : null;
@@ -477,12 +481,14 @@ export default async function ClientReportPage({
                       <td className="px-4 py-3">
                         <span
                           style={{
-                            color: STATUS_MAP[r.status]?.color,
-                            background: STATUS_MAP[r.status]?.soft,
+                            color: statusMap[r.status]?.color,
+                            background: statusMap[r.status]
+                              ? softBg(statusMap[r.status].color)
+                              : undefined,
                           }}
                           className="rounded-full px-2 py-0.5 text-xs font-medium"
                         >
-                          {STATUS_MAP[r.status]?.label ?? r.status}
+                          {statusMap[r.status]?.label ?? r.status}
                         </span>
                       </td>
                       <td className="px-4 py-3">

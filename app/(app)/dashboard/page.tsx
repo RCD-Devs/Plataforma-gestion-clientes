@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { isManager, requestVisibilityWhere, clientVisibilityWhere } from "@/lib/authz";
-import { STATUSES } from "@/lib/constants";
+import { getStatuses } from "@/lib/statuses";
 import { StatCard } from "@/components/ui";
 import { hoursLabel } from "@/lib/format";
 import { getHoursSummaries } from "@/lib/hoursLedger";
@@ -17,7 +17,7 @@ export default async function DashboardPage() {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const [requests, entries, clients] = await Promise.all([
+  const [requests, entries, clients, statuses] = await Promise.all([
     prisma.request.findMany({
       where: requestVisibilityWhere(user),
       select: { status: true },
@@ -29,9 +29,11 @@ export default async function DashboardPage() {
     prisma.client.findMany({
       where: clientVisibilityWhere(user),
     }),
+    getStatuses(),
   ]);
+  const finalCodes = new Set(statuses.filter((s) => s.isFinal).map((s) => s.code));
 
-  const open = requests.filter((r) => r.status !== "FINALIZADA").length;
+  const open = requests.filter((r) => !finalCodes.has(r.status)).length;
   const monthHours = entries
     .filter((t) => new Date(t.date) >= monthStart)
     .reduce((a, t) => a + t.hours, 0);
@@ -45,7 +47,7 @@ export default async function DashboardPage() {
     0,
   );
   const counts: Record<string, number> = Object.fromEntries(
-    STATUSES.map((s) => [s.key, requests.filter((r) => r.status === s.key).length]),
+    statuses.map((s) => [s.code, requests.filter((r) => r.status === s.code).length]),
   );
   const maxCount = Math.max(1, ...Object.values(counts));
 
@@ -79,20 +81,20 @@ export default async function DashboardPage() {
               Solicitudes por estado
             </h2>
             <div className="space-y-3">
-              {STATUSES.map((s) => (
-                <div key={s.key} className="flex items-center gap-3">
+              {statuses.map((s) => (
+                <div key={s.code} className="flex items-center gap-3">
                   <div className="w-32 text-xs text-[#6b7280]">{s.label}</div>
                   <div className="h-5 flex-1 overflow-hidden rounded bg-[#f3f4f6]">
                     <div
                       style={{
-                        width: `${(counts[s.key] / maxCount) * 100}%`,
+                        width: `${(counts[s.code] / maxCount) * 100}%`,
                         background: s.color,
                       }}
                       className="h-full rounded"
                     />
                   </div>
                   <div className="w-6 text-right text-sm font-medium">
-                    {counts[s.key]}
+                    {counts[s.code]}
                   </div>
                 </div>
               ))}

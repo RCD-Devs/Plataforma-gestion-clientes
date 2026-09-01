@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
-import { STATUSES } from "@/lib/constants";
+import { getStatuses } from "@/lib/statuses";
 import { StatusSelect } from "@/components/controls";
 import { StatusBadge, PriorityTag, ClientTag } from "@/components/ui";
 import { HandoffPanel } from "@/components/Handoff";
@@ -13,8 +13,8 @@ import { getUnreadRequestIds } from "@/lib/commentReads";
 
 export const dynamic = "force-dynamic";
 
-function dueInfo(dueDate: Date | null, status: string) {
-  if (!dueDate || status === "FINALIZADA") return null;
+function dueInfo(dueDate: Date | null, isFinal: boolean) {
+  if (!dueDate || isFinal) return null;
   const days = daysFromToday(dueDate);
   if (days < 0)
     return { tone: "late" as const, text: `Vencida hace ${-days} día${days === -1 ? "" : "s"}` };
@@ -40,7 +40,7 @@ export default async function MiEspacioPage({
   const { vista } = await searchParams;
   const asList = vista === "lista";
 
-  const [tasks, teammates, alerts, unread] = await Promise.all([
+  const [tasks, teammates, alerts, unread, statuses] = await Promise.all([
     prisma.request.findMany({
       where: {
         archivedAt: null,
@@ -66,16 +66,18 @@ export default async function MiEspacioPage({
     prisma.notification.count({
       where: { recipientEmail: user.email, channel: "team", read: false },
     }),
+    getStatuses(),
   ]);
+  const finalCodes = new Set(statuses.filter((s) => s.isFinal).map((s) => s.code));
 
   const unreadIds = await getUnreadRequestIds(user.id, tasks.map((t) => t.id));
 
   const reminders = tasks
-    .map((t) => ({ t, due: dueInfo(t.dueDate, t.status) }))
+    .map((t) => ({ t, due: dueInfo(t.dueDate, finalCodes.has(t.status)) }))
     .filter((x) => x.due)
     .sort((a, b) => (a.t.dueDate!.getTime() ?? 0) - (b.t.dueDate!.getTime() ?? 0));
 
-  const open = tasks.filter((t) => t.status !== "FINALIZADA").length;
+  const open = tasks.filter((t) => !finalCodes.has(t.status)).length;
 
   return (
     <div className="flex h-full flex-col">
@@ -200,7 +202,7 @@ export default async function MiEspacioPage({
                 </thead>
                 <tbody>
                   {tasks.map((t) => {
-                    const due = dueInfo(t.dueDate, t.status);
+                    const due = dueInfo(t.dueDate, finalCodes.has(t.status));
                     const hrs = t.timeEntries.reduce((a, e) => a + e.hours, 0);
                     return (
                       <tr
@@ -255,7 +257,7 @@ export default async function MiEspacioPage({
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          <StatusSelect requestId={t.id} value={t.status} />
+                          <StatusSelect requestId={t.id} value={t.status} statuses={statuses} />
                         </td>
                         <td className="px-4 py-3">
                           <HandoffPanel
@@ -265,6 +267,7 @@ export default async function MiEspacioPage({
                               name: m.name,
                               role: m.role,
                             }))}
+                            statuses={statuses}
                           />
                         </td>
                       </tr>
@@ -286,10 +289,10 @@ export default async function MiEspacioPage({
           </div>
         ) : (
           <div className="thin-scroll flex gap-4 overflow-x-auto p-6">
-            {STATUSES.map((s) => {
-              const items = tasks.filter((t) => t.status === s.key);
+            {statuses.map((s) => {
+              const items = tasks.filter((t) => t.status === s.code);
               return (
-                <div key={s.key} className="flex w-80 shrink-0 flex-col">
+                <div key={s.code} className="flex w-80 shrink-0 flex-col">
                   <div className="mb-3 flex items-center gap-2">
                     <span
                       style={{ background: s.color }}
@@ -302,7 +305,7 @@ export default async function MiEspacioPage({
                   </div>
                   <div className="flex flex-col gap-2.5">
                     {items.map((t) => {
-                      const due = dueInfo(t.dueDate, t.status);
+                      const due = dueInfo(t.dueDate, finalCodes.has(t.status));
                       const hrs = t.timeEntries.reduce((a, e) => a + e.hours, 0);
                       return (
                         <div
@@ -354,7 +357,7 @@ export default async function MiEspacioPage({
                             </div>
                           )}
                           <div className="mt-2 flex items-center justify-between gap-2 border-t border-[#f1f3f4] pt-2">
-                            <StatusSelect requestId={t.id} value={t.status} />
+                            <StatusSelect requestId={t.id} value={t.status} statuses={statuses} />
                             <HandoffPanel
                               requestId={t.id}
                               teammates={teammates.map((m) => ({
@@ -362,6 +365,7 @@ export default async function MiEspacioPage({
                                 name: m.name,
                                 role: m.role,
                               }))}
+                              statuses={statuses}
                             />
                           </div>
                         </div>
