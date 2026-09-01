@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { resetPassword } from "@/app/actions";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -65,9 +66,12 @@ export default async function RestablecerContrasenaPage({
             <p className="text-xs text-[#7f7f7f]">
               Mínimo 8 caracteres, con una mayúscula y un símbolo (! @ # $ % & * ? + -).
             </p>
-            <button className="w-full rounded-lg bg-[#0bdbcf] py-2.5 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]">
+            <SubmitButton
+              className="w-full rounded-lg bg-[#0bdbcf] py-2.5 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]"
+              pendingLabel="Guardando…"
+            >
               Guardar contraseña
-            </button>
+            </SubmitButton>
           </form>
         )}
       </div>

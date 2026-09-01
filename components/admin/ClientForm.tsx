@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SubmitButton } from "@/components/SubmitButton";
 
 const inputCls =
   "w-full rounded-lg border border-[#e4e8ec] px-3 py-2 text-sm outline-none focus:border-[#0bdbcf]";
@@ -107,9 +108,9 @@ export function ClientForm({
         Cliente activo (visible en el formulario público de solicitudes)
       </label>
       <div className="flex gap-2 pt-2">
-        <button className="rounded-md bg-[#0bdbcf] px-4 py-2 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]">
+        <SubmitButton className="rounded-md bg-[#0bdbcf] px-4 py-2 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]">
           {submitLabel}
-        </button>
+        </SubmitButton>
         <Link
           href="/admin/clientes"
           className="rounded-md border border-[#e4e8ec] px-4 py-2 text-sm text-[#5d6b77] hover:bg-[#f8fafb]"

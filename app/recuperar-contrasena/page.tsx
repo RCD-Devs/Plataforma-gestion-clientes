@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { requestPasswordReset } from "@/app/actions";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -39,9 +40,12 @@ export default async function RecuperarContrasenaPage({
             </label>
             <input name="email" type="email" required className={inputCls} />
           </div>
-          <button className="w-full rounded-lg bg-[#0bdbcf] py-2.5 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]">
+          <SubmitButton
+            className="w-full rounded-lg bg-[#0bdbcf] py-2.5 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]"
+            pendingLabel="Enviando…"
+          >
             Enviar instrucciones
-          </button>
+          </SubmitButton>
         </form>
         <div className="mt-4 text-center text-xs text-[#7f7f7f]">
           <Link href={backHref} className="hover:text-[#08a89f] hover:underline">
