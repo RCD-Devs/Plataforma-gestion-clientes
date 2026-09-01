@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
 import crypto from "crypto";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { canActOnRequest } from "@/lib/authz";
 import { sniffFile, MAX_FILE_SIZE_BYTES } from "@/lib/files";
 import { rateLimit } from "@/lib/rateLimit";
+import { uploadToStorage } from "@/lib/storage";
 
 export async function POST(req: NextRequest) {
   const form = await req.formData();
@@ -36,11 +35,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.redirect(back, { status: 303 });
   }
 
-  const dir = path.join(process.cwd(), "uploads");
-  await mkdir(dir, { recursive: true });
-
   const id = crypto.randomUUID();
-  await writeFile(path.join(dir, id + sig.ext), bytes);
+  await uploadToStorage(id + sig.ext, bytes, sig.contentType);
 
   await prisma.attachment.create({
     data: {

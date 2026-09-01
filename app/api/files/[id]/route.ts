@@ -1,9 +1,9 @@
 import { NextRequest } from "next/server";
-import { readFile } from "fs/promises";
 import path from "path";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { canActOnRequest } from "@/lib/authz";
+import { downloadFromStorage } from "@/lib/storage";
 
 export async function GET(
   _req: NextRequest,
@@ -27,9 +27,8 @@ export async function GET(
       : canActOnRequest(user, attachment.request);
   if (!allowed) return new Response("No autorizado", { status: 403 });
 
-  const file = path.join(process.cwd(), "uploads", safe);
   try {
-    const buf = await readFile(file);
+    const buf = await downloadFromStorage(safe);
     const ext = path.extname(safe).toLowerCase();
     const type =
       ext === ".pdf"

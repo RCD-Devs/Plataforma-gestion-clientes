@@ -15,9 +15,8 @@ import { isTeamRole, isManager, canActOnRequest } from "@/lib/authz";
 import { sniffFile, MAX_FILE_SIZE_BYTES } from "@/lib/files";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { logAudit } from "@/lib/audit";
+import { uploadToStorage } from "@/lib/storage";
 import crypto from "crypto";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
 import { notifyClient, notifyTeam } from "@/lib/email";
 import { STATUS_MAP, PRIORITY_MAP } from "@/lib/constants";
 
@@ -631,10 +630,8 @@ export async function submitClientRequest(formData: FormData) {
     const bytes = Buffer.from(await file.arrayBuffer());
     const sig = sniffFile(bytes);
     if (sig) {
-      const dir = path.join(process.cwd(), "uploads");
-      await mkdir(dir, { recursive: true });
       const id = crypto.randomUUID();
-      await writeFile(path.join(dir, id + sig.ext), bytes);
+      await uploadToStorage(id + sig.ext, bytes, sig.contentType);
       await prisma.attachment.create({
         data: {
           requestId: req.id,
