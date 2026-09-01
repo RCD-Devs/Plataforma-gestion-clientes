@@ -7,6 +7,7 @@ import { requestVisibilityWhere } from "@/lib/authz";
 import { Filters } from "@/components/Filters";
 import { Avatar, StatusBadge, PriorityTag, ClientTag } from "@/components/ui";
 import { hoursLabel, relative } from "@/lib/format";
+import { getUnreadRequestIds } from "@/lib/commentReads";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,7 @@ export default async function SolicitudesPage({
   const where: Prisma.RequestWhereInput = { ...requestVisibilityWhere(user) };
   where.archivedAt = sp.archivadas === "1" ? { not: null } : null;
   if (sp.cliente) where.clientId = sp.cliente;
+  if (sp.proyecto) where.projectId = sp.proyecto;
   if (sp.responsable) where.assigneeId = sp.responsable;
   if (sp.equipo) where.teamId = sp.equipo;
   if (sp.estado) where.status = sp.estado;
@@ -45,7 +47,7 @@ export default async function SolicitudesPage({
     where.createdAt = range;
   }
 
-  const [requests, clients, users, teams] = await Promise.all([
+  const [requests, clients, users, teams, projects] = await Promise.all([
     prisma.request.findMany({
       where,
       include: {
@@ -61,7 +63,13 @@ export default async function SolicitudesPage({
       orderBy: { name: "asc" },
     }),
     prisma.team.findMany({ orderBy: { name: "asc" } }),
+    prisma.project.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" } }),
   ]);
+
+  const unreadIds =
+    user.role === "CLIENTE"
+      ? new Set<string>()
+      : await getUnreadRequestIds(user.id, requests.map((r) => r.id));
 
   const totalHours = requests.reduce(
     (a, r) => a + r.timeEntries.reduce((x, t) => x + t.hours, 0),
@@ -84,7 +92,7 @@ export default async function SolicitudesPage({
             + Nueva solicitud
           </Link>
         </div>
-        <Filters clients={clients} users={users} teams={teams} />
+        <Filters clients={clients} users={users} teams={teams} projects={projects} />
       </header>
 
       <div className="flex-1 overflow-y-auto p-6">
@@ -116,6 +124,12 @@ export default async function SolicitudesPage({
                         <div className="flex items-center gap-1.5">
                           <ClientTag name={r.client.code || r.client.name} />
                           <span className="text-xs text-[#9ca3af]">{r.key}</span>
+                          {unreadIds.has(r.id) && (
+                            <span
+                              title="El cliente respondió y nadie lo ha visto"
+                              className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#d21f3c]"
+                            />
+                          )}
                         </div>
                         <div className="mt-0.5 font-medium">{r.title}</div>
                       </Link>

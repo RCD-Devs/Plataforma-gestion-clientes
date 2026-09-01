@@ -9,10 +9,12 @@ export function Filters({
   clients,
   users,
   teams,
+  projects,
 }: {
   clients: Opt[];
   users: Opt[];
   teams: Opt[];
+  projects: Opt[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -61,6 +63,18 @@ export function Filters({
         {users.map((u) => (
           <option key={u.id} value={u.id}>
             {u.name}
+          </option>
+        ))}
+      </select>
+      <select
+        className={cls}
+        value={sp.get("proyecto") ?? ""}
+        onChange={(e) => setParam("proyecto", e.target.value)}
+      >
+        <option value="">Proyecto</option>
+        {projects.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
           </option>
         ))}
       </select>

@@ -21,22 +21,37 @@ export function isManager(role: string): boolean {
 
 // Admin/Líder pueden actuar sobre cualquier solicitud; Coordinador solo sobre
 // las de sus propios clientes (Rec. #22); Diseño/SEO/Desarrollo solo sobre la
-// que tienen asignada (Rec. #21); un Cliente, nunca (usa sus propios chequeos
-// de clientId). Se mantiene coherente con canViewRequest: nadie puede actuar
+// que tienen asignada o donde son colaboradores (Rec. #21 + fusión Codia
+// Task, 2026-09-01 — colaboradores es aditivo, assigneeId sigue siendo el
+// responsable principal); un Cliente, nunca (usa sus propios chequeos de
+// clientId). Se mantiene coherente con canViewRequest: nadie puede actuar
 // sobre algo que no puede ver.
 export function canActOnRequest(
   user: { id: string; role: string },
-  req: { assigneeId: string | null; client: { accountManagerId: string | null } },
+  req: {
+    assigneeId: string | null;
+    client: { accountManagerId: string | null };
+    collaborators?: { userId: string }[];
+  },
 ): boolean {
   if (user.role === "ADMIN" || user.role === "LIDER_AREA") return true;
   if (user.role === "COORDINADOR_CUENTA") return req.client.accountManagerId === user.id;
-  if (isTeamRole(user.role)) return req.assigneeId === user.id;
+  if (isTeamRole(user.role)) {
+    return (
+      req.assigneeId === user.id ||
+      (req.collaborators?.some((c) => c.userId === user.id) ?? false)
+    );
+  }
   return false;
 }
 
 export function canViewRequest(
   user: { id: string; role: string },
-  req: { assigneeId: string | null; client: { accountManagerId: string | null } },
+  req: {
+    assigneeId: string | null;
+    client: { accountManagerId: string | null };
+    collaborators?: { userId: string }[];
+  },
 ): boolean {
   return canActOnRequest(user, req);
 }
@@ -51,7 +66,11 @@ export function requestVisibilityWhere(user: {
   if (user.role === "COORDINADOR_CUENTA") {
     return { client: { accountManagerId: user.id } };
   }
-  if (isTeamRole(user.role)) return { assigneeId: user.id };
+  if (isTeamRole(user.role)) {
+    return {
+      OR: [{ assigneeId: user.id }, { collaborators: { some: { userId: user.id } } }],
+    };
+  }
   return { id: "__ninguna__" }; // no debería llegar aquí (Cliente ya se excluye en el layout)
 }
 

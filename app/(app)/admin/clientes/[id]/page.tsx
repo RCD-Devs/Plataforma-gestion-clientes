@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { updateClient, createHoursAdjustment } from "@/app/actions";
+import { updateClient, createHoursAdjustment, createProject, setProjectActive } from "@/app/actions";
 import { isManager } from "@/lib/authz";
 import { ClientForm } from "@/components/admin/ClientForm";
 import { SubmitButton } from "@/components/SubmitButton";
+import { ActiveToggle } from "@/components/admin/ActiveToggle";
 import { getHoursSummaries } from "@/lib/hoursLedger";
 import { hoursLabel, shortDate } from "@/lib/format";
 
@@ -21,10 +22,11 @@ export default async function EditarClientePage({
 }) {
   const { id } = await params;
   const { error } = await searchParams;
-  const [client, users, adjustments] = await Promise.all([
+  const [client, users, adjustments, projects] = await Promise.all([
     prisma.client.findUnique({ where: { id } }),
     prisma.user.findMany({ orderBy: { name: "asc" } }),
     prisma.hoursAdjustment.findMany({ where: { clientId: id }, orderBy: { createdAt: "desc" } }),
+    prisma.project.findMany({ where: { clientId: id }, orderBy: { createdAt: "desc" } }),
   ]);
   if (!client) notFound();
   const managers = users.filter((u) => isManager(u.role));
@@ -121,6 +123,43 @@ export default async function EditarClientePage({
             ))}
           </div>
         )}
+      </div>
+
+      <div className="max-w-xl space-y-4 border-t border-[#e6e8eb] p-6">
+        <h2 className="text-sm font-semibold">Proyectos</h2>
+        <p className="text-xs text-[#9aa5ad]">
+          Cada proyecto es su propio tablero filtrado. La mantención general
+          (formulario público, portal) sigue sin proyecto asignado.
+        </p>
+
+        {projects.length > 0 && (
+          <div className="space-y-1.5">
+            {projects.map((p) => (
+              <div
+                key={p.id}
+                className="flex items-center justify-between rounded-lg border border-[#f1f3f4] px-3 py-2 text-sm"
+              >
+                <span>{p.name}</span>
+                <ActiveToggle id={p.id} isActive={!p.archivedAt} action={setProjectActive} />
+              </div>
+            ))}
+          </div>
+        )}
+
+        <form
+          action={createProject.bind(null, id)}
+          className="flex flex-wrap items-end gap-2 rounded-lg border border-[#e4e8ec] p-3"
+        >
+          <div className="flex-1">
+            <label className="mb-1 block text-xs font-semibold text-[#5d6b77]">
+              Nombre del proyecto
+            </label>
+            <input name="name" required className={inputCls} />
+          </div>
+          <SubmitButton className="h-9 rounded-md bg-[#0bdbcf] px-3 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]">
+            Crear proyecto
+          </SubmitButton>
+        </form>
       </div>
     </div>
   );

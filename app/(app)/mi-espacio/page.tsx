@@ -9,6 +9,7 @@ import { HandoffPanel } from "@/components/Handoff";
 import { markTeamAlertsRead } from "@/app/actions";
 import { hoursLabel, relative, shortDate } from "@/lib/format";
 import { daysFromToday } from "@/lib/dates";
+import { getUnreadRequestIds } from "@/lib/commentReads";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +42,10 @@ export default async function MiEspacioPage({
 
   const [tasks, teammates, alerts, unread] = await Promise.all([
     prisma.request.findMany({
-      where: { assigneeId: user.id, archivedAt: null },
+      where: {
+        archivedAt: null,
+        OR: [{ assigneeId: user.id }, { collaborators: { some: { userId: user.id } } }],
+      },
       include: {
         client: true,
         attachments: { select: { id: true } },
@@ -63,6 +67,8 @@ export default async function MiEspacioPage({
       where: { recipientEmail: user.email, channel: "team", read: false },
     }),
   ]);
+
+  const unreadIds = await getUnreadRequestIds(user.id, tasks.map((t) => t.id));
 
   const reminders = tasks
     .map((t) => ({ t, due: dueInfo(t.dueDate, t.status) }))
@@ -203,8 +209,14 @@ export default async function MiEspacioPage({
                       >
                         <td className="px-4 py-3">
                           <Link href={`/solicitudes/${t.key}`}>
-                            <div className="text-xs text-[#7f7f7f]">
+                            <div className="flex items-center gap-1.5 text-xs text-[#7f7f7f]">
                               {t.key} · {t.type}
+                              {unreadIds.has(t.id) && (
+                                <span
+                                  title="El cliente respondió y nadie lo ha visto"
+                                  className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#d21f3c]"
+                                />
+                              )}
                             </div>
                             <div className="font-semibold">{t.title}</div>
                             <div className="mt-0.5 line-clamp-1 max-w-md text-xs text-[#5d6b77]">
@@ -300,6 +312,12 @@ export default async function MiEspacioPage({
                           <div className="mb-1.5 flex items-center gap-1.5">
                             <ClientTag name={t.client.code || t.client.name} />
                             <PriorityTag priority={t.priority} />
+                            {unreadIds.has(t.id) && (
+                              <span
+                                title="El cliente respondió y nadie lo ha visto"
+                                className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#d21f3c]"
+                              />
+                            )}
                             {t.clientPriority && (
                               <span className="text-[11px] text-[#c97416]">
                                 ★{t.clientPriority}/5

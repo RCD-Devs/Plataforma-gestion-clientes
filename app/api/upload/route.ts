@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   const user = await getSessionUser();
   const target = await prisma.request.findUnique({
     where: { id: requestId },
-    include: { client: true },
+    include: { client: true, collaborators: true },
   });
   if (!user || !target || !canActOnRequest(user, target)) {
     return new NextResponse("No autorizado", { status: 403 });

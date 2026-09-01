@@ -14,12 +14,16 @@ export function RequestEditPanel({
   description,
   type,
   dueDate,
+  projectId,
+  projects,
 }: {
   requestId: string;
   title: string;
   description: string;
   type: string;
   dueDate: Date | null;
+  projectId: string | null;
+  projects: { id: string; name: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -88,6 +92,19 @@ export function RequestEditPanel({
             className={inputCls}
           />
         </div>
+      </div>
+      <div>
+        <label className="mb-1 block text-xs font-semibold text-[#6b7280]">
+          Proyecto
+        </label>
+        <select name="projectId" defaultValue={projectId ?? ""} className={inputCls}>
+          <option value="">Sin proyecto (mantención general)</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="flex gap-2 pt-1">
         <button

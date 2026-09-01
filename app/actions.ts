@@ -258,7 +258,7 @@ export async function changeStatus(requestId: string, status: string) {
   if (!user || !STATUS_MAP[status]) return;
   const req = await prisma.request.findUnique({
     where: { id: requestId },
-    include: { client: true },
+    include: { client: true, collaborators: true },
   });
   if (!req || req.status === status) return;
   if (!canActOnRequest(user, req)) return;
@@ -332,7 +332,7 @@ export async function updateRequestDetails(requestId: string, formData: FormData
   if (!user) return;
   const existing = await prisma.request.findUnique({
     where: { id: requestId },
-    include: { client: true },
+    include: { client: true, collaborators: true },
   });
   if (!existing || !canActOnRequest(user, existing)) return;
 
@@ -341,6 +341,12 @@ export async function updateRequestDetails(requestId: string, formData: FormData
   const description = String(formData.get("description") || "");
   const type = String(formData.get("type") || existing.type).trim() || existing.type;
   const dueStr = String(formData.get("dueDate") || "");
+  const projectIdRaw = String(formData.get("projectId") || "");
+  let projectId: string | null = null;
+  if (projectIdRaw) {
+    const project = await prisma.project.findUnique({ where: { id: projectIdRaw } });
+    if (project && project.clientId === existing.clientId) projectId = project.id;
+  }
 
   const req = await prisma.request.update({
     where: { id: requestId },
@@ -349,6 +355,7 @@ export async function updateRequestDetails(requestId: string, formData: FormData
       description,
       type,
       dueDate: dueStr ? parseLocalDate(dueStr) : null,
+      projectId,
     },
   });
   await prisma.activity.create({
@@ -367,7 +374,7 @@ export async function archiveRequest(requestId: string) {
   if (!user) return;
   const existing = await prisma.request.findUnique({
     where: { id: requestId },
-    include: { client: true },
+    include: { client: true, collaborators: true },
   });
   if (!existing || !canActOnRequest(user, existing)) return;
 
@@ -391,7 +398,7 @@ export async function unarchiveRequest(requestId: string) {
   if (!user) return;
   const existing = await prisma.request.findUnique({
     where: { id: requestId },
-    include: { client: true },
+    include: { client: true, collaborators: true },
   });
   if (!existing || !canActOnRequest(user, existing)) return;
 
@@ -408,6 +415,213 @@ export async function unarchiveRequest(requestId: string) {
     },
   });
   refreshLists(req.key);
+}
+
+// ---------- Motor de tareas: fusión con Codia Task, parte aditiva (2026-09-01) ----------
+
+export async function createSubtask(parentId: string, formData: FormData) {
+  const user = await getSessionUser();
+  if (!user) return;
+  const parent = await prisma.request.findUnique({
+    where: { id: parentId },
+    include: { client: true, collaborators: true },
+  });
+  if (!parent || !canActOnRequest(user, parent)) return;
+
+  const title = String(formData.get("title") || "").trim();
+  if (!title) return;
+
+  const key = await nextKey();
+  const sub = await prisma.request.create({
+    data: {
+      key,
+      title,
+      type: parent.type,
+      clientId: parent.clientId,
+      projectId: parent.projectId,
+      parentId: parent.id,
+      requesterEmail: parent.requesterEmail,
+      status: "POR_HACER",
+    },
+  });
+  await prisma.activity.create({
+    data: {
+      requestId: parent.id,
+      type: "subtask_created",
+      message: `Creó la subtarea "${title}" (${sub.key})`,
+      actorName: user.name,
+    },
+  });
+  refreshLists(parent.key);
+  revalidatePath(`/solicitudes/${sub.key}`);
+}
+
+export async function addCollaborator(requestId: string, userId: string) {
+  const user = await getSessionUser();
+  if (!user || !userId) return;
+  const req = await prisma.request.findUnique({
+    where: { id: requestId },
+    include: { client: true, collaborators: true },
+  });
+  if (!req || !canActOnRequest(user, req)) return;
+  if (req.collaborators.some((c) => c.userId === userId)) return;
+
+  const collaborator = await prisma.user.findUnique({ where: { id: userId } });
+  if (!collaborator) return;
+  await prisma.requestCollaborator.create({ data: { requestId, userId } });
+  await prisma.activity.create({
+    data: {
+      requestId,
+      type: "collaborator_added",
+      message: `Agregó a ${collaborator.name} como colaborador`,
+      actorName: user.name,
+    },
+  });
+  refreshLists(req.key);
+}
+
+export async function removeCollaborator(requestId: string, userId: string) {
+  const user = await getSessionUser();
+  if (!user) return;
+  const req = await prisma.request.findUnique({
+    where: { id: requestId },
+    include: { client: true, collaborators: true },
+  });
+  if (!req || !canActOnRequest(user, req)) return;
+
+  await prisma.requestCollaborator.deleteMany({ where: { requestId, userId } });
+  refreshLists(req.key);
+}
+
+export async function saveCustomFieldValues(requestId: string, formData: FormData) {
+  const user = await getSessionUser();
+  if (!user) return;
+  const req = await prisma.request.findUnique({
+    where: { id: requestId },
+    include: { client: true, collaborators: true },
+  });
+  if (!req || !canActOnRequest(user, req)) return;
+
+  const fields = await prisma.customFieldDefinition.findMany({ where: { archivedAt: null } });
+  for (const field of fields) {
+    const key = `field_${field.id}`;
+    if (field.type === "checkbox") {
+      const value = formData.get(key) === "on" ? "true" : "false";
+      await prisma.customFieldValue.upsert({
+        where: { fieldId_requestId: { fieldId: field.id, requestId } },
+        update: { value },
+        create: { fieldId: field.id, requestId, value },
+      });
+      continue;
+    }
+    const value = String(formData.get(key) || "").trim();
+    if (!value) {
+      await prisma.customFieldValue.deleteMany({ where: { fieldId: field.id, requestId } });
+    } else {
+      await prisma.customFieldValue.upsert({
+        where: { fieldId_requestId: { fieldId: field.id, requestId } },
+        update: { value },
+        create: { fieldId: field.id, requestId, value },
+      });
+    }
+  }
+  revalidatePath(`/solicitudes/${req.key}`);
+}
+
+export async function markCommentsRead(requestId: string) {
+  const user = await getSessionUser();
+  if (!user) return;
+  const req = await prisma.request.findUnique({
+    where: { id: requestId },
+    include: { client: true, collaborators: true },
+  });
+  if (!req) return;
+  const allowed =
+    user.role === "CLIENTE"
+      ? user.clientId === req.clientId
+      : canActOnRequest(user, req);
+  if (!allowed) return;
+
+  await prisma.commentRead.upsert({
+    where: { userId_requestId: { userId: user.id, requestId } },
+    update: { readAt: new Date() },
+    create: { userId: user.id, requestId },
+  });
+}
+
+export async function createProject(clientId: string, formData: FormData) {
+  const user = await getSessionUser();
+  if (!user || user.role !== "ADMIN") return;
+  const name = String(formData.get("name") || "").trim();
+  if (!name) return;
+  const project = await prisma.project.create({ data: { name, clientId } });
+  await logAudit({
+    type: "admin_project_created",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `projectId=${project.id}, clientId=${clientId}`,
+  });
+  revalidatePath(`/admin/clientes/${clientId}`);
+}
+
+export async function setProjectActive(projectId: string, isActive: boolean) {
+  const user = await getSessionUser();
+  if (!user || user.role !== "ADMIN") return;
+  const project = await prisma.project.update({
+    where: { id: projectId },
+    data: { archivedAt: isActive ? null : new Date() },
+  });
+  await logAudit({
+    type: isActive ? "admin_project_reactivated" : "admin_project_archived",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `projectId=${projectId}`,
+  });
+  revalidatePath(`/admin/clientes/${project.clientId}`);
+}
+
+export async function createCustomField(formData: FormData) {
+  const user = await getSessionUser();
+  if (!user || user.role !== "ADMIN") redirect("/mi-espacio");
+  const label = String(formData.get("label") || "").trim();
+  const type = String(formData.get("type") || "text");
+  if (!label) redirect("/admin/campos?error=nombre");
+
+  const options =
+    type === "select"
+      ? String(formData.get("options") || "")
+          .split(",")
+          .map((o) => o.trim())
+          .filter(Boolean)
+      : [];
+
+  const field = await prisma.customFieldDefinition.create({
+    data: { label, type, options },
+  });
+  await logAudit({
+    type: "admin_custom_field_created",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `fieldId=${field.id}, label=${label}`,
+  });
+  revalidatePath("/admin/campos");
+  redirect("/admin/campos");
+}
+
+export async function setCustomFieldActive(fieldId: string, isActive: boolean) {
+  const user = await getSessionUser();
+  if (!user || user.role !== "ADMIN") return;
+  await prisma.customFieldDefinition.update({
+    where: { id: fieldId },
+    data: { archivedAt: isActive ? null : new Date() },
+  });
+  await logAudit({
+    type: isActive ? "admin_custom_field_reactivated" : "admin_custom_field_archived",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `fieldId=${fieldId}`,
+  });
+  revalidatePath("/admin/campos");
 }
 
 export async function logHours(formData: FormData) {
@@ -515,7 +729,7 @@ export async function addUrlAttachment(formData: FormData) {
   if (!requestId || !url) return;
   const req = await prisma.request.findUnique({
     where: { id: requestId },
-    include: { client: true },
+    include: { client: true, collaborators: true },
   });
   if (!user || !req || !canActOnRequest(user, req)) return;
   await prisma.attachment.create({
@@ -568,7 +782,7 @@ export async function handoffRequest(formData: FormData) {
     prisma.user.findUnique({ where: { id: toUserId } }),
     prisma.request.findUnique({
       where: { id: requestId },
-      include: { client: true },
+      include: { client: true, collaborators: true },
     }),
   ]);
   if (!to || !req) return;

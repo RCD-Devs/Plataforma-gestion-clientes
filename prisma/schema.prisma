@@ -35,6 +35,24 @@ model Client {
   requests          Request[]
   users             User[]            @relation("clientUsers")
   hoursAdjustments  HoursAdjustment[]
+  projects          Project[]
+}
+
+// Un cliente puede tener varios proyectos (fusión con Codia Task,
+// 2026-09-01) — cada uno es su propio tablero filtrado. La mantención
+// general (formulario público, portal) sigue sin proyecto asignado.
+model Project {
+  id         String    @id @default(cuid())
+  name       String
+  createdAt  DateTime  @default(now())
+  archivedAt DateTime?
+
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  requests Request[]
+
+  @@index([clientId])
 }
 
 // Ajuste manual a la bolsa de horas de un cliente (Rec. #36) — a
@@ -83,11 +101,13 @@ model User {
   clientId String?
   client   Client? @relation("clientUsers", fields: [clientId], references: [id])
 
-  assigned       Request[]            @relation("assignee")
-  timeEntries    TimeEntry[]
-  comments       Comment[]
-  resetTokens    PasswordResetToken[]
-  managedClients Client[]             @relation("clientAccountManager")
+  assigned        Request[]              @relation("assignee")
+  timeEntries     TimeEntry[]
+  comments        Comment[]
+  resetTokens     PasswordResetToken[]
+  managedClients  Client[]               @relation("clientAccountManager")
+  collaborations  RequestCollaborator[]
+  commentReads    CommentRead[]
 }
 
 model PasswordResetToken {
@@ -125,20 +145,93 @@ model Request {
   clientId String
   client   Client @relation(fields: [clientId], references: [id])
 
+  // Proyecto opcional (fusión con Codia Task) — null = mantención
+  // general, como hoy. Nunca lo setean el formulario público ni el
+  // portal; es una acción del equipo interno.
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id])
+
+  // Subtareas: una subtarea es un Request con padre, hereda
+  // clientId/projectId del padre al crearse.
+  parentId String?
+  parent   Request?  @relation("subtasks", fields: [parentId], references: [id])
+  subtasks Request[] @relation("subtasks")
+
   assigneeId String?
   assignee   User?   @relation("assignee", fields: [assigneeId], references: [id])
 
   teamId String?
   team   Team?   @relation(fields: [teamId], references: [id])
 
-  attachments Attachment[]
-  comments    Comment[]
-  timeEntries TimeEntry[]
-  activities  Activity[]
+  attachments       Attachment[]
+  comments          Comment[]
+  timeEntries       TimeEntry[]
+  activities        Activity[]
+  collaborators     RequestCollaborator[]
+  customFieldValues CustomFieldValue[]
+  commentReads      CommentRead[]
 
   @@index([clientId])
   @@index([assigneeId])
   @@index([status])
+  @@index([projectId])
+  @@index([parentId])
+}
+
+// Gente adicional que puede actuar sobre la tarea, además del
+// responsable principal (assigneeId, sin cambios). Aditivo a propósito
+// — ver ADR de la fusión con Codia Task, 2026-09-01.
+model RequestCollaborator {
+  requestId String
+  request   Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  addedAt DateTime @default(now())
+
+  @@id([requestId, userId])
+}
+
+// Campos personalizados — globales, no por proyecto (decisión
+// 2026-09-01: mantener estados/campos compartidos entre todos los
+// proyectos para no repetir la complejidad de JIRA).
+model CustomFieldDefinition {
+  id         String    @id @default(cuid())
+  label      String
+  type       String // text | textarea | number | date | select | checkbox
+  options    String[] @default([])
+  sortOrder  Int       @default(0)
+  archivedAt DateTime?
+
+  values CustomFieldValue[]
+}
+
+model CustomFieldValue {
+  id    String @id @default(cuid())
+  value String
+
+  fieldId String
+  field   CustomFieldDefinition @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  requestId String
+  request   Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@unique([fieldId, requestId])
+}
+
+// Marca hasta cuándo vio cada usuario los comentarios de una
+// solicitud — para el indicador de "el cliente respondió y nadie lo ha
+// visto".
+model CommentRead {
+  userId    String
+  requestId String
+  readAt    DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@id([userId, requestId])
 }
 
 model Attachment {
