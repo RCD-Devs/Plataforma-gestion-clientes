@@ -12,10 +12,9 @@ import {
 } from "@/lib/password";
 import { sendPasswordReset, sendWelcomeEmail } from "@/lib/email";
 import { isTeamRole, isManager, canActOnRequest, TEAM_ROLES } from "@/lib/authz";
-import { sniffFile, MAX_FILE_SIZE_BYTES } from "@/lib/files";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { logAudit } from "@/lib/audit";
-import { uploadToStorage } from "@/lib/storage";
+import { storeUploadedFile } from "@/lib/attachments";
 import crypto from "crypto";
 import { notifyClient, notifyTeam } from "@/lib/email";
 import { STATUS_MAP, PRIORITY_MAP } from "@/lib/constants";
@@ -634,22 +633,7 @@ export async function submitClientRequest(formData: FormData) {
     },
   });
 
-  if (file && file.size > 0 && file.size <= MAX_FILE_SIZE_BYTES) {
-    const bytes = Buffer.from(await file.arrayBuffer());
-    const sig = sniffFile(bytes);
-    if (sig) {
-      const id = crypto.randomUUID();
-      await uploadToStorage(id + sig.ext, bytes, sig.contentType);
-      await prisma.attachment.create({
-        data: {
-          requestId: req.id,
-          kind: sig.kind,
-          name: file.name,
-          url: `/api/files/${id}${sig.ext}`,
-        },
-      });
-    }
-  }
+  await storeUploadedFile(req.id, file);
 
   await prisma.activity.create({
     data: {
