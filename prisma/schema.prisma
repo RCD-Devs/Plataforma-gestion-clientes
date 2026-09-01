@@ -19,6 +19,7 @@ model Client {
   code            String?
   contactEmail    String?
   contractedHours Float    @default(0)
+  isActive        Boolean  @default(true)
   color           String?
   createdAt       DateTime @default(now())
 

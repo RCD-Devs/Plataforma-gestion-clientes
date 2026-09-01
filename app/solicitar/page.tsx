@@ -14,7 +14,10 @@ export default async function SolicitarPage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  const clients = await prisma.client.findMany({ orderBy: { name: "asc" } });
+  const clients = await prisma.client.findMany({
+    where: { isActive: true },
+    orderBy: { name: "asc" },
+  });
   const { error } = await searchParams;
 
   return (

@@ -92,6 +92,27 @@ export async function notifyClient(opts: {
   });
 }
 
+export async function sendWelcomeEmail(opts: {
+  to: string;
+  name: string;
+  resetUrl: string;
+}) {
+  const fullUrl = `${appBaseUrl()}${opts.resetUrl}`;
+  await sendEmail({
+    to: opts.to,
+    subject: "Te dieron de alta en la Plataforma REVO",
+    html: `<p>Hola ${opts.name},</p><p>Ya tienes una cuenta en la Plataforma de gestión de clientes. Usa este enlace para definir tu contraseña (vence en 1 hora):</p><p><a href="${fullUrl}">${fullUrl}</a></p>`,
+  });
+  await prisma.notification.create({
+    data: {
+      recipientEmail: opts.to,
+      title: "Te dieron de alta en la Plataforma REVO",
+      body: `Hola ${opts.name}, usa este enlace para definir tu contraseña: ${fullUrl}`,
+      channel: "email",
+    },
+  });
+}
+
 export async function sendPasswordReset(opts: {
   to: string;
   name: string;

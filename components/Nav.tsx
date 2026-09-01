@@ -17,6 +17,7 @@ const items = [
   { href: "/bolsa", label: "Bolsa de horas", icon: "◷", manager: true },
   { href: "/dashboard", label: "Dashboard", icon: "▤", manager: true },
   { href: "/notificaciones", label: "Notificaciones", icon: "✷", manager: true },
+  { href: "/admin", label: "Administración", icon: "⚙", admin: true },
 ];
 
 export function Sidebar({
@@ -45,6 +46,7 @@ export function Sidebar({
           if (it.leader && user.role !== "LIDER_AREA" && user.role !== "ADMIN")
             return null;
           if (it.manager && !isManager(user.role)) return null;
+          if (it.admin && user.role !== "ADMIN") return null;
           const active =
             pathname === it.href || pathname.startsWith(it.href + "/");
           return (

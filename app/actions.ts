@@ -10,8 +10,8 @@ import {
   rotateUserPassword,
   PasswordPolicyError,
 } from "@/lib/password";
-import { sendPasswordReset } from "@/lib/email";
-import { isTeamRole, isManager, canActOnRequest } from "@/lib/authz";
+import { sendPasswordReset, sendWelcomeEmail } from "@/lib/email";
+import { isTeamRole, isManager, canActOnRequest, TEAM_ROLES } from "@/lib/authz";
 import { sniffFile, MAX_FILE_SIZE_BYTES } from "@/lib/files";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { logAudit } from "@/lib/audit";
@@ -24,6 +24,25 @@ const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
 function hashResetToken(token: string) {
   return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+// Usado tanto por "olvidé mi contraseña" como por el alta de usuarios desde
+// /admin — en ambos casos la persona necesita un link para definir/cambiar
+// su contraseña.
+async function issuePasswordResetToken(userId: string) {
+  const rawToken = crypto.randomBytes(32).toString("hex");
+  await prisma.passwordResetToken.updateMany({
+    where: { userId, usedAt: null },
+    data: { usedAt: new Date() },
+  });
+  await prisma.passwordResetToken.create({
+    data: {
+      userId,
+      tokenHash: hashResetToken(rawToken),
+      expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS),
+    },
+  });
+  return rawToken;
 }
 
 // Un input type=date entrega "YYYY-MM-DD"; new Date() lo interpretaría como
@@ -176,18 +195,7 @@ export async function requestPasswordReset(formData: FormData) {
     detail: !allowed ? "rate_limited" : user?.isActive ? "encontrado" : "no_encontrado",
   });
   if (user?.isActive) {
-    const rawToken = crypto.randomBytes(32).toString("hex");
-    await prisma.passwordResetToken.updateMany({
-      where: { userId: user.id, usedAt: null },
-      data: { usedAt: new Date() },
-    });
-    await prisma.passwordResetToken.create({
-      data: {
-        userId: user.id,
-        tokenHash: hashResetToken(rawToken),
-        expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS),
-      },
-    });
+    const rawToken = await issuePasswordResetToken(user.id);
     await sendPasswordReset({
       to: user.email,
       name: user.name,
@@ -660,4 +668,272 @@ export async function submitClientRequest(formData: FormData) {
   refreshLists();
   revalidatePath("/portal");
   redirect(`/portal?ok=${req.key}`);
+}
+
+// ---------- Administración: clientes, usuarios, equipos (Rec. #27-#30) ----------
+// Todo restringido a ADMIN por ahora — ver docs/integracion-codiatask/03-decisiones.md
+// (ADR-011): Líder de área/Coordinador ganan esto recién en la fusión con Codia Task.
+
+function revalidateAdmin() {
+  revalidatePath("/admin/clientes");
+  revalidatePath("/clientes");
+  revalidatePath("/bolsa");
+  revalidatePath("/solicitar");
+  revalidatePath("/admin/usuarios");
+  revalidatePath("/admin/equipos");
+  revalidatePath("/equipo");
+}
+
+export async function createClient(formData: FormData) {
+  const user = await getSessionUser();
+  if (!user || user.role !== "ADMIN") redirect("/mi-espacio");
+
+  const name = String(formData.get("name") || "").trim();
+  if (!name) redirect("/admin/clientes/nuevo?error=nombre");
+
+  const client = await prisma.client.create({
+    data: {
+      name,
+      code: String(formData.get("code") || "").trim() || null,
+      contactEmail: String(formData.get("contactEmail") || "").trim() || null,
+      contractedHours: Number(formData.get("contractedHours") || 0) || 0,
+      color: String(formData.get("color") || "").trim() || null,
+      accountManagerId: String(formData.get("accountManagerId") || "") || null,
+      isActive: formData.get("isActive") === "on",
+    },
+  });
+  await logAudit({
+    type: "admin_client_created",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `clientId=${client.id}, name=${client.name}`,
+  });
+  revalidateAdmin();
+  redirect("/admin/clientes");
+}
+
+export async function updateClient(id: string, formData: FormData) {
+  const user = await getSessionUser();
+  if (!user || user.role !== "ADMIN") redirect("/mi-espacio");
+
+  const name = String(formData.get("name") || "").trim();
+  if (!name) redirect(`/admin/clientes/${id}?error=nombre`);
+
+  await prisma.client.update({
+    where: { id },
+    data: {
+      name,
+      code: String(formData.get("code") || "").trim() || null,
+      contactEmail: String(formData.get("contactEmail") || "").trim() || null,
+      contractedHours: Number(formData.get("contractedHours") || 0) || 0,
+      color: String(formData.get("color") || "").trim() || null,
+      accountManagerId: String(formData.get("accountManagerId") || "") || null,
+      isActive: formData.get("isActive") === "on",
+    },
+  });
+  await logAudit({
+    type: "admin_client_updated",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `clientId=${id}`,
+  });
+  revalidateAdmin();
+  redirect("/admin/clientes");
+}
+
+export async function setClientActive(id: string, isActive: boolean) {
+  const user = await getSessionUser();
+  if (!user || user.role !== "ADMIN") return;
+  await prisma.client.update({ where: { id }, data: { isActive } });
+  await logAudit({
+    type: isActive ? "admin_client_reactivated" : "admin_client_deactivated",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `clientId=${id}`,
+  });
+  revalidateAdmin();
+}
+
+export async function createUser(formData: FormData) {
+  const user = await getSessionUser();
+  if (!user || user.role !== "ADMIN") redirect("/mi-espacio");
+
+  const name = String(formData.get("name") || "").trim();
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const role = String(formData.get("role") || "");
+  const validRole = (TEAM_ROLES as readonly string[]).includes(role) || role === "CLIENTE";
+  if (!name || !email || !validRole) redirect("/admin/usuarios/nuevo?error=datos");
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) redirect("/admin/usuarios/nuevo?error=email_existente");
+
+  const isClientRole = role === "CLIENTE";
+  const clientId = isClientRole ? String(formData.get("clientId") || "") || null : null;
+  if (isClientRole && !clientId) redirect("/admin/usuarios/nuevo?error=cliente_requerido");
+
+  const created = await prisma.user.create({
+    data: {
+      name,
+      email,
+      role,
+      color: String(formData.get("color") || "").trim() || null,
+      teamId: isTeamRole(role) ? String(formData.get("teamId") || "") || null : null,
+      clientId,
+      isActive: true,
+      mustChangePassword: true,
+    },
+  });
+  await logAudit({
+    type: "admin_user_created",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `userId=${created.id}, email=${created.email}, role=${created.role}`,
+  });
+
+  const rawToken = await issuePasswordResetToken(created.id);
+  await sendWelcomeEmail({
+    to: created.email,
+    name: created.name,
+    resetUrl: `/restablecer-contrasena?token=${rawToken}`,
+  });
+
+  revalidateAdmin();
+  redirect("/admin/usuarios");
+}
+
+export async function updateUser(id: string, formData: FormData) {
+  const user = await getSessionUser();
+  if (!user || user.role !== "ADMIN") redirect("/mi-espacio");
+
+  const name = String(formData.get("name") || "").trim();
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const role = String(formData.get("role") || "");
+  const validRole = (TEAM_ROLES as readonly string[]).includes(role) || role === "CLIENTE";
+  if (!name || !email || !validRole) redirect(`/admin/usuarios/${id}?error=datos`);
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing && existing.id !== id) redirect(`/admin/usuarios/${id}?error=email_existente`);
+
+  const isClientRole = role === "CLIENTE";
+  const clientId = isClientRole ? String(formData.get("clientId") || "") || null : null;
+  if (isClientRole && !clientId) redirect(`/admin/usuarios/${id}?error=cliente_requerido`);
+
+  await prisma.user.update({
+    where: { id },
+    data: {
+      name,
+      email,
+      role,
+      color: String(formData.get("color") || "").trim() || null,
+      teamId: isTeamRole(role) ? String(formData.get("teamId") || "") || null : null,
+      clientId,
+      isActive: formData.get("isActive") === "on",
+    },
+  });
+  await logAudit({
+    type: "admin_user_updated",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `userId=${id}`,
+  });
+  revalidateAdmin();
+  redirect("/admin/usuarios");
+}
+
+export async function setUserActive(id: string, isActive: boolean) {
+  const user = await getSessionUser();
+  if (!user || user.role !== "ADMIN") return;
+  await prisma.user.update({ where: { id }, data: { isActive } });
+  await logAudit({
+    type: isActive ? "admin_user_reactivated" : "admin_user_deactivated",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `userId=${id}`,
+  });
+  revalidateAdmin();
+}
+
+export async function createTeam(formData: FormData) {
+  const user = await getSessionUser();
+  if (!user || user.role !== "ADMIN") redirect("/mi-espacio");
+
+  const name = String(formData.get("name") || "").trim();
+  if (!name) redirect("/admin/equipos/nuevo?error=nombre");
+
+  const memberIds = formData.getAll("memberIds").map(String).filter(Boolean);
+  const team = await prisma.team.create({
+    data: {
+      name,
+      color: String(formData.get("color") || "").trim() || null,
+    },
+  });
+  if (memberIds.length > 0) {
+    await prisma.user.updateMany({
+      where: { id: { in: memberIds } },
+      data: { teamId: team.id },
+    });
+  }
+  await logAudit({
+    type: "admin_team_created",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `teamId=${team.id}, name=${team.name}`,
+  });
+  revalidateAdmin();
+  redirect("/admin/equipos");
+}
+
+export async function updateTeam(id: string, formData: FormData) {
+  const user = await getSessionUser();
+  if (!user || user.role !== "ADMIN") redirect("/mi-espacio");
+
+  const name = String(formData.get("name") || "").trim();
+  if (!name) redirect(`/admin/equipos/${id}?error=nombre`);
+
+  const memberIds = formData.getAll("memberIds").map(String).filter(Boolean);
+  await prisma.team.update({
+    where: { id },
+    data: {
+      name,
+      color: String(formData.get("color") || "").trim() || null,
+    },
+  });
+  // User.teamId es 1-a-muchos (sin tabla intermedia): se reconcilia
+  // desasignando a quien se sacó y asignando a los seleccionados.
+  await prisma.user.updateMany({
+    where: { teamId: id, id: { notIn: memberIds } },
+    data: { teamId: null },
+  });
+  if (memberIds.length > 0) {
+    await prisma.user.updateMany({
+      where: { id: { in: memberIds } },
+      data: { teamId: id },
+    });
+  }
+  await logAudit({
+    type: "admin_team_updated",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `teamId=${id}`,
+  });
+  revalidateAdmin();
+  redirect("/admin/equipos");
+}
+
+export async function deleteTeam(id: string) {
+  const user = await getSessionUser();
+  if (!user || user.role !== "ADMIN") return;
+  const team = await prisma.team.findUnique({
+    where: { id },
+    include: { members: { select: { id: true } }, requests: { select: { id: true } } },
+  });
+  if (!team || team.members.length > 0 || team.requests.length > 0) return;
+  await prisma.team.delete({ where: { id } });
+  await logAudit({
+    type: "admin_team_deleted",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `teamId=${id}, name=${team.name}`,
+  });
+  revalidateAdmin();
 }
