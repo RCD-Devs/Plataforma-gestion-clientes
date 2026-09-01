@@ -1,11 +1,47 @@
+import { Resend } from "resend";
 import { prisma } from "./db";
 
 function appBaseUrl() {
   return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 }
 
+let resend: Resend | null = null;
+function resendClient() {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return null;
+  if (!resend) resend = new Resend(key);
+  return resend;
+}
+
+// Envío real vía Resend (Rec. #41). Sin RESEND_API_KEY configurada, cae al
+// mismo stub de consola que ya existía — así el resto del equipo sigue
+// pudiendo correr la app en local sin tener que crear una cuenta de Resend.
+// Un correo que falla nunca debe tumbar el flujo que lo dispara.
+async function sendEmail(opts: { to: string; subject: string; html: string }) {
+  const client = resendClient();
+  if (!client) {
+    // eslint-disable-next-line no-console
+    console.log(`\n📧  [email, sin RESEND_API_KEY → ${opts.to}] ${opts.subject}\n`);
+    return;
+  }
+  const from = process.env.EMAIL_FROM || "REVO <onboarding@resend.dev>";
+  try {
+    const { error } = await client.emails.send({
+      from,
+      to: opts.to,
+      subject: opts.subject,
+      html: opts.html,
+    });
+    if (error) console.error("Resend rechazó el correo:", error);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("Error enviando correo:", err);
+  }
+}
+
 // Notificación interna para colaboradores (campana en "Mi espacio"):
 // traspasos de tareas, cambios de prioridad del cliente, feedback, etc.
+// Queda solo in-app a propósito — no es correo transaccional al cliente.
 export async function notifyTeam(opts: {
   to: string;
   requestId?: string;
@@ -13,8 +49,6 @@ export async function notifyTeam(opts: {
   body: string;
 }) {
   if (!opts.to) return;
-  // eslint-disable-next-line no-console
-  console.log(`\n🔔  [equipo → ${opts.to}] ${opts.title}\n    ${opts.body}\n`);
   await prisma.notification.create({
     data: {
       recipientEmail: opts.to,
@@ -26,8 +60,6 @@ export async function notifyTeam(opts: {
   });
 }
 
-// Desarrollo: registra el correo en consola y lo guarda como notificación
-// (canal email + in-app). En producción se reemplaza por Resend/SMTP.
 export async function notifyClient(opts: {
   to: string;
   requestId?: string;
@@ -35,8 +67,11 @@ export async function notifyClient(opts: {
   body: string;
 }) {
   if (!opts.to) return;
-  // eslint-disable-next-line no-console
-  console.log(`\n📧  [email → ${opts.to}] ${opts.title}\n    ${opts.body}\n`);
+  await sendEmail({
+    to: opts.to,
+    subject: opts.title,
+    html: `<p>${opts.body}</p>`,
+  });
   await prisma.notification.createMany({
     data: [
       {
@@ -57,19 +92,17 @@ export async function notifyClient(opts: {
   });
 }
 
-// Recuperación de contraseña — mismo patrón stub: se registra en consola y
-// como notificación in-app hasta que se conecte un proveedor real
-// (Resend/SMTP, Rec. #41). El link no debe llegar nunca por otro canal que
-// no sea el correo real, así que por ahora solo queda visible en el log del
-// servidor para poder probar el flujo en desarrollo.
 export async function sendPasswordReset(opts: {
   to: string;
   name: string;
   resetUrl: string;
 }) {
   const fullUrl = `${appBaseUrl()}${opts.resetUrl}`;
-  // eslint-disable-next-line no-console
-  console.log(`\n🔑  [recuperar contraseña → ${opts.to}]\n    ${fullUrl}\n`);
+  await sendEmail({
+    to: opts.to,
+    subject: "Recupera tu contraseña",
+    html: `<p>Hola ${opts.name},</p><p>Usa este enlace para elegir una nueva contraseña (vence en 1 hora):</p><p><a href="${fullUrl}">${fullUrl}</a></p>`,
+  });
   await prisma.notification.create({
     data: {
       recipientEmail: opts.to,
