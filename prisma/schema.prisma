@@ -330,3 +330,14 @@ model AuditLog {
   @@index([type])
   @@index([createdAt])
 }
+
+// Folio de Request.key (Rec. #65/#67) — antes se calculaba escaneando
+// todas las solicitudes y tomando el máximo en memoria: dos creaciones
+// concurrentes (formulario público + portal + equipo interno son
+// caminos separados) podían calcular el mismo siguiente número. Una fila
+// con UPDATE ... SET value = value + 1 es atómica a nivel de Postgres —
+// dos transacciones concurrentes nunca leen el mismo valor.
+model Counter {
+  id    String @id
+  value Int    @default(0)
+}

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getSessionUser, createSession, destroySession, redirectForRole } from "@/lib/session";
 import {
@@ -51,14 +52,41 @@ function parseLocalDate(s: string) {
   return new Date(`${s}T12:00:00`);
 }
 
+// Contador atómico (Rec. #65/#67) — antes escaneaba todas las solicitudes
+// y calculaba el máximo en memoria, lo que dos creaciones concurrentes
+// (formulario público, portal y equipo interno son caminos separados)
+// podían leer al mismo tiempo y generar el mismo folio. El UPDATE/INSERT
+// de Counter es atómico en Postgres: dos transacciones concurrentes nunca
+// obtienen el mismo valor.
 async function nextKey() {
-  const reqs = await prisma.request.findMany({ select: { key: true } });
-  let max = 0;
-  for (const r of reqs) {
-    const m = r.key.match(/(\d+)/);
-    if (m) max = Math.max(max, parseInt(m[1], 10));
+  const counter = await prisma.counter.upsert({
+    where: { id: "request_key" },
+    create: { id: "request_key", value: 1 },
+    update: { value: { increment: 1 } },
+  });
+  return `MBA-${counter.value}`;
+}
+
+// Rec. #66 — defensa adicional ante una colisión de Request.key (por
+// ejemplo si alguna vez se inserta un folio a mano fuera del contador):
+// reintenta con un folio nuevo en vez de fallar la creación completa.
+async function withKeyRetry<T>(
+  create: (key: string) => Promise<T>,
+  attempts = 3,
+): Promise<T> {
+  for (let i = 0; i < attempts; i++) {
+    const key = await nextKey();
+    try {
+      return await create(key);
+    } catch (err) {
+      const isKeyCollision =
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002" &&
+        (err.meta?.target as string[] | undefined)?.includes("key");
+      if (!isKeyCollision || i === attempts - 1) throw err;
+    }
   }
-  return `MBA-${max + 1}`;
+  throw new Error("no se pudo generar un folio único");
 }
 
 // Destinatarios de alertas internas: el responsable, o los líderes de área
@@ -433,19 +461,20 @@ export async function createSubtask(parentId: string, formData: FormData) {
   const title = String(formData.get("title") || "").trim();
   if (!title) return;
 
-  const key = await nextKey();
-  const sub = await prisma.request.create({
-    data: {
-      key,
-      title,
-      type: parent.type,
-      clientId: parent.clientId,
-      projectId: parent.projectId,
-      parentId: parent.id,
-      requesterEmail: parent.requesterEmail,
-      status: "POR_HACER",
-    },
-  });
+  const sub = await withKeyRetry((key) =>
+    prisma.request.create({
+      data: {
+        key,
+        title,
+        type: parent.type,
+        clientId: parent.clientId,
+        projectId: parent.projectId,
+        parentId: parent.id,
+        requesterEmail: parent.requesterEmail,
+        status: "POR_HACER",
+      },
+    }),
+  );
   await prisma.activity.create({
     data: {
       requestId: parent.id,
@@ -944,21 +973,22 @@ export async function submitRequest(formData: FormData) {
   const dueStr = String(formData.get("dueDate") || "");
   if (!clientId || !requesterEmail || !title) return;
 
-  const key = await nextKey();
-  const req = await prisma.request.create({
-    data: {
-      key,
-      title,
-      type,
-      description,
-      priority,
-      requesterEmail,
-      clientId,
-      status: "POR_HACER",
-      dueDate: dueStr ? parseLocalDate(dueStr) : null,
-    },
-    include: { client: true },
-  });
+  const req = await withKeyRetry((key) =>
+    prisma.request.create({
+      data: {
+        key,
+        title,
+        type,
+        description,
+        priority,
+        requesterEmail,
+        clientId,
+        status: "POR_HACER",
+        dueDate: dueStr ? parseLocalDate(dueStr) : null,
+      },
+      include: { client: true },
+    }),
+  );
   await prisma.activity.create({
     data: {
       requestId: req.id,
@@ -999,20 +1029,21 @@ export async function submitClientRequest(formData: FormData) {
   const title =
     firstLine.length > 70 ? `${firstLine.slice(0, 67).trimEnd()}…` : firstLine;
 
-  const key = await nextKey();
-  const req = await prisma.request.create({
-    data: {
-      key,
-      title: `${type} — ${title}`,
-      type,
-      description,
-      priority,
-      requesterEmail: email,
-      clientId: client.id,
-      status: "POR_HACER",
-      dueDate: dueStr ? parseLocalDate(dueStr) : null,
-    },
-  });
+  const req = await withKeyRetry((key) =>
+    prisma.request.create({
+      data: {
+        key,
+        title: `${type} — ${title}`,
+        type,
+        description,
+        priority,
+        requesterEmail: email,
+        clientId: client.id,
+        status: "POR_HACER",
+        dueDate: dueStr ? parseLocalDate(dueStr) : null,
+      },
+    }),
+  );
 
   await storeUploadedFile(req.id, file);
 
