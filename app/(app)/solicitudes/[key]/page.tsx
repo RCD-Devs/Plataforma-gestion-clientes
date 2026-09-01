@@ -12,6 +12,8 @@ import {
 import { Avatar, ClientTag } from "@/components/ui";
 import { addComment, addUrlAttachment, logHours } from "@/app/actions";
 import { hoursLabel, longDate, shortDate, relative } from "@/lib/format";
+import { RequestEditPanel } from "@/components/RequestEditPanel";
+import { ArchiveButton } from "@/components/ArchiveButton";
 
 export const dynamic = "force-dynamic";
 
@@ -60,9 +62,27 @@ export default async function RequestDetail({
         <div className="mt-1 flex items-center gap-2">
           <ClientTag name={req.client.name} />
           <span className="text-xs text-[#9ca3af]">{req.key}</span>
+          {req.archivedAt && (
+            <span className="rounded bg-[#f3f4f6] px-1.5 py-0.5 text-[10px] font-medium text-[#6b7280]">
+              Archivada · {shortDate(req.archivedAt)}
+            </span>
+          )}
         </div>
-        <h1 className="mt-1 text-xl font-semibold">{req.title}</h1>
+        <div className="mt-1 flex items-center justify-between gap-3">
+          <h1 className="text-xl font-semibold">{req.title}</h1>
+          <ArchiveButton requestId={req.id} archived={!!req.archivedAt} />
+        </div>
       </header>
+
+      <div className="border-b border-[#e6e8eb] bg-white px-6 py-2">
+        <RequestEditPanel
+          requestId={req.id}
+          title={req.title}
+          description={req.description}
+          type={req.type}
+          dueDate={req.dueDate}
+        />
+      </div>
 
       <div className="flex flex-1 gap-6 overflow-y-auto p-6">
         <div className="min-w-0 flex-1 space-y-6">

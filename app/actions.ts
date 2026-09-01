@@ -327,6 +327,89 @@ export async function updatePriority(requestId: string, priority: string) {
   refreshLists(req.key);
 }
 
+export async function updateRequestDetails(requestId: string, formData: FormData) {
+  const user = await getSessionUser();
+  if (!user) return;
+  const existing = await prisma.request.findUnique({
+    where: { id: requestId },
+    include: { client: true },
+  });
+  if (!existing || !canActOnRequest(user, existing)) return;
+
+  const title = String(formData.get("title") || "").trim();
+  if (!title) return;
+  const description = String(formData.get("description") || "");
+  const type = String(formData.get("type") || existing.type).trim() || existing.type;
+  const dueStr = String(formData.get("dueDate") || "");
+
+  const req = await prisma.request.update({
+    where: { id: requestId },
+    data: {
+      title,
+      description,
+      type,
+      dueDate: dueStr ? parseLocalDate(dueStr) : null,
+    },
+  });
+  await prisma.activity.create({
+    data: {
+      requestId,
+      type: "edited",
+      message: "Editó los detalles de la solicitud",
+      actorName: user.name,
+    },
+  });
+  refreshLists(req.key);
+}
+
+export async function archiveRequest(requestId: string) {
+  const user = await getSessionUser();
+  if (!user) return;
+  const existing = await prisma.request.findUnique({
+    where: { id: requestId },
+    include: { client: true },
+  });
+  if (!existing || !canActOnRequest(user, existing)) return;
+
+  const req = await prisma.request.update({
+    where: { id: requestId },
+    data: { archivedAt: new Date() },
+  });
+  await prisma.activity.create({
+    data: {
+      requestId,
+      type: "archived",
+      message: "Archivó la solicitud",
+      actorName: user.name,
+    },
+  });
+  refreshLists(req.key);
+}
+
+export async function unarchiveRequest(requestId: string) {
+  const user = await getSessionUser();
+  if (!user) return;
+  const existing = await prisma.request.findUnique({
+    where: { id: requestId },
+    include: { client: true },
+  });
+  if (!existing || !canActOnRequest(user, existing)) return;
+
+  const req = await prisma.request.update({
+    where: { id: requestId },
+    data: { archivedAt: null },
+  });
+  await prisma.activity.create({
+    data: {
+      requestId,
+      type: "unarchived",
+      message: "Restauró la solicitud archivada",
+      actorName: user.name,
+    },
+  });
+  refreshLists(req.key);
+}
+
 export async function logHours(formData: FormData) {
   const user = await getSessionUser();
   if (!user || !isTeamRole(user.role)) return;

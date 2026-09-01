@@ -14,7 +14,7 @@ export default async function TableroPage() {
   if (!user) redirect("/login");
 
   const requests = await prisma.request.findMany({
-    where: requestVisibilityWhere(user),
+    where: { ...requestVisibilityWhere(user), archivedAt: null },
     include: {
       client: true,
       assignee: true,

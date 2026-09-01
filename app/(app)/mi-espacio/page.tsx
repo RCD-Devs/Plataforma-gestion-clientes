@@ -41,7 +41,7 @@ export default async function MiEspacioPage({
 
   const [tasks, teammates, alerts, unread] = await Promise.all([
     prisma.request.findMany({
-      where: { assigneeId: user.id },
+      where: { assigneeId: user.id, archivedAt: null },
       include: {
         client: true,
         attachments: { select: { id: true } },

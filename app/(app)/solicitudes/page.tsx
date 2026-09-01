@@ -21,6 +21,7 @@ export default async function SolicitudesPage({
   const sp = await searchParams;
 
   const where: Prisma.RequestWhereInput = { ...requestVisibilityWhere(user) };
+  where.archivedAt = sp.archivadas === "1" ? { not: null } : null;
   if (sp.cliente) where.clientId = sp.cliente;
   if (sp.responsable) where.assigneeId = sp.responsable;
   if (sp.equipo) where.teamId = sp.equipo;

@@ -118,6 +118,9 @@ model Request {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   finalizedAt    DateTime?
+  // Archivar (Rec. #32) es soft delete: desaparece de tablero/solicitudes/
+  // mi-espacio pero sigue contando en reportes e historial de bolsa.
+  archivedAt     DateTime?
 
   clientId String
   client   Client @relation(fields: [clientId], references: [id])

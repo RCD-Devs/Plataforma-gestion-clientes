@@ -130,6 +130,15 @@ export function Filters({
           onChange={(e) => setParam("hasta", e.target.value)}
         />
       </label>
+      <label className="flex items-center gap-1 text-xs text-[#6b7280]">
+        <input
+          type="checkbox"
+          checked={sp.get("archivadas") === "1"}
+          onChange={(e) => setParam("archivadas", e.target.checked ? "1" : "")}
+          className="h-3.5 w-3.5 accent-[#0bdbcf]"
+        />
+        Ver archivadas
+      </label>
       {hasFilters && (
         <button
           className={`${cls} text-[#e2532a]`}
