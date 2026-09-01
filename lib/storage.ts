@@ -25,10 +25,19 @@ export async function uploadToStorage(
   if (error) throw error;
 }
 
-export async function downloadFromStorage(path: string): Promise<Buffer> {
+// Rec. #39 — en vez de que nuestro propio servidor descargue y reenvíe
+// los bytes, se emite un link temporal directo al bucket. La
+// autorización sigue pasando por /api/files/[id] (Rec. #8/#9) antes de
+// llamar a esto; lo que cambia es que el link resultante deja de sernos
+// útil a los pocos segundos, en vez de quedar servible para siempre
+// mientras la sesión exista.
+export async function getSignedDownloadUrl(
+  path: string,
+  expiresInSeconds = 60,
+): Promise<string> {
   const { data, error } = await storageClient()
     .storage.from(ATTACHMENTS_BUCKET)
-    .download(path);
-  if (error) throw error;
-  return Buffer.from(await data.arrayBuffer());
+    .createSignedUrl(path, expiresInSeconds);
+  if (error || !data) throw error ?? new Error("No se pudo firmar la URL");
+  return data.signedUrl;
 }

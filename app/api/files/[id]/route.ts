@@ -3,7 +3,7 @@ import path from "path";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { canActOnRequest } from "@/lib/authz";
-import { downloadFromStorage } from "@/lib/storage";
+import { getSignedDownloadUrl } from "@/lib/storage";
 
 export async function GET(
   _req: NextRequest,
@@ -28,20 +28,13 @@ export async function GET(
   if (!allowed) return new Response("No autorizado", { status: 403 });
 
   try {
-    const buf = await downloadFromStorage(safe);
-    const ext = path.extname(safe).toLowerCase();
-    const type =
-      ext === ".pdf"
-        ? "application/pdf"
-        : ext === ".png"
-          ? "image/png"
-          : ext === ".jpg" || ext === ".jpeg"
-            ? "image/jpeg"
-            : ext === ".gif"
-              ? "image/gif"
-              : "application/octet-stream";
-    return new Response(new Uint8Array(buf), {
-      headers: { "Content-Type": type, "Cache-Control": "private, max-age=3600" },
+    const signedUrl = await getSignedDownloadUrl(safe, 60);
+    // Cada visita revalida sesión/autorización y firma un link nuevo — el
+    // redirect no se cachea (para que eso siga siendo cierto en la
+    // próxima visita), y la URL firmada en sí deja de servir a los 60s.
+    return new Response(null, {
+      status: 302,
+      headers: { Location: signedUrl, "Cache-Control": "no-store" },
     });
   } catch {
     return new Response("No encontrado", { status: 404 });
