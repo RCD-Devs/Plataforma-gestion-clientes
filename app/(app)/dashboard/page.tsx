@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
-import { isManager } from "@/lib/authz";
+import { isManager, requestVisibilityWhere, clientVisibilityWhere } from "@/lib/authz";
 import { STATUSES } from "@/lib/constants";
 import { StatCard } from "@/components/ui";
 import { hoursLabel } from "@/lib/format";
@@ -17,9 +17,16 @@ export default async function DashboardPage() {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
   const [requests, entries, clients] = await Promise.all([
-    prisma.request.findMany({ select: { status: true } }),
-    prisma.timeEntry.findMany({ select: { hours: true, date: true } }),
+    prisma.request.findMany({
+      where: requestVisibilityWhere(user),
+      select: { status: true },
+    }),
+    prisma.timeEntry.findMany({
+      where: { request: requestVisibilityWhere(user) },
+      select: { hours: true, date: true },
+    }),
     prisma.client.findMany({
+      where: clientVisibilityWhere(user),
       include: {
         requests: { include: { timeEntries: { select: { hours: true } } } },
       },

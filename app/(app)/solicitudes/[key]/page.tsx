@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/session";
+import { canViewRequest } from "@/lib/authz";
 import {
   StatusSelect,
   AssigneeSelect,
@@ -35,6 +37,10 @@ export default async function RequestDetail({
     },
   });
   if (!req) notFound();
+
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+  if (!canViewRequest(user, req)) notFound();
 
   const users = await prisma.user.findMany({
     where: { role: { not: "CLIENTE" } },

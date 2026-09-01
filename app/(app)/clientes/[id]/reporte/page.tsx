@@ -45,6 +45,9 @@ export default async function ClientReportPage({
 
   const client = await prisma.client.findUnique({ where: { id } });
   if (!client) notFound();
+  if (user.role === "COORDINADOR_CUENTA" && client.accountManagerId !== user.id) {
+    notFound();
+  }
 
   const now = new Date();
   const desde = sp.desde

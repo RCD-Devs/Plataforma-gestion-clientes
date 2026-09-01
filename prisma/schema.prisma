@@ -22,8 +22,11 @@ model Client {
   color           String?
   createdAt       DateTime @default(now())
 
+  accountManagerId String?
+  accountManager   User?   @relation("clientAccountManager", fields: [accountManagerId], references: [id])
+
   requests Request[]
-  users    User[]
+  users    User[]   @relation("clientUsers")
 }
 
 model Team {
@@ -53,12 +56,13 @@ model User {
   team   Team?   @relation(fields: [teamId], references: [id])
 
   clientId String?
-  client   Client? @relation(fields: [clientId], references: [id])
+  client   Client? @relation("clientUsers", fields: [clientId], references: [id])
 
-  assigned      Request[]           @relation("assignee")
-  timeEntries   TimeEntry[]
-  comments      Comment[]
-  resetTokens   PasswordResetToken[]
+  assigned       Request[]            @relation("assignee")
+  timeEntries    TimeEntry[]
+  comments       Comment[]
+  resetTokens    PasswordResetToken[]
+  managedClients Client[]             @relation("clientAccountManager")
 }
 
 model PasswordResetToken {

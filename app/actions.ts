@@ -424,7 +424,10 @@ export async function addUrlAttachment(formData: FormData) {
   const name = String(formData.get("name") || "Enlace").trim();
   const url = String(formData.get("url") || "").trim();
   if (!requestId || !url) return;
-  const req = await prisma.request.findUnique({ where: { id: requestId } });
+  const req = await prisma.request.findUnique({
+    where: { id: requestId },
+    include: { client: true },
+  });
   if (!user || !req || !canActOnRequest(user, req)) return;
   await prisma.attachment.create({
     data: { requestId, kind: "url", name: name || url, url },

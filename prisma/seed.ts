@@ -125,6 +125,10 @@ async function main() {
     { name: "SCH", code: "SCH", email: "contacto@sch.cl", hours: 0, color: "#7f7f7f" },
     { name: "Oxentia", code: "OXENTIA", email: "hola@oxentia.cl", hours: 0, color: "#fda565" },
   ];
+  // Clientes a cargo de camila (COORDINADOR_CUENTA) — para poder probar la
+  // visibilidad acotada de Rec. #22 con datos reales del seed.
+  const camilaClients = ["ACHS", "HAB", "VRAEA"];
+
   const clients: Record<string, { id: string; email: string }> = {};
   for (const c of clientsData) {
     const created = await prisma.client.create({
@@ -134,6 +138,7 @@ async function main() {
         contactEmail: c.email,
         contractedHours: c.hours,
         color: c.color,
+        accountManagerId: camilaClients.includes(c.code) ? camila.id : null,
       },
     });
     clients[c.code] = { id: created.id, email: c.email };

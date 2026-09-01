@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
-import { isManager } from "@/lib/authz";
+import { isManager, clientVisibilityWhere } from "@/lib/authz";
 import { Bar } from "@/components/ui";
 import { hoursLabel } from "@/lib/format";
 
@@ -14,6 +14,7 @@ export default async function ClientesPage() {
   if (!isManager(user.role)) redirect("/mi-espacio");
 
   const clients = await prisma.client.findMany({
+    where: clientVisibilityWhere(user),
     include: {
       requests: { include: { timeEntries: { select: { hours: true } } } },
     },

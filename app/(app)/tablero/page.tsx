@@ -1,5 +1,8 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/session";
+import { requestVisibilityWhere } from "@/lib/authz";
 import { STATUSES } from "@/lib/constants";
 import { Avatar, PriorityTag, ClientTag } from "@/components/ui";
 import { hoursLabel } from "@/lib/format";
@@ -7,7 +10,11 @@ import { hoursLabel } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 export default async function TableroPage() {
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+
   const requests = await prisma.request.findMany({
+    where: requestVisibilityWhere(user),
     include: {
       client: true,
       assignee: true,

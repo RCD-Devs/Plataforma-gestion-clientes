@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
-import { isManager } from "@/lib/authz";
+import { isManager, requestVisibilityWhere, clientVisibilityWhere } from "@/lib/authz";
 import { Avatar, Bar } from "@/components/ui";
 import { hoursLabel, shortDate } from "@/lib/format";
 
@@ -17,10 +17,12 @@ export default async function BolsaPage() {
 
   const [clients, entries] = await Promise.all([
     prisma.client.findMany({
+      where: clientVisibilityWhere(user),
       include: { requests: { include: { timeEntries: true } } },
       orderBy: { name: "asc" },
     }),
     prisma.timeEntry.findMany({
+      where: { request: requestVisibilityWhere(user) },
       include: { user: true, request: { include: { client: true } } },
       orderBy: { date: "desc" },
       take: 25,

@@ -18,16 +18,23 @@ No se marca nada como CONFIRMADA solo porque quede bien en el documento — si n
 **Motivo:** El README indica explícitamente que "en desarrollo el acceso es de demo" y que Google SSO y el envío real de correos están pendientes. No es una decisión de producto, es un estado transitorio conocido.
 
 ### ADR-003 — Codia Task se integra como motor de tareas dentro de la Plataforma de clientes (no al revés)
-**Estado:** PROPUESTA
+**Estado:** CONFIRMADA (decisión directa del dueño del proyecto, 2026-08-31)
 **Motivo:** Codia Task ya resolvió, de forma probada en producción, la mayoría de los P0 de seguridad y autorización que la Plataforma de clientes tiene pendientes (auth real, roles server-side, protección de archivos, sanitización XSS, protección IDOR). Reconstruir eso en Prisma sería duplicar trabajo ya hecho.
 **Alternativa descartada:** portar las funcionalidades de Codia Task una a una hacia el modelo Prisma de la Plataforma de clientes. Se descarta porque implica reimplementar subtareas, campos custom, estados configurables por tablero y todo el trabajo de seguridad ya hecho.
-**Quién debe confirmarla:** dirección de producto + quien lidere el desarrollo, antes de iniciar la Fase 0 del roadmap.
+**Cuándo se implementa:** en una sesión de planificación aparte — es una fusión de dos bases de datos y dos codebases completas, no algo para arrancar sin su propio diseño dedicado. Esta decisión solo fija la dirección.
 
 ### ADR-004 — Base de datos única sobre el esquema de Codia Task
-**Estado:** PROPUESTA
+**Estado:** CONFIRMADA con matiz (decisión directa del dueño del proyecto, 2026-08-31)
 **Motivo:** El esquema SQL de Codia Task (`backend/src/db/schema.sql`) ya modela multi-rol (`user_roles`), subtareas (`parent_id`), campos custom y estados configurables — cosas que el esquema Prisma actual no tiene. Adaptar Prisma hacia ese esquema es menos trabajo que llevar todo Codia Task a Prisma.
+**El matiz:** lo que se confirma como requisito duro es **un solo proyecto Supabase para ambos sistemas** (ya no dos bases separadas). Si el esquema final termina siendo exactamente el de Codia Task o uno adaptado es secundario y se resuelve con la prueba técnica de migración que este mismo ADR ya pedía — no es una condición para avanzar.
 **Riesgo a mitigar:** la Plataforma de clientes pierde `Activity` (bitácora) y `Notification` (canal in-app), que Codia Task no tiene — hay que decidir si se mantienen como tablas propias sobre la BBDD compartida o se descartan.
-**Quién debe confirmarla:** quien lidere el desarrollo, junto con una prueba técnica de migración antes de comprometerse.
+**Quién debe confirmarla en detalle:** quien lidere el desarrollo, junto con la prueba técnica de migración, en la misma sesión aparte que ADR-003.
+
+### ADR-011 — Roles y permisos como datos editables (Admin, Líder de área y Coordinador de cuenta), no hardcodeados
+**Estado:** CONFIRMADA como requisito (decisión directa del dueño del proyecto, 2026-08-31) — implementación diferida
+**Motivo:** Se prevé integrar otros tipos de perfil a futuro. Admin, Líder de área y Coordinador de cuenta deben poder crear/editar/eliminar roles y asignarles permisos desde una pantalla de administración, en vez de que estén fijos en código (`lib/authz.ts`) como hoy.
+**Por qué se difiere:** Codia Task ya modela esto como datos (`roles`, `user_roles`, multi-rol por persona) — construirlo ahora en Prisma sería trabajo que se descarta apenas se ejecute `ADR-003`. Se implementa en esa misma sesión de fusión, no antes.
+**Mientras tanto:** `Rec. #21` (Diseño/SEO/Desarrollo ven solo lo asignado) y `Rec. #22` (Coordinador ve solo sus clientes) quedan resueltos hoy de forma hardcodeada en `lib/authz.ts` (`requestVisibilityWhere`, `clientVisibilityWhere`, `canActOnRequest`) — cierran la brecha real de seguridad sin esperar al sistema completo, y se reemplazan sin drama cuando llegue `ADR-011`.
 
 ### ADR-005 — El rol `CLIENTE` del modelo `User` de Prisma se retira en favor de `client_id` + rol de Codia Task
 **Estado:** PROPUESTA

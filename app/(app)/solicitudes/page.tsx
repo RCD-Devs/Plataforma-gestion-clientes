@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/session";
+import { requestVisibilityWhere } from "@/lib/authz";
 import { Filters } from "@/components/Filters";
 import { Avatar, StatusBadge, PriorityTag, ClientTag } from "@/components/ui";
 import { hoursLabel, relative } from "@/lib/format";
@@ -12,9 +15,12 @@ export default async function SolicitudesPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+
   const sp = await searchParams;
 
-  const where: Prisma.RequestWhereInput = {};
+  const where: Prisma.RequestWhereInput = { ...requestVisibilityWhere(user) };
   if (sp.cliente) where.clientId = sp.cliente;
   if (sp.responsable) where.assigneeId = sp.responsable;
   if (sp.equipo) where.teamId = sp.equipo;

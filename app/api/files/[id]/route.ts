@@ -17,7 +17,7 @@ export async function GET(
 
   const attachment = await prisma.attachment.findFirst({
     where: { url: `/api/files/${safe}` },
-    include: { request: true },
+    include: { request: { include: { client: true } } },
   });
   if (!attachment) return new Response("No encontrado", { status: 404 });
 
