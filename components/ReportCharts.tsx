@@ -44,7 +44,12 @@ const tooltip = {
   cornerRadius: 6,
 };
 
+// El ref del componente Chart de react-chartjs-2 tiene un tipo genérico
+// que varía por TType/TData y no vale la pena repetir en cada wrapper —
+// nadie llama métodos específicos del chart a través de este ref, solo
+// lo reexpone.
 export const MonthlyEvolutionChart = forwardRef<
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   any,
   {
     labels: string[];
@@ -56,6 +61,7 @@ export const MonthlyEvolutionChart = forwardRef<
   // Chart.js soporta mezclar tipos por dataset (bar + line) registrando
   // ambos controllers; el tipado de react-chartjs-2 no modela bien esta
   // unión, así que se relaja localmente a `any`.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data: ChartData<any, number[], string> = {
     labels,
     datasets: [
@@ -125,6 +131,7 @@ export const MonthlyEvolutionChart = forwardRef<
 });
 
 export const GroupedBarChart = forwardRef<
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ver MonthlyEvolutionChart
   any,
   {
     labels: string[];
@@ -232,6 +239,7 @@ export function StackedBarChart({
 }
 
 export const ReportDoughnut = forwardRef<
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ver MonthlyEvolutionChart
   any,
   {
     labels: string[];

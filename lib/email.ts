@@ -20,7 +20,6 @@ function resendClient() {
 async function sendEmail(opts: { to: string; subject: string; html: string }) {
   const client = resendClient();
   if (!client) {
-    // eslint-disable-next-line no-console
     console.log(`\n📧  [email, sin RESEND_API_KEY → ${opts.to}] ${opts.subject}\n`);
     return;
   }
@@ -34,7 +33,6 @@ async function sendEmail(opts: { to: string; subject: string; html: string }) {
     });
     if (error) console.error("Resend rechazó el correo:", error);
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error("Error enviando correo:", err);
   }
 }

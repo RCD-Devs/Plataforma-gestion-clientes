@@ -97,7 +97,7 @@ export function HandoffPanel({
             </div>
             <p className="text-[10px] leading-snug text-[#7f7f7f]">
               El colaborador recibirá una notificación. El cliente no verá
-              "Finalizada" hasta que la última etapa termine.
+              &quot;Finalizada&quot; hasta que la última etapa termine.
             </p>
           </form>
         </div>

@@ -23,8 +23,9 @@ export default async function AdminEstadosPage({
       <p className="mb-4 text-sm text-[#6b7280]">
         Estados de solicitud — compartidos por todos los proyectos y
         tableros, se editan una vez y aplican a toda la plataforma. Marca
-        "Estado final" en el (o los) estado que cierra una solicitud: define
-        cuándo se calcula el SLA y cuándo deja de contar como "abierta".
+        &quot;Estado final&quot; en el (o los) estado que cierra una solicitud:
+        define cuándo se calcula el SLA y cuándo deja de contar como
+        &quot;abierta&quot;.
       </p>
 
       {error && (

@@ -48,8 +48,8 @@ export function AiAssistant() {
           <div className="flex-1 space-y-3 overflow-y-auto p-3">
             {messages.length === 0 && (
               <div className="text-xs text-[#7f7f7f]">
-                Prueba algo como "qué tengo asignado" o "tareas en revisión de
-                ACHS".
+                Prueba algo como &quot;qué tengo asignado&quot; o &quot;tareas en
+                revisión de ACHS&quot;.
               </div>
             )}
             {messages.map((m) => (

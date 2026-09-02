@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { getStatuses } from "@/lib/statuses";
 import { StatusSelect } from "@/components/controls";
-import { StatusBadge, PriorityTag, ClientTag } from "@/components/ui";
+import { PriorityTag, ClientTag } from "@/components/ui";
 import { HandoffPanel } from "@/components/Handoff";
 import { markTeamAlertsRead } from "@/app/actions";
 import { hoursLabel, relative, shortDate } from "@/lib/format";

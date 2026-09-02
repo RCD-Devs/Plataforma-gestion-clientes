@@ -98,7 +98,7 @@ export default async function AdminCamposPage({
         </div>
         <div>
           <label className="mb-1 block text-xs font-semibold text-[#6b7280]">
-            Opciones (solo si es "Lista", separadas por coma)
+            Opciones (solo si es &quot;Lista&quot;, separadas por coma)
           </label>
           <input name="options" placeholder="Opción 1, Opción 2, Opción 3" className={inputCls} />
         </div>

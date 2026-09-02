@@ -19,7 +19,6 @@ export async function logAudit(opts: {
       },
     });
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error("No se pudo registrar el evento de auditoría:", err);
   }
 }

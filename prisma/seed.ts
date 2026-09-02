@@ -435,7 +435,6 @@ async function main() {
     solicitudes: requests.length,
     horas: timeData.reduce((a, t) => a + t.hours, 0),
   };
-  // eslint-disable-next-line no-console
   console.log("Seed listo:", counts);
 }
 
