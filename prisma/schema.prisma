@@ -376,3 +376,29 @@ model AiMemoryNote {
 
   @@index([userId, createdAt])
 }
+
+// Fase 3 — alertas de bolsa de horas y SLA (Rmap #17, #18). Mismo patrón
+// que NudgeShown: sin cron, se evalúa al cargar la página dueña del dato
+// y se deja un registro para no reavisar de más.
+//
+// Bolsa de horas: throttle semanal (weekKey = lunes de la semana en
+// America/Santiago) — a diferencia del vencimiento de una tarea, el saldo
+// de horas se mueve lento, avisar cada carga de página sería spam.
+model HoursAlertLog {
+  id        String   @id @default(cuid())
+  clientId  String
+  weekKey   String // "YYYY-MM-DD" del lunes de esa semana
+  createdAt DateTime @default(now())
+
+  @@unique([clientId, weekKey])
+}
+
+// SLA: una sola notificación por solicitud al responsable cuando se
+// acerca o pasa su fecha límite — no se repite aunque la tarea siga
+// atrasada (evita ruido); si se quiere volver a avisar basta con borrar
+// la fila o, más adelante, resetearla cuando cambie la fecha límite.
+model SlaAlertLog {
+  id        String   @id @default(cuid())
+  requestId String   @unique
+  createdAt DateTime @default(now())
+}

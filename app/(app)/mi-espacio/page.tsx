@@ -12,6 +12,7 @@ import { daysFromToday } from "@/lib/dates";
 import { getUnreadRequestIds } from "@/lib/commentReads";
 import { getPendingNudge } from "@/lib/nudges";
 import { NudgeBanner } from "@/components/NudgeBanner";
+import { escalateSlaAlerts } from "@/lib/slaAlerts";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,11 @@ export default async function MiEspacioPage({
   if (!user) redirect("/login");
   const { vista } = await searchParams;
   const asList = vista === "lista";
+
+  // Antes del Promise.all (no en paralelo): si la solicitud vencida es de
+  // este mismo usuario, así la notificación recién creada ya aparece en
+  // "alerts" más abajo, sin esperar a la siguiente carga de página.
+  await escalateSlaAlerts().catch(() => {});
 
   const [tasks, teammates, alerts, unread, statuses, nudgeItems] = await Promise.all([
     prisma.request.findMany({

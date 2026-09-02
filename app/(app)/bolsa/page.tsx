@@ -5,6 +5,7 @@ import { isManager, requestVisibilityWhere, clientVisibilityWhere } from "@/lib/
 import { Avatar, Bar } from "@/components/ui";
 import { hoursLabel, shortDate } from "@/lib/format";
 import { getHoursSummaries } from "@/lib/hoursLedger";
+import { checkHoursAlerts } from "@/lib/hoursAlerts";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,7 @@ export default async function BolsaPage() {
     }),
   ]);
   const summaries = await getHoursSummaries(clients);
+  await checkHoursAlerts(clients, summaries);
 
   const rows = clients.map((c) => {
     const all = c.requests.flatMap((r) => r.timeEntries);

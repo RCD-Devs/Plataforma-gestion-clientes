@@ -21,3 +21,12 @@ export function endOfToday() {
 export function toDateInput(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
+
+// Lunes de la semana de d, como "YYYY-MM-DD" — clave de throttle semanal
+// (ver HoursAlertLog).
+export function mondayOf(d: Date) {
+  const day = d.getDay(); // 0=domingo
+  const diff = day === 0 ? -6 : 1 - day;
+  const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diff);
+  return toDateInput(monday);
+}
