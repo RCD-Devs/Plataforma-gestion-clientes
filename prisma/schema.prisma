@@ -109,6 +109,7 @@ model User {
   collaborations  RequestCollaborator[]
   commentReads    CommentRead[]
   nudgesShown     NudgeShown[]
+  aiMemoryNotes   AiMemoryNote[]
 }
 
 model PasswordResetToken {
@@ -357,4 +358,21 @@ model NudgeShown {
   day    String // "YYYY-MM-DD" en America/Santiago
 
   @@unique([userId, day])
+}
+
+// Memoria liviana del asistente IA (fusión Codia Task, fase A — solo
+// lectura, sin mutaciones). El propio modelo decide qué anotar vía la
+// herramienta rememberNote cuando el usuario dice algo que vale la pena
+// recordar entre sesiones (ej. "muéstrame primero las urgentes"); se
+// inyectan las últimas notas en el system prompt de cada conversación
+// nueva. Reemplaza las tablas ai_user_profiles/ai_interactions de Codia
+// Task — mismo propósito, mucho más simple para el alcance de fase A.
+model AiMemoryNote {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }

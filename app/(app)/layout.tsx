@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/session";
 import { Sidebar } from "@/components/Nav";
+import { AiAssistant } from "@/components/AiAssistant";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         }}
       />
       <main className="h-screen flex-1 overflow-y-auto">{children}</main>
+      <AiAssistant />
     </div>
   );
 }
