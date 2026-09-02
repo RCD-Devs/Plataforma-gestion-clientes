@@ -31,11 +31,19 @@ export default async function SolicitudesPage({
   if (sp.estado) where.status = sp.estado;
   if (sp.prioridad) where.priority = sp.prioridad;
   if (sp.rol) where.assignee = { role: sp.rol };
+  // Rec. #79/#80 — insensible a mayúsculas (mode: "insensitive", Postgres
+  // ILIKE) y extendido a cliente y comentarios, no solo título/folio/
+  // descripción. Insensible a acentos queda pendiente aparte: requiere la
+  // extensión unaccent de Postgres + SQL crudo, que no compone con el
+  // resto de este `where` armado por partes — ver Pendientes técnicos.
   if (sp.q)
     where.OR = [
-      { title: { contains: sp.q } },
-      { key: { contains: sp.q } },
-      { description: { contains: sp.q } },
+      { title: { contains: sp.q, mode: "insensitive" } },
+      { key: { contains: sp.q, mode: "insensitive" } },
+      { description: { contains: sp.q, mode: "insensitive" } },
+      { client: { name: { contains: sp.q, mode: "insensitive" } } },
+      { client: { code: { contains: sp.q, mode: "insensitive" } } },
+      { comments: { some: { body: { contains: sp.q, mode: "insensitive" } } } },
     ];
   if (sp.desde || sp.hasta) {
     const range: Prisma.DateTimeFilter = {};

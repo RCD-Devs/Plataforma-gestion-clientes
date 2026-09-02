@@ -38,8 +38,8 @@ export function Filters({
     <div className="flex flex-wrap items-center gap-2">
       <input
         defaultValue={sp.get("q") ?? ""}
-        placeholder="Buscar…"
-        className={`${cls} w-44`}
+        placeholder="Buscar folio, cliente, comentario…"
+        className={`${cls} w-52`}
         onKeyDown={(e) => {
           if (e.key === "Enter")
             setParam("q", (e.target as HTMLInputElement).value);
