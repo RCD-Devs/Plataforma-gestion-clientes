@@ -108,6 +108,7 @@ model User {
   managedClients  Client[]               @relation("clientAccountManager")
   collaborations  RequestCollaborator[]
   commentReads    CommentRead[]
+  nudgesShown     NudgeShown[]
 }
 
 model PasswordResetToken {
@@ -340,4 +341,20 @@ model AuditLog {
 model Counter {
   id    String @id
   value Int    @default(0)
+}
+
+// Throttle de los nudges de comportamiento (port de Codia Task, sin IA —
+// son 4 reglas SQL sobre tareas asignadas: sin horas, por vencer, sin
+// movimiento, sin comentario propio). Una fila por usuario por día:
+// evita mostrar el aviso más de una vez al día. Codia Task usaba SSE +
+// hasta 2 avisos programados/día; acá se simplifica a 1 por día,
+// calculado al cargar /mi-espacio (sin push en tiempo real ni cron —
+// no hay infraestructura para eso en Vercel serverless).
+model NudgeShown {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+  day    String // "YYYY-MM-DD" en America/Santiago
+
+  @@unique([userId, day])
 }

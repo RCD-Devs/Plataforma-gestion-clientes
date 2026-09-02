@@ -10,6 +10,8 @@ import { markTeamAlertsRead } from "@/app/actions";
 import { hoursLabel, relative, shortDate } from "@/lib/format";
 import { daysFromToday } from "@/lib/dates";
 import { getUnreadRequestIds } from "@/lib/commentReads";
+import { getPendingNudge } from "@/lib/nudges";
+import { NudgeBanner } from "@/components/NudgeBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +42,7 @@ export default async function MiEspacioPage({
   const { vista } = await searchParams;
   const asList = vista === "lista";
 
-  const [tasks, teammates, alerts, unread, statuses] = await Promise.all([
+  const [tasks, teammates, alerts, unread, statuses, nudgeItems] = await Promise.all([
     prisma.request.findMany({
       where: {
         archivedAt: null,
@@ -67,6 +69,7 @@ export default async function MiEspacioPage({
       where: { recipientEmail: user.email, channel: "team", read: false },
     }),
     getStatuses(),
+    getPendingNudge(user.id),
   ]);
   const finalCodes = new Set(statuses.filter((s) => s.isFinal).map((s) => s.code));
 
@@ -109,6 +112,7 @@ export default async function MiEspacioPage({
       </header>
 
       <div className="flex-1 overflow-y-auto">
+        {nudgeItems && <NudgeBanner items={nudgeItems} />}
         {(reminders.length > 0 || alerts.length > 0) && (
           <div className="grid gap-4 border-b border-[#e4e8ec] bg-white/60 px-6 py-4 lg:grid-cols-2">
             <section>
