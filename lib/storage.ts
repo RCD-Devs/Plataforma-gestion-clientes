@@ -31,13 +31,23 @@ export async function uploadToStorage(
 // llamar a esto; lo que cambia es que el link resultante deja de sernos
 // útil a los pocos segundos, en vez de quedar servible para siempre
 // mientras la sesión exista.
+// Nuevo #18 (auditoría de gaps, 2 sep 2026) — forzar descarga (en vez de
+// verlo inline en el navegador) para todo lo que no sea una imagen que
+// queremos previsualizar. Mitiga que un archivo se abra/interprete
+// directo en el navegador; Supabase Storage ya soporta esto nativo vía
+// el parámetro download de la URL firmada, sin proxy propio de por medio.
 export async function getSignedDownloadUrl(
   path: string,
   expiresInSeconds = 60,
+  download?: string | false,
 ): Promise<string> {
   const { data, error } = await storageClient()
     .storage.from(ATTACHMENTS_BUCKET)
-    .createSignedUrl(path, expiresInSeconds);
+    .createSignedUrl(
+      path,
+      expiresInSeconds,
+      download ? { download } : undefined,
+    );
   if (error || !data) throw error ?? new Error("No se pudo firmar la URL");
   return data.signedUrl;
 }

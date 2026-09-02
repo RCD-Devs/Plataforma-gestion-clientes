@@ -28,7 +28,10 @@ export async function GET(
   if (!allowed) return new Response("No autorizado", { status: 403 });
 
   try {
-    const signedUrl = await getSignedDownloadUrl(safe, 60);
+    // Solo las imágenes se previsualizan inline; el resto (hoy, PDF)
+    // fuerza descarga — ver Nuevo #18.
+    const download = attachment.kind === "png" ? false : attachment.name;
+    const signedUrl = await getSignedDownloadUrl(safe, 60, download);
     // Cada visita revalida sesión/autorización y firma un link nuevo — el
     // redirect no se cachea (para que eso siga siendo cierto en la
     // próxima visita), y la URL firmada en sí deja de servir a los 60s.
