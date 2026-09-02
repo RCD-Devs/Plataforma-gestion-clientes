@@ -438,7 +438,7 @@ export default async function ClientReportPage({
                       </td>
                       <td className="px-4 py-3">
                         {r.assignee?.name ?? (
-                          <span className="text-[#9aa5ad]">Sin asignar</span>
+                          <span className="text-[#6b7280]">Sin asignar</span>
                         )}
                       </td>
                       <td className="px-4 py-3 font-medium">

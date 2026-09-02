@@ -101,7 +101,7 @@ export function ClientForm({
             defaultValue={toDateInput(client?.cycleStartDate ?? client?.createdAt ?? new Date())}
             className={inputCls}
           />
-          <p className="mt-1 text-[11px] text-[#9aa5ad]">
+          <p className="mt-1 text-[11px] text-[#6b7280]">
             Ancla del ciclo — desde acá se cuentan las renovaciones automáticas.
           </p>
         </div>

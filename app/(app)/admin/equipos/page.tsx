@@ -67,7 +67,7 @@ export default async function AdminEquiposPage() {
             ))}
             {teams.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-[#9ca3af]">
+                <td colSpan={5} className="px-4 py-10 text-center text-[#6b7280]">
                   Aún no hay equipos creados.
                 </td>
               </tr>

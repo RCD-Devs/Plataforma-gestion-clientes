@@ -47,11 +47,11 @@ export default async function EditarClientePage({
         <h2 className="text-sm font-semibold">Bolsa de horas</h2>
         <div className="grid grid-cols-2 gap-4 rounded-lg border border-[#e4e8ec] bg-[#f8fafb] p-4 text-sm">
           <div>
-            <div className="text-xs text-[#9aa5ad]">Disponible ahora</div>
+            <div className="text-xs text-[#6b7280]">Disponible ahora</div>
             <div className="text-lg font-semibold">{hoursLabel(ledger.available)}</div>
           </div>
           <div>
-            <div className="text-xs text-[#9aa5ad]">Horas extra (sin cubrir por la bolsa)</div>
+            <div className="text-xs text-[#6b7280]">Horas extra (sin cubrir por la bolsa)</div>
             <div
               className="text-lg font-semibold"
               style={{ color: ledger.extraHours > 0 ? "#d21f3c" : undefined }}
@@ -116,7 +116,7 @@ export default async function EditarClientePage({
                   </span>{" "}
                   {a.note && <span className="text-[#5d6b77]">· {a.note}</span>}
                 </span>
-                <span className="text-[#9aa5ad]">
+                <span className="text-[#6b7280]">
                   {a.actorName || "—"} · {shortDate(a.createdAt)}
                 </span>
               </div>
@@ -127,7 +127,7 @@ export default async function EditarClientePage({
 
       <div className="max-w-xl space-y-4 border-t border-[#e6e8eb] p-6">
         <h2 className="text-sm font-semibold">Proyectos</h2>
-        <p className="text-xs text-[#9aa5ad]">
+        <p className="text-xs text-[#6b7280]">
           Cada proyecto es su propio tablero filtrado. La mantención general
           (formulario público, portal) sigue sin proyecto asignado.
         </p>

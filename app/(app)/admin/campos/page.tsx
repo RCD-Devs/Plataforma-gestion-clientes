@@ -65,7 +65,7 @@ export default async function AdminCamposPage({
             ))}
             {fields.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-[#9ca3af]">
+                <td colSpan={4} className="px-4 py-10 text-center text-[#6b7280]">
                   Aún no hay campos personalizados creados.
                 </td>
               </tr>

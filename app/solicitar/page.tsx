@@ -128,7 +128,7 @@ export default async function SolicitarPage({
           <button className="w-full rounded-lg bg-[#0bdbcf] py-2.5 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]">
             Enviar solicitud
           </button>
-          <p className="text-center text-xs text-[#9ca3af]">
+          <p className="text-center text-xs text-[#6b7280]">
             Podrás adjuntar archivos (PDF, PNG) y seguir el estado desde el
             portal.
           </p>
@@ -150,7 +150,7 @@ function Field({
   return (
     <label className="block">
       <div className="mb-1 text-sm font-medium">{label}</div>
-      {hint && <div className="mb-1 text-xs text-[#9ca3af]">{hint}</div>}
+      {hint && <div className="mb-1 text-xs text-[#6b7280]">{hint}</div>}
       {children}
     </label>
   );

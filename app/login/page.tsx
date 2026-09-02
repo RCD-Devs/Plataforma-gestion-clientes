@@ -59,7 +59,7 @@ export default async function LoginPage({
 
           <button
             disabled
-            className="mb-5 flex w-full items-center justify-center gap-2 rounded-lg border border-[#e4e8ec] py-2.5 text-sm text-[#9ca3af]"
+            className="mb-5 flex w-full items-center justify-center gap-2 rounded-lg border border-[#e4e8ec] py-2.5 text-sm text-[#6b7280]"
           >
             <span className="font-semibold">G</span> Continuar con Google
             <span className="ml-1 rounded bg-[#f3f4f6] px-1.5 py-0.5 text-[10px]">

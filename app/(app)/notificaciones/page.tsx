@@ -52,7 +52,7 @@ export default async function NotificacionesPage() {
               </div>
             ))}
             {notifs.length === 0 && (
-              <div className="text-sm text-[#9ca3af]">
+              <div className="text-sm text-[#6b7280]">
                 Aún no se han enviado correos.
               </div>
             )}
@@ -70,7 +70,7 @@ export default async function NotificacionesPage() {
               >
                 <span className="font-medium">{a.actorName}</span>{" "}
                 <span className="text-[#6b7280]">{a.message}</span>
-                <span className="text-[#9ca3af]">
+                <span className="text-[#6b7280]">
                   {" "}
                   · {a.request.key} · {relative(a.createdAt)}
                 </span>

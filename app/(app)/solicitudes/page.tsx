@@ -133,7 +133,7 @@ export default async function SolicitudesPage({
                       <Link href={`/solicitudes/${r.key}`} className="block">
                         <div className="flex items-center gap-1.5">
                           <ClientTag name={r.client.code || r.client.name} />
-                          <span className="text-xs text-[#9ca3af]">{r.key}</span>
+                          <span className="text-xs text-[#6b7280]">{r.key}</span>
                           {unreadIds.has(r.id) && (
                             <span
                               title="El cliente respondió y nadie lo ha visto"
@@ -155,7 +155,7 @@ export default async function SolicitudesPage({
                           {r.assignee.name}
                         </span>
                       ) : (
-                        <span className="text-[#9ca3af]">Sin asignar</span>
+                        <span className="text-[#6b7280]">Sin asignar</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -177,7 +177,7 @@ export default async function SolicitudesPage({
                 <tr>
                   <td
                     colSpan={6}
-                    className="px-4 py-10 text-center text-[#9ca3af]"
+                    className="px-4 py-10 text-center text-[#6b7280]"
                   >
                     No hay solicitudes con esos filtros.
                   </td>

@@ -97,7 +97,7 @@ export default async function RequestDetail({
         </Link>
         <div className="mt-1 flex items-center gap-2">
           <ClientTag name={req.client.name} />
-          <span className="text-xs text-[#9ca3af]">{req.key}</span>
+          <span className="text-xs text-[#6b7280]">{req.key}</span>
           {req.project && (
             <span className="rounded bg-[#e0fbf9] px-1.5 py-0.5 text-[10px] font-medium text-[#08a89f]">
               {req.project.name}
@@ -176,7 +176,7 @@ export default async function RequestDetail({
                 </div>
               ))}
               {req.attachments.length === 0 && (
-                <div className="text-sm text-[#9ca3af]">Sin adjuntos.</div>
+                <div className="text-sm text-[#6b7280]">Sin adjuntos.</div>
               )}
             </div>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -225,7 +225,7 @@ export default async function RequestDetail({
                   className="flex items-center justify-between rounded-lg border border-[#e6e8eb] bg-white px-3 py-2 text-sm hover:bg-[#f9fafb]"
                 >
                   <span className="min-w-0 truncate">
-                    <span className="text-xs text-[#9ca3af]">{s.key}</span>{" "}
+                    <span className="text-xs text-[#6b7280]">{s.key}</span>{" "}
                     {s.title}
                   </span>
                   <span
@@ -242,7 +242,7 @@ export default async function RequestDetail({
                 </Link>
               ))}
               {req.subtasks.length === 0 && (
-                <div className="text-sm text-[#9ca3af]">Sin subtareas.</div>
+                <div className="text-sm text-[#6b7280]">Sin subtareas.</div>
               )}
             </div>
             <form
@@ -354,7 +354,7 @@ export default async function RequestDetail({
                 </div>
               ))}
               {req.comments.length === 0 && (
-                <div className="text-sm text-[#9ca3af]">
+                <div className="text-sm text-[#6b7280]">
                   Aún no hay comentarios.
                 </div>
               )}
@@ -416,7 +416,7 @@ export default async function RequestDetail({
 
           <div className="rounded-xl border border-[#e6e8eb] bg-white p-4">
             <h3 className="mb-2 text-sm font-semibold">Colaboradores</h3>
-            <p className="mb-2 text-[11px] text-[#9aa5ad]">
+            <p className="mb-2 text-[11px] text-[#6b7280]">
               Además del responsable principal, también pueden actuar sobre
               esta tarea.
             </p>
@@ -454,7 +454,7 @@ export default async function RequestDetail({
                 </div>
               ))}
               {req.timeEntries.length === 0 && (
-                <div className="text-xs text-[#9ca3af]">
+                <div className="text-xs text-[#6b7280]">
                   Sin horas cargadas.
                 </div>
               )}
@@ -493,7 +493,7 @@ export default async function RequestDetail({
                     {a.actorName}
                   </span>{" "}
                   {a.message}
-                  <span className="text-[#9ca3af]">
+                  <span className="text-[#6b7280]">
                     {" "}
                     · {relative(a.createdAt)}
                   </span>

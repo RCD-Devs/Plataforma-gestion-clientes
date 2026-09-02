@@ -99,7 +99,7 @@ export function UserForm({
               </option>
             ))}
           </select>
-          <p className="mt-1 text-[11px] text-[#9aa5ad]">
+          <p className="mt-1 text-[11px] text-[#6b7280]">
             Solo aplica a roles de equipo (se ignora en Cliente).
           </p>
         </div>
@@ -113,7 +113,7 @@ export function UserForm({
               </option>
             ))}
           </select>
-          <p className="mt-1 text-[11px] text-[#9aa5ad]">
+          <p className="mt-1 text-[11px] text-[#6b7280]">
             Obligatorio solo para rol Cliente (acceso al portal).
           </p>
         </div>

@@ -75,7 +75,7 @@ export default async function ClientesPage() {
                       <span className="text-[#6b7280]">Bolsa disponible</span>
                       <span className="font-medium">
                         {hoursLabel(ledger.available)} / {hoursLabel(c.contractedHours)}{" "}
-                        <span className="text-[#9ca3af]">
+                        <span className="text-[#6b7280]">
                           cada {c.cycleMonths === 1 ? "mes" : `${c.cycleMonths} meses`}
                         </span>
                       </span>
@@ -93,7 +93,7 @@ export default async function ClientesPage() {
                     )}
                   </div>
                 ) : (
-                  <div className="mt-3 text-xs text-[#9ca3af]">
+                  <div className="mt-3 text-xs text-[#6b7280]">
                     Sin bolsa configurada
                   </div>
                 )}

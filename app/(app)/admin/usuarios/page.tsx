@@ -44,7 +44,7 @@ export default async function AdminUsuariosPage() {
                     <Avatar name={u.name} color={u.color} size={22} />
                     <span>
                       <div className="font-medium">{u.name}</div>
-                      <div className="text-xs text-[#9ca3af]">{u.email}</div>
+                      <div className="text-xs text-[#6b7280]">{u.email}</div>
                     </span>
                   </span>
                 </td>
@@ -66,7 +66,7 @@ export default async function AdminUsuariosPage() {
             ))}
             {users.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-[#9ca3af]">
+                <td colSpan={6} className="px-4 py-10 text-center text-[#6b7280]">
                   Aún no hay usuarios creados.
                 </td>
               </tr>

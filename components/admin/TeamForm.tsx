@@ -58,13 +58,13 @@ export function TeamForm({
                 className="h-4 w-4 accent-[#0bdbcf]"
               />
               {u.name}{" "}
-              <span className="text-xs text-[#9aa5ad]">
+              <span className="text-xs text-[#6b7280]">
                 · {ROLE_MAP[u.role]?.label ?? u.role}
               </span>
             </label>
           ))}
           {users.length === 0 && (
-            <p className="text-xs text-[#9aa5ad]">Aún no hay usuarios creados.</p>
+            <p className="text-xs text-[#6b7280]">Aún no hay usuarios creados.</p>
           )}
         </div>
       </div>

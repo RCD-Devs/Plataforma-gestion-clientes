@@ -308,7 +308,7 @@ export default async function EquipoPage({
                             {t.assignee.name}
                           </span>
                         ) : (
-                          <span className="text-[#9aa5ad]">Sin asignar</span>
+                          <span className="text-[#6b7280]">Sin asignar</span>
                         )}
                       </td>
                       <td className="px-4 py-3">{t.client.name}</td>

@@ -382,7 +382,7 @@ export default async function MiEspacioPage({
                       );
                     })}
                     {items.length === 0 && (
-                      <div className="rounded-xl border border-dashed border-[#e4e8ec] p-3 text-center text-xs text-[#9aa5ad]">
+                      <div className="rounded-xl border border-dashed border-[#e4e8ec] p-3 text-center text-xs text-[#6b7280]">
                         Sin tareas
                       </div>
                     )}

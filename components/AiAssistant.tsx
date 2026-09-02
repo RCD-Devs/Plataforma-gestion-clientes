@@ -40,7 +40,7 @@ export function AiAssistant() {
         <div className="fixed bottom-20 right-5 z-40 flex h-[520px] w-[360px] flex-col overflow-hidden rounded-xl border border-[#e4e8ec] bg-white shadow-2xl">
           <div className="border-b border-[#e4e8ec] bg-[#081826] px-4 py-3">
             <div className="text-sm font-semibold text-white">Asistente RGC</div>
-            <div className="text-[11px] text-[#9aa5ad]">
+            <div className="text-[11px] text-[#6b7280]">
               Busca tareas y navega — no crea ni edita nada todavía
             </div>
           </div>

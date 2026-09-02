@@ -52,7 +52,7 @@ export default async function AdminEstadosPage({
             action={updateStatus.bind(null, s.id)}
             className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)_5.5rem_5rem_4rem_5.5rem_5.5rem] items-center gap-x-2 border-b border-[#f3f4f6] px-4 py-2 text-sm last:border-0"
           >
-            <div className="truncate font-mono text-xs text-[#9ca3af]">
+            <div className="truncate font-mono text-xs text-[#6b7280]">
               {s.code}
             </div>
             <input
@@ -90,7 +90,7 @@ export default async function AdminEstadosPage({
           </form>
         ))}
         {statuses.length === 0 && (
-          <div className="px-4 py-10 text-center text-sm text-[#9ca3af]">
+          <div className="px-4 py-10 text-center text-sm text-[#6b7280]">
             Aún no hay estados creados.
           </div>
         )}
@@ -111,7 +111,7 @@ export default async function AdminEstadosPage({
             required
             className={inputCls}
           />
-          <p className="mt-1 text-[11px] text-[#9ca3af]">
+          <p className="mt-1 text-[11px] text-[#6b7280]">
             Identificador interno, sin espacios. Se normaliza en mayúsculas.
           </p>
         </div>

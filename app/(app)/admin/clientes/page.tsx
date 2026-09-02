@@ -63,7 +63,7 @@ export default async function AdminClientesPage() {
             ))}
             {clients.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-[#9ca3af]">
+                <td colSpan={7} className="px-4 py-10 text-center text-[#6b7280]">
                   Aún no hay clientes creados.
                 </td>
               </tr>

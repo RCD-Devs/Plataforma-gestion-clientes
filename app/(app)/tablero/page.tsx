@@ -72,7 +72,7 @@ export default async function TableroPage() {
                       </div>
                       <div className="mb-2 text-sm leading-snug">{r.title}</div>
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-[#9ca3af]">{r.key}</span>
+                        <span className="text-xs text-[#6b7280]">{r.key}</span>
                         <div className="flex items-center gap-2">
                           {hrs > 0 && (
                             <span className="text-xs text-[#6b7280]">
@@ -94,7 +94,7 @@ export default async function TableroPage() {
                   );
                 })}
                 {items.length === 0 && (
-                  <div className="rounded-xl border border-dashed border-[#e6e8eb] p-3 text-center text-xs text-[#9ca3af]">
+                  <div className="rounded-xl border border-dashed border-[#e6e8eb] p-3 text-center text-xs text-[#6b7280]">
                     Sin tarjetas
                   </div>
                 )}

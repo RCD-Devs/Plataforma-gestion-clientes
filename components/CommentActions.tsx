@@ -54,7 +54,7 @@ export function CommentActions({
   }
 
   return (
-    <div className="mt-1 flex gap-3 text-[11px] text-[#9ca3af]">
+    <div className="mt-1 flex gap-3 text-[11px] text-[#6b7280]">
       <button
         type="button"
         onClick={() => setEditing(true)}

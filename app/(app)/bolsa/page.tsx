@@ -162,7 +162,7 @@ export default async function BolsaPage() {
                   <tr>
                     <td
                       colSpan={6}
-                      className="px-4 py-8 text-center text-[#9ca3af]"
+                      className="px-4 py-8 text-center text-[#6b7280]"
                     >
                       Aún no hay horas registradas.
                     </td>

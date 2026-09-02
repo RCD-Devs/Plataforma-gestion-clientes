@@ -16,7 +16,8 @@ export function AttachmentDeleteButton({ attachmentId }: { attachmentId: string 
         startTransition(() => deleteAttachment(attachmentId));
       }}
       title="Eliminar adjunto"
-      className="shrink-0 rounded px-1.5 text-xs text-[#9ca3af] hover:bg-[#feede6] hover:text-[#d21f3c] disabled:opacity-50"
+      aria-label="Eliminar adjunto"
+      className="shrink-0 rounded px-1.5 text-xs text-[#6b7280] hover:bg-[#feede6] hover:text-[#d21f3c] disabled:opacity-50"
     >
       {pending ? "…" : "✕"}
     </button>

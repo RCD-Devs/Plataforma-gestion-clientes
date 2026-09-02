@@ -170,7 +170,7 @@ export default async function PortalRequestDetail({
                   <div className="whitespace-pre-wrap">{c.body}</div>
                   <div
                     className={`mt-1 text-[10px] ${
-                      c.isClient ? "text-[#08a89f]/70" : "text-[#9aa5ad]"
+                      c.isClient ? "text-[#08a89f]/70" : "text-[#6b7280]"
                     }`}
                   >
                     {relative(c.createdAt)}

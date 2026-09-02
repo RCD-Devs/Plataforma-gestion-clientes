@@ -30,14 +30,14 @@ export function CollaboratorsPanel({
             type="button"
             disabled={pending}
             onClick={() => start(() => removeCollaborator(requestId, c.id))}
-            className="text-[#9aa5ad] hover:text-[#d21f3c] disabled:opacity-50"
+            className="text-[#6b7280] hover:text-[#d21f3c] disabled:opacity-50"
           >
             Quitar
           </button>
         </div>
       ))}
       {collaborators.length === 0 && (
-        <div className="text-xs text-[#9ca3af]">Sin colaboradores.</div>
+        <div className="text-xs text-[#6b7280]">Sin colaboradores.</div>
       )}
       {availableUsers.length > 0 && (
         <select
