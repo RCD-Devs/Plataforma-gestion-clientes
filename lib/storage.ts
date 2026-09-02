@@ -51,3 +51,10 @@ export async function getSignedDownloadUrl(
   if (error || !data) throw error ?? new Error("No se pudo firmar la URL");
   return data.signedUrl;
 }
+
+// Rec. #34 — al borrar un adjunto, limpiar también el archivo real del
+// bucket (no solo la fila de Attachment), para no acumular basura.
+export async function deleteFromStorage(path: string) {
+  const { error } = await storageClient().storage.from(ATTACHMENTS_BUCKET).remove([path]);
+  if (error) throw error;
+}

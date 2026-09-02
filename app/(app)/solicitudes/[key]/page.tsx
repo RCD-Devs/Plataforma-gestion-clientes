@@ -22,6 +22,7 @@ import { hoursLabel, longDate, shortDate, relative } from "@/lib/format";
 import { RequestEditPanel } from "@/components/RequestEditPanel";
 import { ArchiveButton } from "@/components/ArchiveButton";
 import { CommentActions } from "@/components/CommentActions";
+import { AttachmentDeleteButton } from "@/components/AttachmentDeleteButton";
 import { CollaboratorsPanel } from "@/components/CollaboratorsPanel";
 import { SubmitButton } from "@/components/SubmitButton";
 import { getStatusMap, getStatuses, softBg } from "@/lib/statuses";
@@ -151,23 +152,28 @@ export default async function RequestDetail({
             </h2>
             <div className="space-y-2">
               {req.attachments.map((a) => (
-                <a
+                <div
                   key={a.id}
-                  href={a.url}
-                  target="_blank"
                   className="flex items-center gap-2 rounded-lg border border-[#e6e8eb] bg-white px-3 py-2 text-sm hover:bg-[#f9fafb]"
                 >
-                  <span className="rounded bg-[#f3f4f6] px-1.5 py-0.5 text-[10px] font-medium text-[#6b7280]">
-                    {a.kind === "pdf"
-                      ? "PDF"
-                      : a.kind === "png"
-                        ? "IMG"
-                        : a.kind === "url"
-                          ? "URL"
-                          : "FILE"}
-                  </span>
-                  <span className="truncate">{a.name}</span>
-                </a>
+                  <a
+                    href={a.url}
+                    target="_blank"
+                    className="flex min-w-0 flex-1 items-center gap-2"
+                  >
+                    <span className="rounded bg-[#f3f4f6] px-1.5 py-0.5 text-[10px] font-medium text-[#6b7280]">
+                      {a.kind === "pdf"
+                        ? "PDF"
+                        : a.kind === "png"
+                          ? "IMG"
+                          : a.kind === "url"
+                            ? "URL"
+                            : "FILE"}
+                    </span>
+                    <span className="truncate">{a.name}</span>
+                  </a>
+                  <AttachmentDeleteButton attachmentId={a.id} />
+                </div>
               ))}
               {req.attachments.length === 0 && (
                 <div className="text-sm text-[#9ca3af]">Sin adjuntos.</div>

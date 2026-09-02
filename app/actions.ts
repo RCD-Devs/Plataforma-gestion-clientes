@@ -16,6 +16,7 @@ import { isTeamRole, isManager, canActOnRequest, TEAM_ROLES } from "@/lib/authz"
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { logAudit } from "@/lib/audit";
 import { storeUploadedFile } from "@/lib/attachments";
+import { deleteFromStorage } from "@/lib/storage";
 import crypto from "crypto";
 import { notifyClient, notifyTeam } from "@/lib/email";
 import { PRIORITY_MAP } from "@/lib/constants";
@@ -879,6 +880,26 @@ export async function addUrlAttachment(formData: FormData) {
     data: { requestId, kind: "url", name: name || url, url },
   });
   revalidatePath(`/solicitudes/${req.key}`);
+}
+
+// Rec. #34 — mismo permiso que agregar un adjunto (canActOnRequest), no
+// "solo quien lo subió": Attachment no registra quién lo subió, y
+// exigirlo obligaría a migrar datos existentes por un ítem P2.
+export async function deleteAttachment(attachmentId: string) {
+  const user = await getSessionUser();
+  if (!user) return;
+  const attachment = await prisma.attachment.findUnique({
+    where: { id: attachmentId },
+    include: { request: { include: { client: true, collaborators: true } } },
+  });
+  if (!attachment || !canActOnRequest(user, attachment.request)) return;
+
+  await prisma.attachment.delete({ where: { id: attachmentId } });
+  if (attachment.kind !== "url") {
+    const filename = attachment.url.split("/").pop();
+    if (filename) await deleteFromStorage(filename).catch(() => {});
+  }
+  revalidatePath(`/solicitudes/${attachment.request.key}`);
 }
 
 export async function setClientPriority(requestId: string, value: number) {
