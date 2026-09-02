@@ -833,6 +833,37 @@ export async function addComment(formData: FormData) {
   revalidatePath("/portal");
 }
 
+// Rec. #33 — solo el autor puede editar/eliminar su propio comentario, y
+// solo comentarios de equipo (authorId real): los del portal del cliente
+// se guardan con authorId null (ver addComment), fuera de alcance acá.
+export async function editComment(commentId: string, body: string) {
+  const user = await getSessionUser();
+  if (!user) return;
+  const trimmed = body.trim();
+  if (!trimmed) return;
+  const comment = await prisma.comment.findUnique({
+    where: { id: commentId },
+    include: { request: { select: { key: true } } },
+  });
+  if (!comment || !comment.authorId || comment.authorId !== user.id) return;
+
+  await prisma.comment.update({ where: { id: commentId }, data: { body: trimmed } });
+  revalidatePath(`/solicitudes/${comment.request.key}`);
+}
+
+export async function deleteComment(commentId: string) {
+  const user = await getSessionUser();
+  if (!user) return;
+  const comment = await prisma.comment.findUnique({
+    where: { id: commentId },
+    include: { request: { select: { key: true } } },
+  });
+  if (!comment || !comment.authorId || comment.authorId !== user.id) return;
+
+  await prisma.comment.delete({ where: { id: commentId } });
+  revalidatePath(`/solicitudes/${comment.request.key}`);
+}
+
 export async function addUrlAttachment(formData: FormData) {
   const user = await getSessionUser();
   const requestId = String(formData.get("requestId") || "");

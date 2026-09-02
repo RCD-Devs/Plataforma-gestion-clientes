@@ -21,6 +21,7 @@ import {
 import { hoursLabel, longDate, shortDate, relative } from "@/lib/format";
 import { RequestEditPanel } from "@/components/RequestEditPanel";
 import { ArchiveButton } from "@/components/ArchiveButton";
+import { CommentActions } from "@/components/CommentActions";
 import { CollaboratorsPanel } from "@/components/CollaboratorsPanel";
 import { SubmitButton } from "@/components/SubmitButton";
 import { getStatusMap, getStatuses, softBg } from "@/lib/statuses";
@@ -340,6 +341,9 @@ export default async function RequestDetail({
                       <span>· {relative(c.createdAt)}</span>
                     </div>
                     <div className="whitespace-pre-wrap text-sm">{c.body}</div>
+                    {c.authorId === user.id && (
+                      <CommentActions commentId={c.id} body={c.body} />
+                    )}
                   </div>
                 </div>
               ))}
