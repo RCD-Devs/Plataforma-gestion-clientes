@@ -1,30 +1,19 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { isManager } from "@/lib/authz";
-import { REQUEST_TYPES } from "@/lib/constants";
-import { getStatuses, getStatusMap, softBg } from "@/lib/statuses";
+import { softBg } from "@/lib/statuses";
 import { StatCard } from "@/components/ui";
 import { hoursLabel, shortDate, longDate } from "@/lib/format";
-import { getHoursSummaries } from "@/lib/hoursLedger";
-import { toDateInput, endOfToday } from "@/lib/dates";
-import {
-  slaDays,
-  classifySla,
-  mean,
-  median,
-  round1,
-  monthRange,
-  monthKey,
-  monthLabel,
-  SLA_RANGES,
-} from "@/lib/sla";
+import { toDateInput } from "@/lib/dates";
+import { slaDays, classifySla, round1, SLA_RANGES } from "@/lib/sla";
 import {
   MonthlyEvolutionChart,
   GroupedBarChart,
   ReportDoughnut,
 } from "@/components/ReportCharts";
+import { getClientReportData } from "@/lib/clientReport";
+import { ReportExportButtons } from "@/components/ReportExportButtons";
 
 export const dynamic = "force-dynamic";
 
@@ -45,140 +34,41 @@ export default async function ClientReportPage({
   const { id } = await params;
   const sp = await searchParams;
 
-  const client = await prisma.client.findUnique({ where: { id } });
-  if (!client) notFound();
-  if (user.role === "COORDINADOR_CUENTA" && client.accountManagerId !== user.id) {
+  const data = await getClientReportData(id, sp.desde, sp.hasta);
+  if (!data) notFound();
+  if (user.role === "COORDINADOR_CUENTA" && data.client.accountManagerId !== user.id) {
     notFound();
   }
 
-  const now = new Date();
-  const desde = sp.desde
-    ? new Date(`${sp.desde}T00:00:00`)
-    : new Date(now.getFullYear(), now.getMonth() - 11, 1);
-  const hasta = sp.hasta ? new Date(`${sp.hasta}T23:59:59`) : endOfToday();
-
-  const [requests, timeEntries, statuses, statusMap] = await Promise.all([
-    prisma.request.findMany({
-      where: { clientId: id, createdAt: { gte: desde, lte: hasta } },
-      include: {
-        assignee: true,
-        timeEntries: { select: { hours: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.timeEntry.findMany({
-      where: {
-        date: { gte: desde, lte: hasta },
-        request: { clientId: id },
-      },
-      include: { user: true, request: { select: { type: true } } },
-    }),
-    getStatuses(),
-    getStatusMap(),
-  ]);
-  const finalCodes = new Set(statuses.filter((s) => s.isFinal).map((s) => s.code));
-
-  // --- KPIs ---
-  const finalizadas = requests.filter(
-    (r) => finalCodes.has(r.status) && r.finalizedAt,
-  );
-  const slaList = finalizadas.map((r) => slaDays(r.createdAt, r.finalizedAt!));
-  const slaPromedio = round1(mean(slaList));
-  const slaMediana = round1(median(slaList));
-  const rangeCounts = { OPTIMO: 0, ACEPTABLE: 0, ATENCION: 0, CRITICO: 0 };
-  for (const d of slaList) rangeCounts[classifySla(d)]++;
-  const tasaOptima =
-    slaList.length > 0 ? round1((rangeCounts.OPTIMO / slaList.length) * 100) : 0;
-  const horasTotales = timeEntries.reduce((a, t) => a + t.hours, 0);
-  const ledger = (await getHoursSummaries([client])).get(client.id)!;
-
-  // --- Evolución mensual (agrupado por mes de INGRESO) ---
-  const months = monthRange(desde, hasta);
-  const byMonth = new Map<string, typeof requests>();
-  for (const m of months) byMonth.set(m, []);
-  for (const r of requests) {
-    const k = monthKey(r.createdAt);
-    if (byMonth.has(k)) byMonth.get(k)!.push(r);
-  }
-  const evolLabels = months.map(monthLabel);
-  const evolVolumen = months.map((m) => byMonth.get(m)!.length);
-  const evolPromedio = months.map((m) => {
-    const f = byMonth
-      .get(m)!
-      .filter((r) => finalCodes.has(r.status) && r.finalizedAt)
-      .map((r) => slaDays(r.createdAt, r.finalizedAt!));
-    return round1(mean(f));
-  });
-  const evolMediana = months.map((m) => {
-    const f = byMonth
-      .get(m)!
-      .filter((r) => finalCodes.has(r.status) && r.finalizedAt)
-      .map((r) => slaDays(r.createdAt, r.finalizedAt!));
-    return round1(median(f));
-  });
-
-  // --- Horas por mes ---
-  const hoursByMonth = new Map<string, number>();
-  for (const m of months) hoursByMonth.set(m, 0);
-  for (const t of timeEntries) {
-    const k = monthKey(t.date);
-    if (hoursByMonth.has(k)) hoursByMonth.set(k, hoursByMonth.get(k)! + t.hours);
-  }
-  const hoursMonthValues = months.map((m) => round1(hoursByMonth.get(m) ?? 0));
-
-  // --- SLA por tipo ---
-  const typesInUse = REQUEST_TYPES.filter((t) =>
-    finalizadas.some((r) => r.type === t),
-  );
-  const slaPromPorTipo = typesInUse.map((t) =>
-    round1(
-      mean(
-        finalizadas
-          .filter((r) => r.type === t)
-          .map((r) => slaDays(r.createdAt, r.finalizedAt!)),
-      ),
-    ),
-  );
-  const slaMedPorTipo = typesInUse.map((t) =>
-    round1(
-      median(
-        finalizadas
-          .filter((r) => r.type === t)
-          .map((r) => slaDays(r.createdAt, r.finalizedAt!)),
-      ),
-    ),
-  );
-
-  // --- Horas por tipo ---
-  const hoursByType = new Map<string, number>();
-  for (const t of timeEntries) {
-    hoursByType.set(t.request.type, (hoursByType.get(t.request.type) ?? 0) + t.hours);
-  }
-  const typesWithHours = [...hoursByType.keys()].sort(
-    (a, b) => hoursByType.get(b)! - hoursByType.get(a)!,
-  );
-  const hoursByTypeValues = typesWithHours.map((t) => round1(hoursByType.get(t)!));
-
-  // --- Horas por perfil ---
-  const hoursByUser = new Map<
-    string,
-    { name: string; color: string | null; hours: number }
-  >();
-  for (const t of timeEntries) {
-    const cur = hoursByUser.get(t.userId) ?? {
-      name: t.user.name,
-      color: t.user.color,
-      hours: 0,
-    };
-    cur.hours += t.hours;
-    hoursByUser.set(t.userId, cur);
-  }
-  const perUser = [...hoursByUser.values()].sort((a, b) => b.hours - a.hours);
-
-  // --- Distribución de estado ---
-  const statusCounts = statuses.map(
-    (s) => requests.filter((r) => r.status === s.code).length,
-  );
+  const {
+    client,
+    desde,
+    hasta,
+    requests,
+    statuses,
+    statusMap,
+    finalCodes,
+    finalizadas,
+    slaList,
+    slaPromedio,
+    slaMediana,
+    rangeCounts,
+    tasaOptima,
+    horasTotales,
+    ledger,
+    evolLabels,
+    evolVolumen,
+    evolPromedio,
+    evolMediana,
+    hoursMonthValues,
+    typesInUse,
+    slaPromPorTipo,
+    slaMedPorTipo,
+    typesWithHours,
+    hoursByTypeValues,
+    perUser,
+    statusCounts,
+  } = data;
 
   const fmt = toDateInput;
 
@@ -225,6 +115,61 @@ export default async function ClientReportPage({
             </button>
           </form>
         </div>
+        <ReportExportButtons
+          clientId={client.id}
+          clientName={client.name}
+          desde={desde}
+          hasta={hasta}
+          kpis={{
+            totalSolicitudes: requests.length,
+            finalizadas: finalizadas.length,
+            slaPromedio,
+            slaMediana,
+            tasaOptima,
+            optimas: rangeCounts.OPTIMO,
+            conSla: slaList.length,
+            horasTotales,
+            saldoDisponible: ledger.available,
+            horasExtra: ledger.extraHours,
+            horasContratadas: client.contractedHours,
+          }}
+          evolucion={{ labels: evolLabels, volumen: evolVolumen, promedio: evolPromedio, mediana: evolMediana }}
+          horasPorMes={hoursMonthValues}
+          slaPorTipo={{ labels: typesInUse, promedio: slaPromPorTipo, mediana: slaMedPorTipo }}
+          distribucionSla={{
+            labels: SLA_RANGES.map((r) => r.label),
+            values: SLA_RANGES.map((r) => rangeCounts[r.key]),
+            colors: SLA_RANGES.map((r) => r.color),
+          }}
+          horasPorTipo={{ labels: typesWithHours, values: hoursByTypeValues }}
+          distribucionEstado={{
+            labels: statuses.map((s) => s.label),
+            values: statusCounts,
+            colors: statuses.map((s) => s.color),
+          }}
+          horasPorPerfil={{
+            labels: perUser.map((u) => u.name),
+            values: perUser.map((u) => round1(u.hours)),
+          }}
+          detalle={requests.map((r) => {
+            const hrs = r.timeEntries.reduce((a, t) => a + t.hours, 0);
+            const sla =
+              finalCodes.has(r.status) && r.finalizedAt
+                ? round1(slaDays(r.createdAt, r.finalizedAt))
+                : null;
+            return {
+              key: r.key,
+              title: r.title,
+              type: r.type,
+              ingreso: shortDate(r.createdAt),
+              finalizacion: r.finalizedAt ? shortDate(r.finalizedAt) : "—",
+              sla: sla != null ? `${sla} d` : "—",
+              estado: statusMap[r.status]?.label ?? r.status,
+              responsable: r.assignee?.name ?? "Sin asignar",
+              horas: hrs > 0 ? hoursLabel(hrs) : "—",
+            };
+          })}
+        />
       </header>
 
       <div className="flex-1 space-y-6 overflow-y-auto p-6">

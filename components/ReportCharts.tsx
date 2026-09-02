@@ -1,5 +1,6 @@
 "use client";
 
+import { forwardRef } from "react";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -43,17 +44,15 @@ const tooltip = {
   cornerRadius: 6,
 };
 
-export function MonthlyEvolutionChart({
-  labels,
-  volumen,
-  promedio,
-  mediana,
-}: {
-  labels: string[];
-  volumen: number[];
-  promedio: number[];
-  mediana: number[];
-}) {
+export const MonthlyEvolutionChart = forwardRef<
+  any,
+  {
+    labels: string[];
+    volumen: number[];
+    promedio: number[];
+    mediana: number[];
+  }
+>(function MonthlyEvolutionChart({ labels, volumen, promedio, mediana }, ref) {
   // Chart.js soporta mezclar tipos por dataset (bar + line) registrando
   // ambos controllers; el tipado de react-chartjs-2 no modela bien esta
   // unión, así que se relaja localmente a `any`.
@@ -120,34 +119,40 @@ export function MonthlyEvolutionChart({
   };
   return (
     <div style={{ position: "relative", width: "100%", height: 280 }}>
-      <Chart type="bar" data={data} options={options} />
+      <Chart ref={ref} type="bar" data={data} options={options} />
     </div>
   );
-}
+});
 
-export function GroupedBarChart({
-  labels,
-  a,
-  b,
-  aLabel,
-  bLabel,
-  aColor = "#08a89f",
-  bColor = "rgba(8,168,159,0.25)",
-  suffix = "d",
-  horizontal = false,
-  height = 260,
-}: {
-  labels: string[];
-  a: number[];
-  b?: number[];
-  aLabel: string;
-  bLabel?: string;
-  aColor?: string;
-  bColor?: string;
-  suffix?: string;
-  horizontal?: boolean;
-  height?: number;
-}) {
+export const GroupedBarChart = forwardRef<
+  any,
+  {
+    labels: string[];
+    a: number[];
+    b?: number[];
+    aLabel: string;
+    bLabel?: string;
+    aColor?: string;
+    bColor?: string;
+    suffix?: string;
+    horizontal?: boolean;
+    height?: number;
+  }
+>(function GroupedBarChart(
+  {
+    labels,
+    a,
+    b,
+    aLabel,
+    bLabel,
+    aColor = "#08a89f",
+    bColor = "rgba(8,168,159,0.25)",
+    suffix = "d",
+    horizontal = false,
+    height = 260,
+  },
+  ref,
+) {
   const datasets = [
     {
       label: aLabel,
@@ -184,10 +189,10 @@ export function GroupedBarChart({
   };
   return (
     <div style={{ position: "relative", width: "100%", height }}>
-      <Bar data={{ labels, datasets }} options={options} />
+      <Bar ref={ref} data={{ labels, datasets }} options={options} />
     </div>
   );
-}
+});
 
 export function StackedBarChart({
   labels,
@@ -226,17 +231,15 @@ export function StackedBarChart({
   );
 }
 
-export function ReportDoughnut({
-  labels,
-  values,
-  colors,
-  height = 240,
-}: {
-  labels: string[];
-  values: number[];
-  colors: string[];
-  height?: number;
-}) {
+export const ReportDoughnut = forwardRef<
+  any,
+  {
+    labels: string[];
+    values: number[];
+    colors: string[];
+    height?: number;
+  }
+>(function ReportDoughnut({ labels, values, colors, height = 240 }, ref) {
   const total = values.reduce((a, b) => a + b, 0);
   const data = {
     labels,
@@ -270,7 +273,7 @@ export function ReportDoughnut({
   };
   return (
     <div style={{ position: "relative", width: "100%", height }}>
-      <Doughnut data={data} options={options} />
+      <Doughnut ref={ref} data={data} options={options} />
     </div>
   );
-}
+});
