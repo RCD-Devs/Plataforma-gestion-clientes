@@ -4,6 +4,7 @@ import { setUserActive } from "@/app/actions";
 import { ActiveToggle } from "@/components/admin/ActiveToggle";
 import { ROLE_MAP } from "@/lib/constants";
 import { Avatar } from "@/components/ui";
+import { getStatuses } from "@/lib/statuses";
 
 export const dynamic = "force-dynamic";
 
@@ -13,8 +14,43 @@ export default async function AdminUsuariosPage() {
     orderBy: { name: "asc" },
   });
 
+  // Nuevo #12 — al desactivar a alguien, sus solicitudes abiertas quedan
+  // asignadas sin aviso. Por decisión del dueño del proyecto (16 sep) solo
+  // se avisa acá, sin reasignación automática ni cambios al modelo de datos.
+  const statuses = await getStatuses();
+  const finalCodes = statuses.filter((s) => s.isFinal).map((s) => s.code);
+  const orphaned = await prisma.request.findMany({
+    where: {
+      archivedAt: null,
+      status: { notIn: finalCodes },
+      assignee: { isActive: false },
+    },
+    select: { id: true, key: true, title: true, assignee: { select: { name: true } } },
+    orderBy: { key: "asc" },
+  });
+
   return (
     <div className="p-6">
+      {orphaned.length > 0 && (
+        <div className="mb-4 rounded-xl border border-[#fda565] bg-[#fdf1e3] p-4">
+          <h2 className="mb-2 text-sm font-semibold text-[#9a5a25]">
+            ⚠️ {orphaned.length} solicitud{orphaned.length === 1 ? "" : "es"}{" "}
+            asignada{orphaned.length === 1 ? "" : "s"} a alguien inactivo
+          </h2>
+          <div className="flex flex-wrap gap-1.5">
+            {orphaned.map((r) => (
+              <Link
+                key={r.id}
+                href={`/solicitudes/${r.key}`}
+                className="rounded-md border border-[#fda565] bg-white px-2 py-1 text-xs text-[#5d3a16] hover:bg-[#fdf1e3]"
+                title={`${r.title} — asignada a ${r.assignee?.name}`}
+              >
+                {r.key}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="mb-4 flex items-center justify-between">
         <p className="text-sm text-[#6b7280]">{users.length} usuarios</p>
         <Link
