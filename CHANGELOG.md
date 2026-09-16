@@ -6,6 +6,18 @@ hitos. Para el detalle línea por línea, `git log`. El roadmap completo
 
 ## 2026-09-16
 
+- Estado `SIN_TRIAGE` para solicitudes recién llegadas del formulario público y
+  del portal (Nuevo #13); `Status.isOptional` para que estados como "En pausa"
+  no generen alertas de SLA ni nudges de vencida/sin-movimiento (Nuevo #14).
+- Drag-and-drop de tarjetas en `/tablero` (HTML5 nativo, sin librería) para
+  cambiar de estado arrastrando (Nuevo #20).
+- Nudges en tiempo real vía SSE (`/api/nudges/stream`) en `/mi-espacio`, en vez
+  de solo al cargar la página (Nuevo #16).
+- Decisiones registradas: arquitectura de integración cerrada (un solo
+  Next.js, ADR-006/Nuevo #1); SSO de Google queda en espera mientras el alta
+  de usuarios sea manual; luz verde para el CRUD de roles + permisos
+  granulares (ADR-011/Nuevo #3, diseño pendiente); asistente IA con voz en
+  stand-by (Nuevo #19).
 - Error boundaries (`error.tsx`/`global-error.tsx`) + monitoreo con Rollbar.
 - Aviso de privacidad preliminar en `/privacidad`.
 - Aviso de responsables inactivos en `/admin/usuarios` (Nuevo #12).

@@ -25,7 +25,10 @@ export default async function AdminEstadosPage({
         tableros, se editan una vez y aplican a toda la plataforma. Marca
         &quot;Estado final&quot; en el (o los) estado que cierra una solicitud:
         define cuándo se calcula el SLA y cuándo deja de contar como
-        &quot;abierta&quot;.
+        &quot;abierta&quot;. Marca &quot;No bloquea plazos&quot; en un estado
+        como &quot;En pausa&quot;: las tareas ahí no generan alertas de
+        vencimiento ni de &quot;sin movimiento&quot; mientras están
+        detenidas a propósito.
       </p>
 
       {error && (
@@ -37,12 +40,13 @@ export default async function AdminEstadosPage({
       )}
 
       <div className="mb-6 overflow-hidden rounded-xl border border-[#e6e8eb] bg-white">
-        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)_5.5rem_5rem_4rem_5.5rem_5.5rem] gap-x-2 border-b border-[#e6e8eb] px-4 py-2.5 text-left text-xs font-medium text-[#6b7280]">
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)_5.5rem_5rem_4rem_5.5rem_5.5rem_5.5rem] gap-x-2 border-b border-[#e6e8eb] px-4 py-2.5 text-left text-xs font-medium text-[#6b7280]">
           <div>Código</div>
           <div>Nombre</div>
           <div>Color</div>
           <div>Orden</div>
           <div>Final</div>
+          <div>No bloquea</div>
           <div>Estado</div>
           <div />
         </div>
@@ -50,7 +54,7 @@ export default async function AdminEstadosPage({
           <form
             key={s.id}
             action={updateStatus.bind(null, s.id)}
-            className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)_5.5rem_5rem_4rem_5.5rem_5.5rem] items-center gap-x-2 border-b border-[#f3f4f6] px-4 py-2 text-sm last:border-0"
+            className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)_5.5rem_5rem_4rem_5.5rem_5.5rem_5.5rem] items-center gap-x-2 border-b border-[#f3f4f6] px-4 py-2 text-sm last:border-0"
           >
             <div className="truncate font-mono text-xs text-[#6b7280]">
               {s.code}
@@ -77,6 +81,13 @@ export default async function AdminEstadosPage({
               name="isFinal"
               type="checkbox"
               defaultChecked={s.isFinal}
+              className="h-4 w-4 accent-[#0bdbcf]"
+            />
+            <input
+              name="isOptional"
+              type="checkbox"
+              defaultChecked={s.isOptional}
+              title="No genera alertas de vencimiento ni de sin-movimiento"
               className="h-4 w-4 accent-[#0bdbcf]"
             />
             <ActiveToggle
@@ -150,6 +161,14 @@ export default async function AdminEstadosPage({
               className="h-4 w-4 accent-[#0bdbcf]"
             />
             Estado final
+          </label>
+          <label className="mt-6 flex items-center gap-1.5 text-xs text-[#6b7280]">
+            <input
+              name="isOptional"
+              type="checkbox"
+              className="h-4 w-4 accent-[#0bdbcf]"
+            />
+            No bloquea plazos
           </label>
         </div>
         <SubmitButton className="rounded-md bg-[#0bdbcf] px-4 py-2 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]">

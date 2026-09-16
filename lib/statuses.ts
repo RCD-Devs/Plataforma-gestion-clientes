@@ -12,6 +12,7 @@ export type StatusInfo = {
   color: string;
   sortOrder: number;
   isFinal: boolean;
+  isOptional: boolean;
 };
 
 export const getStatuses = cache(async (): Promise<StatusInfo[]> => {

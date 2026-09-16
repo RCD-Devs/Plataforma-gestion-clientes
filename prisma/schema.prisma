@@ -314,6 +314,12 @@ model Status {
   color      String
   sortOrder  Int       @default(0)
   isFinal    Boolean   @default(false)
+  // No obligatorio en el flujo (ej. "En pausa", Nuevo #14): las tareas en un
+  // estado así no cuentan como vencidas/atrasadas/sin-movimiento en las
+  // alertas de SLA ni en los nudges — están pausadas a propósito, no
+  // estancadas. isFinal no aplica aquí (una tarea final ya no genera esas
+  // alertas por otro motivo).
+  isOptional Boolean   @default(false)
   archivedAt DateTime?
 }
 

@@ -11,7 +11,7 @@ import { hoursLabel, relative, shortDate } from "@/lib/format";
 import { daysFromToday } from "@/lib/dates";
 import { getUnreadRequestIds } from "@/lib/commentReads";
 import { getPendingNudge } from "@/lib/nudges";
-import { NudgeBanner } from "@/components/NudgeBanner";
+import { NudgeStream } from "@/components/NudgeStream";
 import { escalateSlaAlerts } from "@/lib/slaAlerts";
 
 export const dynamic = "force-dynamic";
@@ -118,7 +118,7 @@ export default async function MiEspacioPage({
       </header>
 
       <div className="flex-1 overflow-y-auto">
-        {nudgeItems && <NudgeBanner items={nudgeItems} />}
+        <NudgeStream initial={nudgeItems} />
         {(reminders.length > 0 || alerts.length > 0) && (
           <div className="grid gap-4 border-b border-[#e4e8ec] bg-white/60 px-6 py-4 lg:grid-cols-2">
             <section>

@@ -677,12 +677,13 @@ function statusFormValues(formData: FormData, fallbackSortOrder: number) {
   const label = String(formData.get("label") || "").trim();
   const color = String(formData.get("color") || "#7f7f7f").trim();
   const isFinal = formData.get("isFinal") === "on";
+  const isOptional = formData.get("isOptional") === "on";
   const sortOrderRaw = formData.get("sortOrder");
   const sortOrder =
     sortOrderRaw !== null && sortOrderRaw !== ""
       ? Number(sortOrderRaw)
       : fallbackSortOrder;
-  return { label, color, isFinal, sortOrder };
+  return { label, color, isFinal, isOptional, sortOrder };
 }
 
 export async function createStatus(formData: FormData) {
@@ -695,14 +696,14 @@ export async function createStatus(formData: FormData) {
     .replace(/[^A-Z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
   const count = await prisma.status.count();
-  const { label, color, isFinal, sortOrder } = statusFormValues(formData, count);
+  const { label, color, isFinal, isOptional, sortOrder } = statusFormValues(formData, count);
   if (!code || !label) redirect("/admin/estados?error=datos");
 
   const existing = await prisma.status.findUnique({ where: { code } });
   if (existing) redirect("/admin/estados?error=code_existente");
 
   const status = await prisma.status.create({
-    data: { code, label, color, isFinal, sortOrder },
+    data: { code, label, color, isFinal, isOptional, sortOrder },
   });
   await logAudit({
     type: "admin_status_created",
@@ -719,12 +720,12 @@ export async function updateStatus(statusId: string, formData: FormData) {
   const user = await getSessionUser();
   if (!user || user.role !== "ADMIN") redirect("/mi-espacio");
 
-  const { label, color, isFinal, sortOrder } = statusFormValues(formData, 0);
+  const { label, color, isFinal, isOptional, sortOrder } = statusFormValues(formData, 0);
   if (!label) redirect("/admin/estados?error=datos");
 
   await prisma.status.update({
     where: { id: statusId },
-    data: { label, color, isFinal, sortOrder },
+    data: { label, color, isFinal, isOptional, sortOrder },
   });
   await logAudit({
     type: "admin_status_updated",
@@ -1057,7 +1058,7 @@ export async function submitRequest(formData: FormData) {
         priority,
         requesterEmail,
         clientId,
-        status: "POR_HACER",
+        status: "SIN_TRIAGE",
         dueDate: dueStr ? parseLocalDate(dueStr) : null,
       },
       include: { client: true },
@@ -1075,7 +1076,7 @@ export async function submitRequest(formData: FormData) {
     to: requesterEmail,
     requestId: req.id,
     title: `Recibimos tu solicitud ${req.key}`,
-    body: `Recibimos tu solicitud "${title}" para ${req.client.name}. Su folio es ${req.key} y su estado es "Por hacer". Te avisaremos por correo cada cambio de estado.`,
+    body: `Recibimos tu solicitud "${title}" para ${req.client.name}. Su folio es ${req.key} y su estado es "Sin triaje". Te avisaremos por correo cada cambio de estado.`,
   });
   refreshLists();
   redirect(`/solicitar/gracias?key=${req.key}`);
@@ -1113,7 +1114,7 @@ export async function submitClientRequest(formData: FormData) {
         priority,
         requesterEmail: email,
         clientId: client.id,
-        status: "POR_HACER",
+        status: "SIN_TRIAGE",
         dueDate: dueStr ? parseLocalDate(dueStr) : null,
       },
     }),
@@ -1133,7 +1134,7 @@ export async function submitClientRequest(formData: FormData) {
     to: email,
     requestId: req.id,
     title: `Recibimos tu solicitud ${req.key}`,
-    body: `Recibimos tu solicitud de ${type} para ${client.name}. Su folio es ${req.key} y su estado es "Por hacer". Te avisaremos por correo cada cambio de estado.`,
+    body: `Recibimos tu solicitud de ${type} para ${client.name}. Su folio es ${req.key} y su estado es "Sin triaje". Te avisaremos por correo cada cambio de estado.`,
   });
   refreshLists();
   revalidatePath("/portal");

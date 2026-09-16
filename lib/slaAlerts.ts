@@ -14,7 +14,9 @@ import { daysFromToday, DAY } from "./dates";
 
 export async function escalateSlaAlerts(): Promise<void> {
   const statuses = await getStatuses();
-  const finalCodes = statuses.filter((s) => s.isFinal).map((s) => s.code);
+  // Nuevo #14: una tarea "En pausa" (isOptional) tampoco escala SLA — está
+  // detenida a propósito, avisarle al responsable no cambia nada.
+  const excludedCodes = statuses.filter((s) => s.isFinal || s.isOptional).map((s) => s.code);
 
   const tomorrowEnd = new Date(Date.now() + 1 * DAY);
   tomorrowEnd.setHours(23, 59, 59, 999);
@@ -22,7 +24,7 @@ export async function escalateSlaAlerts(): Promise<void> {
   const candidates = await prisma.request.findMany({
     where: {
       archivedAt: null,
-      status: { notIn: finalCodes },
+      status: { notIn: excludedCodes },
       dueDate: { not: null, lte: tomorrowEnd },
       assigneeId: { not: null },
     },

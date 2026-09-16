@@ -96,10 +96,12 @@ async function missingTimes(userId: string): Promise<NudgeTask[]> {
   return rows.filter((r) => !finalCodes.has(r.status) || r.updatedAt >= cutoff);
 }
 
-// Vencidas o por vencer (hoy/mañana), no finalizadas, sin subtareas.
+// Vencidas o por vencer (hoy/mañana), no finalizadas, no pausadas (Nuevo
+// #14 — una tarea "En pausa" no debe sentirse atrasada, está detenida a
+// propósito), sin subtareas.
 async function dueDates(userId: string): Promise<NudgeTask[]> {
   const statuses = await getStatuses();
-  const finalCodes = statuses.filter((s) => s.isFinal).map((s) => s.code);
+  const excludedCodes = statuses.filter((s) => s.isFinal || s.isOptional).map((s) => s.code);
   const tomorrowEnd = new Date();
   tomorrowEnd.setDate(tomorrowEnd.getDate() + 1);
   tomorrowEnd.setHours(23, 59, 59, 999);
@@ -107,7 +109,7 @@ async function dueDates(userId: string): Promise<NudgeTask[]> {
   return prisma.request.findMany({
     where: {
       ...assignedToUserWhere(userId),
-      status: { notIn: finalCodes },
+      status: { notIn: excludedCodes },
       dueDate: { not: null, lte: tomorrowEnd },
       ...NO_SUBTASKS,
     },
@@ -115,14 +117,15 @@ async function dueDates(userId: string): Promise<NudgeTask[]> {
   });
 }
 
-// Sin movimiento hace 3+ días, creada hace 1+ día, no finalizada, sin subtareas.
+// Sin movimiento hace 3+ días, creada hace 1+ día, no finalizada, no
+// pausada (Nuevo #14), sin subtareas.
 async function staleStatus(userId: string): Promise<NudgeTask[]> {
   const statuses = await getStatuses();
-  const finalCodes = statuses.filter((s) => s.isFinal).map((s) => s.code);
+  const excludedCodes = statuses.filter((s) => s.isFinal || s.isOptional).map((s) => s.code);
   return prisma.request.findMany({
     where: {
       ...assignedToUserWhere(userId),
-      status: { notIn: finalCodes },
+      status: { notIn: excludedCodes },
       createdAt: { lte: new Date(Date.now() - 1 * DAY) },
       updatedAt: { lte: new Date(Date.now() - 3 * DAY) },
       ...NO_SUBTASKS,
@@ -149,8 +152,10 @@ async function missingComments(userId: string): Promise<NudgeTask[]> {
 }
 
 // Orden de prioridad igual al original; "sin comentario" solo dispara con
-// 2+ tareas (evita avisar por una sola tarea recién creada).
-async function evaluateItems(userId: string): Promise<NudgeItem[]> {
+// 2+ tareas (evita avisar por una sola tarea recién creada). Exportada
+// (Nuevo #16) para que el stream SSE de /mi-espacio pueda recalcular sin
+// pasar por el throttle de una vez al día de getPendingNudge.
+export async function evaluateNudgeItems(userId: string): Promise<NudgeItem[]> {
   const [missingTimesRows, dueDatesRows, staleStatusRows, missingCommentsRows] =
     await Promise.all([
       missingTimes(userId),
@@ -180,7 +185,7 @@ export async function getPendingNudge(userId: string): Promise<NudgeItem[] | nul
   });
   if (already) return null;
 
-  const items = await evaluateItems(userId);
+  const items = await evaluateNudgeItems(userId);
   if (items.length === 0) return null;
 
   await prisma.nudgeShown.create({ data: { userId, day } }).catch(() => {
