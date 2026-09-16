@@ -1,84 +1,60 @@
 import type { Prisma } from "@prisma/client";
+import {
+  type Capabilities,
+  hasAccess,
+  requestScopeWhere,
+  canOnRequest,
+  clientScopeWhere,
+} from "./permissions";
 
-export const TEAM_ROLES = [
-  "ADMIN",
-  "LIDER_AREA",
-  "COORDINADOR_CUENTA",
-  "DISENADOR_UXUI",
-  "SEO",
-  "DESARROLLADOR",
-] as const;
+// Nuevo #3 (16 sep 2026) — reemplaza los roles hardcodeados por permisos
+// data-driven (ver lib/permissions.ts, Role/RolePermission/UserRole en el
+// esquema). Las firmas de estas funciones se mantienen iguales a las de
+// antes de la fusión con Codia Task para no tener que tocar cada archivo
+// que ya las llama — solo cambió qué hay adentro.
+export type AuthzUser = { id: string; capabilities: Capabilities };
 
-export const MANAGER_ROLES = ["ADMIN", "LIDER_AREA", "COORDINADOR_CUENTA"] as const;
+type RequestLike = {
+  assigneeId: string | null;
+  client: { accountManagerId: string | null };
+  collaborators?: { userId: string }[];
+};
 
+// CLIENTE no es parte del sistema de roles/permisos — sigue siendo el
+// valor especial User.role === "CLIENTE" (ver nota en prisma/schema.prisma
+// y ADR "El rol Cliente se mantiene"). Todo lo demás (equipo interno) pasa
+// por Role/RolePermission.
 export function isTeamRole(role: string): boolean {
-  return (TEAM_ROLES as readonly string[]).includes(role);
+  return role !== "CLIENTE";
 }
 
-export function isManager(role: string): boolean {
-  return (MANAGER_ROLES as readonly string[]).includes(role);
+// Mismo grupo de 3 roles que antes (ADMIN, LIDER_AREA, COORDINADOR_CUENTA)
+// porque hoy son los únicos con clients.view != "none" — pero ahora es
+// consecuencia de los permisos asignados, no de una lista fija de nombres.
+export function isManager(user: AuthzUser): boolean {
+  return hasAccess(user.capabilities, "clients.view");
 }
 
-// Admin/Líder pueden actuar sobre cualquier solicitud; Coordinador solo sobre
-// las de sus propios clientes (Rec. #22); Diseño/SEO/Desarrollo solo sobre la
-// que tienen asignada o donde son colaboradores (Rec. #21 + fusión Codia
-// Task, 2026-09-01 — colaboradores es aditivo, assigneeId sigue siendo el
-// responsable principal); un Cliente, nunca (usa sus propios chequeos de
-// clientId). Se mantiene coherente con canViewRequest: nadie puede actuar
-// sobre algo que no puede ver.
-export function canActOnRequest(
-  user: { id: string; role: string },
-  req: {
-    assigneeId: string | null;
-    client: { accountManagerId: string | null };
-    collaborators?: { userId: string }[];
-  },
-): boolean {
-  if (user.role === "ADMIN" || user.role === "LIDER_AREA") return true;
-  if (user.role === "COORDINADOR_CUENTA") return req.client.accountManagerId === user.id;
-  if (isTeamRole(user.role)) {
-    return (
-      req.assigneeId === user.id ||
-      (req.collaborators?.some((c) => c.userId === user.id) ?? false)
-    );
-  }
-  return false;
+// Admin/Líder ven y actúan sobre cualquier solicitud (scope "all");
+// Coordinador solo las de sus propios clientes ("own_clients"); roles de
+// equipo solo la asignada o donde son colaboradores ("assigned"); Cliente
+// nunca llega acá (usa sus propios chequeos de clientId). Un usuario con
+// varios roles ve la unión de los alcances de todos.
+export function canActOnRequest(user: AuthzUser, req: RequestLike): boolean {
+  return canOnRequest(user.capabilities, "requests.access", user.id, req);
 }
 
-export function canViewRequest(
-  user: { id: string; role: string },
-  req: {
-    assigneeId: string | null;
-    client: { accountManagerId: string | null };
-    collaborators?: { userId: string }[];
-  },
-): boolean {
+export function canViewRequest(user: AuthzUser, req: RequestLike): boolean {
   return canActOnRequest(user, req);
 }
 
 // Filtro para prisma.request.findMany — mismo criterio que canActOnRequest,
 // como where.
-export function requestVisibilityWhere(user: {
-  id: string;
-  role: string;
-}): Prisma.RequestWhereInput {
-  if (user.role === "ADMIN" || user.role === "LIDER_AREA") return {};
-  if (user.role === "COORDINADOR_CUENTA") {
-    return { client: { accountManagerId: user.id } };
-  }
-  if (isTeamRole(user.role)) {
-    return {
-      OR: [{ assigneeId: user.id }, { collaborators: { some: { userId: user.id } } }],
-    };
-  }
-  return { id: "__ninguna__" }; // no debería llegar aquí (Cliente ya se excluye en el layout)
+export function requestVisibilityWhere(user: AuthzUser): Prisma.RequestWhereInput {
+  return requestScopeWhere(user.capabilities, "requests.access", user.id);
 }
 
 // Filtro para prisma.client.findMany.
-export function clientVisibilityWhere(user: {
-  id: string;
-  role: string;
-}): Prisma.ClientWhereInput {
-  if (user.role === "COORDINADOR_CUENTA") return { accountManagerId: user.id };
-  return {};
+export function clientVisibilityWhere(user: AuthzUser): Prisma.ClientWhereInput {
+  return clientScopeWhere(user.capabilities, "clients.view", user.id);
 }

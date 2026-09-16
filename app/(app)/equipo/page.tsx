@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
+import { hasAccess } from "@/lib/permissions";
 import { ROLE_MAP } from "@/lib/constants";
 import { Avatar, StatusBadge, StatCard } from "@/components/ui";
 import { hoursLabel, shortDate } from "@/lib/format";
@@ -18,8 +19,7 @@ export default async function EquipoPage({
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
-  if (user.role !== "LIDER_AREA" && user.role !== "ADMIN")
-    redirect("/mi-espacio");
+  if (!hasAccess(user.capabilities, "team.view_load")) redirect("/mi-espacio");
 
   const sp = await searchParams;
   const now = new Date();

@@ -23,26 +23,61 @@ vi.mock("next/navigation", () => ({
   },
 }));
 
-let currentUser: { id: string; role: string; email: string; client?: unknown } | null = null;
+type TestUser = {
+  id: string;
+  role: string;
+  email: string;
+  client?: unknown;
+  roleCodes: string[];
+  capabilities: Record<string, string[]>;
+};
+let currentUser: TestUser | null = null;
 vi.mock("@/lib/session", () => ({
   getSessionUser: async () => currentUser,
 }));
 
 const { prisma } = await import("@/lib/db");
+const { buildCapabilities } = await import("@/lib/permissions");
+const { seedRoles } = await import("../scripts/seed-roles");
 const { changeStatus, assignRequest, setUserActive, createUser } = await import(
   "@/app/actions"
 );
+
+// Nuevo #3 — CI solo corre `prisma db push`, no el seed completo (que trae
+// data de ejemplo). Role/RolePermission necesitan poblarse acá con el
+// mismo criterio que producción para que estos tests reflejen permisos
+// reales, no un mock aparte que se desincroniza en silencio.
+async function asSessionUser(user: { id: string; role: string; email: string }): Promise<TestUser> {
+  const roles = await prisma.userRole.findMany({
+    where: { userId: user.id },
+    include: { role: { include: { permissions: true } } },
+  });
+  return {
+    ...user,
+    roleCodes: roles.map((r) => r.role.code),
+    capabilities: buildCapabilities(roles.flatMap((r) => r.role.permissions)),
+  };
+}
+
+const CLIENTE_FIXTURE: TestUser = {
+  id: "x",
+  role: "CLIENTE",
+  email: "cliente@test.local",
+  roleCodes: [],
+  capabilities: {},
+};
 
 describe.skipIf(!process.env.RUN_DB_TESTS)(
   "Server Actions críticas (integración, BD real)",
   () => {
     const suffix = Date.now();
-    let admin: { id: string; role: string; email: string };
-    let coordA: { id: string; role: string; email: string };
-    let coordB: { id: string; role: string; email: string };
+    let admin: TestUser;
+    let coordA: TestUser;
+    let coordB: TestUser;
     let clientA: { id: string };
     let clientB: { id: string };
     let req: { id: string };
+    let desarrolladorRoleId: string;
 
     beforeAll(async () => {
       await prisma.status.upsert({
@@ -55,16 +90,42 @@ describe.skipIf(!process.env.RUN_DB_TESTS)(
         update: {},
         create: { code: "FINALIZADA", label: "Finalizada", color: "#0e7a58", isFinal: true },
       });
+      await seedRoles(prisma);
+      const [adminRole, coordRole, desarrolladorRole] = await Promise.all([
+        prisma.role.findUniqueOrThrow({ where: { code: "ADMIN" } }),
+        prisma.role.findUniqueOrThrow({ where: { code: "COORDINADOR_CUENTA" } }),
+        prisma.role.findUniqueOrThrow({ where: { code: "DESARROLLADOR" } }),
+      ]);
+      desarrolladorRoleId = desarrolladorRole.id;
 
-      admin = await prisma.user.create({
-        data: { name: "Admin Test", email: `admin-${suffix}@test.local`, role: "ADMIN" },
+      const adminRow = await prisma.user.create({
+        data: {
+          name: "Admin Test",
+          email: `admin-${suffix}@test.local`,
+          role: "ADMIN",
+          roles: { create: { roleId: adminRole.id } },
+        },
       });
-      coordA = await prisma.user.create({
-        data: { name: "Coord A Test", email: `coordA-${suffix}@test.local`, role: "COORDINADOR_CUENTA" },
+      const coordARow = await prisma.user.create({
+        data: {
+          name: "Coord A Test",
+          email: `coordA-${suffix}@test.local`,
+          role: "COORDINADOR_CUENTA",
+          roles: { create: { roleId: coordRole.id } },
+        },
       });
-      coordB = await prisma.user.create({
-        data: { name: "Coord B Test", email: `coordB-${suffix}@test.local`, role: "COORDINADOR_CUENTA" },
+      const coordBRow = await prisma.user.create({
+        data: {
+          name: "Coord B Test",
+          email: `coordB-${suffix}@test.local`,
+          role: "COORDINADOR_CUENTA",
+          roles: { create: { roleId: coordRole.id } },
+        },
       });
+      admin = await asSessionUser(adminRow);
+      coordA = await asSessionUser(coordARow);
+      coordB = await asSessionUser(coordBRow);
+
       clientA = await prisma.client.create({
         data: { name: `Cliente A Test ${suffix}`, accountManagerId: coordA.id },
       });
@@ -102,9 +163,9 @@ describe.skipIf(!process.env.RUN_DB_TESTS)(
     it("un Coordinador (no manager de asignación) no puede reasignar", async () => {
       currentUser = coordB;
       const res = await assignRequest(req.id, admin.id);
-      expect(res.ok).toBe(true); // COORDINADOR_CUENTA sí es isManager()
-      // pero un rol sin permiso de gestión (ej. cliente) no debería poder
-      currentUser = { id: "x", role: "CLIENTE", email: "cliente@test.local" };
+      expect(res.ok).toBe(true); // COORDINADOR_CUENTA tiene requests.assign="all"
+      // pero un rol sin ese permiso (ej. cliente) no debería poder
+      currentUser = CLIENTE_FIXTURE;
       const res2 = await assignRequest(req.id, coordA.id);
       expect(res2.ok).toBe(false);
     });
@@ -126,7 +187,8 @@ describe.skipIf(!process.env.RUN_DB_TESTS)(
       const fd = new FormData();
       fd.set("name", "Usuario Prueba");
       fd.set("email", "no-es-un-correo");
-      fd.set("role", "DESARROLLADOR");
+      fd.set("accountType", "STAFF");
+      fd.set("roleIds", desarrolladorRoleId);
       await expect(createUser(fd)).rejects.toThrow(RedirectSignal);
       const found = await prisma.user.findUnique({ where: { email: "no-es-un-correo" } });
       expect(found).toBeNull();
@@ -138,7 +200,8 @@ describe.skipIf(!process.env.RUN_DB_TESTS)(
       const fd = new FormData();
       fd.set("name", "Usuario Válido");
       fd.set("email", email);
-      fd.set("role", "DESARROLLADOR");
+      fd.set("accountType", "STAFF");
+      fd.set("roleIds", desarrolladorRoleId);
       await expect(createUser(fd)).rejects.toThrow(RedirectSignal);
       const found = await prisma.user.findUniqueOrThrow({ where: { email } });
       expect(found.role).toBe("DESARROLLADOR");

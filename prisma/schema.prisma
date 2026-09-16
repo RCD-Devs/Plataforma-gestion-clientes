@@ -85,6 +85,11 @@ model User {
   id        String   @id @default(cuid())
   name      String
   email     String   @unique
+  // Ya no decide permisos (eso vive en Role/RolePermission, ver abajo) —
+  // el único valor que el código todavía lee es "CLIENTE" para distinguir
+  // cuenta de portal vs. equipo interno (Nuevo #3, 16 sep 2026). Para
+  // equipo interno guarda el código del primer rol asignado, solo a modo
+  // de respaldo legible; nada depende de ese valor específico.
   role      String   @default("COORDINADOR_CUENTA")
   color     String?
   createdAt DateTime @default(now())
@@ -110,6 +115,49 @@ model User {
   commentReads    CommentRead[]
   nudgesShown     NudgeShown[]
   aiMemoryNotes   AiMemoryNote[]
+  roles           UserRole[]
+}
+
+// Roles y permisos como datos editables (ADR-011, Nuevo #3, 16 sep 2026).
+// Reemplaza los 6 roles de equipo hardcodeados en lib/authz.ts — CLIENTE
+// no vive acá, sigue siendo User.role == "CLIENTE" (ver nota en User).
+model Role {
+  id         String    @id @default(cuid())
+  code       String    @unique
+  name       String
+  // Protege ADMIN/LIDER_AREA/etc. de borrarse por accidente — sus permisos
+  // sí son editables, solo el rol en sí no se puede eliminar.
+  isSystem   Boolean   @default(false)
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  permissions RolePermission[]
+  users       UserRole[]
+}
+
+// Un permiso = (rol, acción, alcance). "action" es una de las claves de
+// lib/permissions.ts (ACTIONS); "scope" uno de sus SCOPES ("all",
+// "own_clients", "assigned", "none"). Si un usuario tiene varios roles, se
+// unen los alcances de todos (ver lib/permissions.ts) — no se pisan entre
+// sí.
+model RolePermission {
+  id     String @id @default(cuid())
+  roleId String
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  action String
+  scope  String
+
+  @@unique([roleId, action])
+}
+
+// Multi-rol por persona — un User puede tener 0..N roles de equipo.
+model UserRole {
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId String
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
 }
 
 model PasswordResetToken {

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { updateClient, createHoursAdjustment, createProject, setProjectActive } from "@/app/actions";
-import { isManager } from "@/lib/authz";
+import { hasAccess, attachCapabilities } from "@/lib/permissions";
 import { ClientForm } from "@/components/admin/ClientForm";
 import { SubmitButton } from "@/components/SubmitButton";
 import { ActiveToggle } from "@/components/admin/ActiveToggle";
@@ -24,12 +24,17 @@ export default async function EditarClientePage({
   const { error } = await searchParams;
   const [client, users, adjustments, projects] = await Promise.all([
     prisma.client.findUnique({ where: { id } }),
-    prisma.user.findMany({ orderBy: { name: "asc" } }),
+    prisma.user.findMany({
+      orderBy: { name: "asc" },
+      include: { roles: { include: { role: { include: { permissions: true } } } } },
+    }),
     prisma.hoursAdjustment.findMany({ where: { clientId: id }, orderBy: { createdAt: "desc" } }),
     prisma.project.findMany({ where: { clientId: id }, orderBy: { createdAt: "desc" } }),
   ]);
   if (!client) notFound();
-  const managers = users.filter((u) => isManager(u.role));
+  const managers = users
+    .map(attachCapabilities)
+    .filter((u) => hasAccess(u.capabilities, "clients.view"));
   const summaries = await getHoursSummaries([client]);
   const ledger = summaries.get(client.id)!;
 

@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function NotificacionesPage() {
   const user = await getSessionUser();
   if (!user) redirect("/login");
-  if (!isManager(user.role)) redirect("/mi-espacio");
+  if (!isManager(user)) redirect("/mi-espacio");
 
   const [notifs, activities] = await Promise.all([
     prisma.notification.findMany({

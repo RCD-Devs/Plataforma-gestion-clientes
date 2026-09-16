@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ROLES } from "@/lib/constants";
 import { SubmitButton } from "@/components/SubmitButton";
 
 const inputCls =
@@ -7,14 +6,16 @@ const inputCls =
 const labelCls = "mb-1 block text-xs font-semibold text-[#5d6b77]";
 
 const ERROR_MESSAGES: Record<string, string> = {
-  datos: "Completa nombre, correo y rol.",
+  datos: "Completa nombre, correo, y al menos un rol (o un cliente si es cuenta de portal).",
   correo: "Ese correo no parece válido — revísalo.",
   email_existente: "Ya existe un usuario con ese correo.",
-  cliente_requerido: "El rol Cliente necesita un cliente asociado.",
+  cliente_requerido: "Una cuenta de portal necesita un cliente asociado.",
 };
 
 export function UserForm({
   editing,
+  editingRoleIds,
+  roles,
   teams,
   clients,
   error,
@@ -30,12 +31,16 @@ export function UserForm({
     clientId: string | null;
     isActive: boolean;
   };
+  // Roles ya asignados a `editing` (vacío/no aplica al crear).
+  editingRoleIds?: string[];
+  roles: { id: string; name: string; archivedAt: Date | null }[];
   teams: { id: string; name: string }[];
   clients: { id: string; name: string }[];
   error?: string;
   action: (formData: FormData) => void | Promise<void>;
   submitLabel: string;
 }) {
+  const isClientAccount = editing?.role === "CLIENTE";
   return (
     <form action={action} className="max-w-xl space-y-4 p-6">
       {error && (
@@ -67,16 +72,14 @@ export function UserForm({
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className={labelCls}>Rol *</label>
-          <select name="role" required defaultValue={editing?.role ?? ""} className={inputCls}>
-            <option value="" disabled>
-              Elegir rol…
-            </option>
-            {ROLES.map((r) => (
-              <option key={r.key} value={r.key}>
-                {r.label}
-              </option>
-            ))}
+          <label className={labelCls}>Tipo de cuenta *</label>
+          <select
+            name="accountType"
+            defaultValue={isClientAccount ? "CLIENTE" : "STAFF"}
+            className={inputCls}
+          >
+            <option value="STAFF">Equipo interno</option>
+            <option value="CLIENTE">Cliente del portal</option>
           </select>
         </div>
         <div>
@@ -88,6 +91,28 @@ export function UserForm({
             className="h-9 w-full rounded-lg border border-[#e4e8ec]"
           />
         </div>
+      </div>
+      <div>
+        <label className={labelCls}>Roles (equipo interno) *</label>
+        <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-[#e4e8ec] p-3">
+          {roles
+            .filter((r) => !r.archivedAt)
+            .map((r) => (
+              <label key={r.id} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  name="roleIds"
+                  value={r.id}
+                  defaultChecked={editingRoleIds?.includes(r.id) ?? false}
+                  className="h-4 w-4 accent-[#0bdbcf]"
+                />
+                {r.name}
+              </label>
+            ))}
+        </div>
+        <p className="mt-1 text-[11px] text-[#6b7280]">
+          Se ignora si el tipo de cuenta es Cliente del portal.
+        </p>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
@@ -101,7 +126,7 @@ export function UserForm({
             ))}
           </select>
           <p className="mt-1 text-[11px] text-[#6b7280]">
-            Solo aplica a roles de equipo (se ignora en Cliente).
+            Solo aplica a equipo interno (se ignora en Cliente del portal).
           </p>
         </div>
         <div>
@@ -115,7 +140,7 @@ export function UserForm({
             ))}
           </select>
           <p className="mt-1 text-[11px] text-[#6b7280]">
-            Obligatorio solo para rol Cliente (acceso al portal).
+            Obligatorio solo para Cliente del portal.
           </p>
         </div>
       </div>

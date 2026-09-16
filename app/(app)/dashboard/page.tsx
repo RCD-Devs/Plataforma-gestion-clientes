@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage() {
   const user = await getSessionUser();
   if (!user) redirect("/login");
-  if (!isManager(user.role)) redirect("/mi-espacio");
+  if (!isManager(user)) redirect("/mi-espacio");
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);

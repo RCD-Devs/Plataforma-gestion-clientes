@@ -12,7 +12,8 @@ import {
   PasswordPolicyError,
 } from "@/lib/password";
 import { sendPasswordReset, sendWelcomeEmail } from "@/lib/email";
-import { isTeamRole, isManager, canActOnRequest, TEAM_ROLES } from "@/lib/authz";
+import { isTeamRole, canActOnRequest } from "@/lib/authz";
+import { hasAccess, ACTIONS } from "@/lib/permissions";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { logAudit } from "@/lib/audit";
 import { storeUploadedFile } from "@/lib/attachments";
@@ -95,8 +96,19 @@ async function withKeyRetry<T>(
 // si la tarea aún no tiene asignado (para que la alerta no se pierda).
 async function teamAlertEmails(assigneeEmail?: string | null) {
   if (assigneeEmail) return [assigneeEmail];
+  // Nuevo #3 — antes era role IN (LIDER_AREA, ADMIN); ahora es "quien
+  // tenga team.view_load otorgado", data-driven en vez de nombres fijos.
   const leaders = await prisma.user.findMany({
-    where: { role: { in: ["LIDER_AREA", "ADMIN"] } },
+    where: {
+      roles: {
+        some: {
+          role: {
+            archivedAt: null,
+            permissions: { some: { action: "team.view_load", scope: "all" } },
+          },
+        },
+      },
+    },
     select: { email: true },
   });
   return leaders.map((l) => l.email);
@@ -123,7 +135,10 @@ export async function login(formData: FormData) {
     redirect(`${failPath}?error=rate_limit`);
   }
 
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await prisma.user.findUnique({
+    where: { email },
+    include: { roles: { select: { role: { select: { code: true } } } } },
+  });
   if (!user || !user.isActive || !user.passwordHash) {
     await logAudit({ type: "login_failed", actorEmail: email, ip, detail: `target=${target}, motivo=usuario` });
     redirect(`${failPath}?error=credenciales`);
@@ -153,7 +168,8 @@ export async function login(formData: FormData) {
 
   await createSession(user.id);
   await logAudit({ type: "login_success", actorId: user.id, actorEmail: user.email, ip, detail: `target=${target}` });
-  redirect(user.mustChangePassword ? "/cambiar-clave" : redirectForRole(user));
+  const roleCodes = user.roles.map((r) => r.role.code);
+  redirect(user.mustChangePassword ? "/cambiar-clave" : redirectForRole({ ...user, roleCodes }));
 }
 
 export async function logout() {
@@ -338,7 +354,7 @@ export async function assignRequest(
   assigneeId: string,
 ): Promise<{ ok: boolean }> {
   const user = await getSessionUser();
-  if (!user || !isManager(user.role)) return { ok: false };
+  if (!user || !hasAccess(user.capabilities, "requests.assign")) return { ok: false };
   const assignee = assigneeId
     ? await prisma.user.findUnique({ where: { id: assigneeId } })
     : null;
@@ -366,7 +382,9 @@ export async function updatePriority(
   priority: string,
 ): Promise<{ ok: boolean }> {
   const user = await getSessionUser();
-  if (!user || !isManager(user.role) || !PRIORITY_MAP[priority]) return { ok: false };
+  if (!user || !hasAccess(user.capabilities, "requests.set_priority") || !PRIORITY_MAP[priority]) {
+    return { ok: false };
+  }
   const req = await prisma.request.update({
     where: { id: requestId },
     data: { priority },
@@ -600,7 +618,7 @@ export async function markCommentsRead(requestId: string) {
 
 export async function createProject(clientId: string, formData: FormData) {
   const user = await getSessionUser();
-  if (!user || user.role !== "ADMIN") return;
+  if (!user || !user.roleCodes.includes("ADMIN")) return;
   const name = String(formData.get("name") || "").trim();
   if (!name) return;
   const project = await prisma.project.create({ data: { name, clientId } });
@@ -615,7 +633,7 @@ export async function createProject(clientId: string, formData: FormData) {
 
 export async function setProjectActive(projectId: string, isActive: boolean) {
   const user = await getSessionUser();
-  if (!user || user.role !== "ADMIN") return;
+  if (!user || !user.roleCodes.includes("ADMIN")) return;
   const project = await prisma.project.update({
     where: { id: projectId },
     data: { archivedAt: isActive ? null : new Date() },
@@ -631,7 +649,7 @@ export async function setProjectActive(projectId: string, isActive: boolean) {
 
 export async function createCustomField(formData: FormData) {
   const user = await getSessionUser();
-  if (!user || user.role !== "ADMIN") redirect("/mi-espacio");
+  if (!user || !user.roleCodes.includes("ADMIN")) redirect("/mi-espacio");
   const label = String(formData.get("label") || "").trim();
   const type = String(formData.get("type") || "text");
   if (!label) redirect("/admin/campos?error=nombre");
@@ -659,7 +677,7 @@ export async function createCustomField(formData: FormData) {
 
 export async function setCustomFieldActive(fieldId: string, isActive: boolean) {
   const user = await getSessionUser();
-  if (!user || user.role !== "ADMIN") return;
+  if (!user || !user.roleCodes.includes("ADMIN")) return;
   await prisma.customFieldDefinition.update({
     where: { id: fieldId },
     data: { archivedAt: isActive ? null : new Date() },
@@ -688,7 +706,7 @@ function statusFormValues(formData: FormData, fallbackSortOrder: number) {
 
 export async function createStatus(formData: FormData) {
   const user = await getSessionUser();
-  if (!user || user.role !== "ADMIN") redirect("/mi-espacio");
+  if (!user || !user.roleCodes.includes("ADMIN")) redirect("/mi-espacio");
 
   const code = String(formData.get("code") || "")
     .trim()
@@ -718,7 +736,7 @@ export async function createStatus(formData: FormData) {
 
 export async function updateStatus(statusId: string, formData: FormData) {
   const user = await getSessionUser();
-  if (!user || user.role !== "ADMIN") redirect("/mi-espacio");
+  if (!user || !user.roleCodes.includes("ADMIN")) redirect("/mi-espacio");
 
   const { label, color, isFinal, isOptional, sortOrder } = statusFormValues(formData, 0);
   if (!label) redirect("/admin/estados?error=datos");
@@ -740,7 +758,7 @@ export async function updateStatus(statusId: string, formData: FormData) {
 
 export async function setStatusActive(statusId: string, isActive: boolean) {
   const user = await getSessionUser();
-  if (!user || user.role !== "ADMIN") return;
+  if (!user || !user.roleCodes.includes("ADMIN")) return;
   await prisma.status.update({
     where: { id: statusId },
     data: { archivedAt: isActive ? null : new Date() },
@@ -753,6 +771,84 @@ export async function setStatusActive(statusId: string, isActive: boolean) {
   });
   refreshLists();
   revalidatePath("/admin/estados");
+}
+
+// ---------- Administración: roles y permisos (Nuevo #3, ADR-011) ----------
+
+export async function createRole(formData: FormData) {
+  const user = await getSessionUser();
+  if (!user || !user.roleCodes.includes("ADMIN")) redirect("/mi-espacio");
+
+  const name = String(formData.get("name") || "").trim();
+  if (!name) redirect("/admin/roles?error=datos");
+
+  const code = name
+    .trim()
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "") // acentos
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  const existing = await prisma.role.findUnique({ where: { code } });
+  if (existing) redirect("/admin/roles?error=code_existente");
+
+  const role = await prisma.role.create({ data: { code, name } });
+  await logAudit({
+    type: "admin_role_created",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `roleId=${role.id}, code=${role.code}`,
+  });
+  revalidatePath("/admin/roles");
+  redirect(`/admin/roles/${role.id}`);
+}
+
+export async function updateRolePermissions(roleId: string, formData: FormData) {
+  const user = await getSessionUser();
+  if (!user || !user.roleCodes.includes("ADMIN")) redirect("/mi-espacio");
+
+  const name = String(formData.get("name") || "").trim();
+  if (!name) redirect(`/admin/roles/${roleId}?error=datos`);
+
+  await prisma.$transaction([
+    prisma.role.update({ where: { id: roleId }, data: { name } }),
+    prisma.rolePermission.deleteMany({ where: { roleId } }),
+    prisma.rolePermission.createMany({
+      data: ACTIONS.filter((a) => {
+        const scope = String(formData.get(`scope__${a.key}`) || "none");
+        return scope !== "none";
+      }).map((a) => ({
+        roleId,
+        action: a.key,
+        scope: String(formData.get(`scope__${a.key}`) || "none"),
+      })),
+    }),
+  ]);
+  await logAudit({
+    type: "admin_role_permissions_updated",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `roleId=${roleId}`,
+  });
+  revalidatePath("/admin/roles");
+  revalidatePath(`/admin/roles/${roleId}`);
+  redirect("/admin/roles");
+}
+
+export async function setRoleActive(roleId: string, isActive: boolean) {
+  const user = await getSessionUser();
+  if (!user || !user.roleCodes.includes("ADMIN")) return;
+  await prisma.role.update({
+    where: { id: roleId },
+    data: { archivedAt: isActive ? null : new Date() },
+  });
+  await logAudit({
+    type: isActive ? "admin_role_reactivated" : "admin_role_archived",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `roleId=${roleId}`,
+  });
+  revalidatePath("/admin/roles");
 }
 
 export async function logHours(formData: FormData) {
@@ -1157,7 +1253,7 @@ function revalidateAdmin() {
 
 export async function createClient(formData: FormData) {
   const user = await getSessionUser();
-  if (!user || user.role !== "ADMIN") redirect("/mi-espacio");
+  if (!user || !user.roleCodes.includes("ADMIN")) redirect("/mi-espacio");
 
   const name = String(formData.get("name") || "").trim();
   if (!name) redirect("/admin/clientes/nuevo?error=nombre");
@@ -1190,7 +1286,7 @@ export async function createClient(formData: FormData) {
 
 export async function updateClient(id: string, formData: FormData) {
   const user = await getSessionUser();
-  if (!user || user.role !== "ADMIN") redirect("/mi-espacio");
+  if (!user || !user.roleCodes.includes("ADMIN")) redirect("/mi-espacio");
 
   const name = String(formData.get("name") || "").trim();
   if (!name) redirect(`/admin/clientes/${id}?error=nombre`);
@@ -1224,7 +1320,7 @@ export async function updateClient(id: string, formData: FormData) {
 
 export async function setClientActive(id: string, isActive: boolean) {
   const user = await getSessionUser();
-  if (!user || user.role !== "ADMIN") return;
+  if (!user || !user.roleCodes.includes("ADMIN")) return;
   await prisma.client.update({ where: { id }, data: { isActive } });
   await logAudit({
     type: isActive ? "admin_client_reactivated" : "admin_client_deactivated",
@@ -1237,7 +1333,7 @@ export async function setClientActive(id: string, isActive: boolean) {
 
 export async function createHoursAdjustment(clientId: string, formData: FormData) {
   const user = await getSessionUser();
-  if (!user || user.role !== "ADMIN") redirect("/mi-espacio");
+  if (!user || !user.roleCodes.includes("ADMIN")) redirect("/mi-espacio");
 
   const hours = Number(formData.get("hours") || 0);
   if (!hours) redirect(`/admin/clientes/${clientId}?error=ajuste_invalido`);
@@ -1264,39 +1360,50 @@ export async function createHoursAdjustment(clientId: string, formData: FormData
 
 export async function createUser(formData: FormData) {
   const user = await getSessionUser();
-  if (!user || user.role !== "ADMIN") redirect("/mi-espacio");
+  if (!user || !user.roleCodes.includes("ADMIN")) redirect("/mi-espacio");
 
   const name = String(formData.get("name") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase();
-  const role = String(formData.get("role") || "");
-  const validRole = (TEAM_ROLES as readonly string[]).includes(role) || role === "CLIENTE";
-  if (!name || !email || !validRole) redirect("/admin/usuarios/nuevo?error=datos");
+  // Nuevo #3 — CLIENTE sigue siendo un valor especial de User.role
+  // (portal), separado del sistema de roles/permisos de equipo. Un
+  // usuario de equipo puede tener uno o varios roles (checkboxes).
+  const isClientAccount = String(formData.get("accountType") || "STAFF") === "CLIENTE";
+  const roleIds = isClientAccount ? [] : formData.getAll("roleIds").map(String).filter(Boolean);
+  if (!name || !email || (!isClientAccount && roleIds.length === 0)) {
+    redirect("/admin/usuarios/nuevo?error=datos");
+  }
   if (!isValidEmail(email)) redirect("/admin/usuarios/nuevo?error=correo");
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) redirect("/admin/usuarios/nuevo?error=email_existente");
 
-  const isClientRole = role === "CLIENTE";
-  const clientId = isClientRole ? String(formData.get("clientId") || "") || null : null;
-  if (isClientRole && !clientId) redirect("/admin/usuarios/nuevo?error=cliente_requerido");
+  const clientId = isClientAccount ? String(formData.get("clientId") || "") || null : null;
+  if (isClientAccount && !clientId) redirect("/admin/usuarios/nuevo?error=cliente_requerido");
+
+  const roles = isClientAccount
+    ? []
+    : await prisma.role.findMany({ where: { id: { in: roleIds }, archivedAt: null } });
+  if (!isClientAccount && roles.length === 0) redirect("/admin/usuarios/nuevo?error=datos");
 
   const created = await prisma.user.create({
     data: {
       name,
       email,
-      role,
+      // Ya no decide permisos — solo respaldo legible (ver nota en schema).
+      role: isClientAccount ? "CLIENTE" : roles[0].code,
       color: String(formData.get("color") || "").trim() || null,
-      teamId: isTeamRole(role) ? String(formData.get("teamId") || "") || null : null,
+      teamId: isClientAccount ? null : String(formData.get("teamId") || "") || null,
       clientId,
       isActive: true,
       mustChangePassword: true,
+      roles: isClientAccount ? undefined : { create: roles.map((r) => ({ roleId: r.id })) },
     },
   });
   await logAudit({
     type: "admin_user_created",
     actorId: user.id,
     actorEmail: user.email,
-    detail: `userId=${created.id}, email=${created.email}, role=${created.role}`,
+    detail: `userId=${created.id}, email=${created.email}, roles=${isClientAccount ? "CLIENTE" : roles.map((r) => r.code).join(",")}`,
   });
 
   const rawToken = await issuePasswordResetToken(created.id);
@@ -1312,33 +1419,43 @@ export async function createUser(formData: FormData) {
 
 export async function updateUser(id: string, formData: FormData) {
   const user = await getSessionUser();
-  if (!user || user.role !== "ADMIN") redirect("/mi-espacio");
+  if (!user || !user.roleCodes.includes("ADMIN")) redirect("/mi-espacio");
 
   const name = String(formData.get("name") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase();
-  const role = String(formData.get("role") || "");
-  const validRole = (TEAM_ROLES as readonly string[]).includes(role) || role === "CLIENTE";
-  if (!name || !email || !validRole) redirect(`/admin/usuarios/${id}?error=datos`);
+  const isClientAccount = String(formData.get("accountType") || "STAFF") === "CLIENTE";
+  const roleIds = isClientAccount ? [] : formData.getAll("roleIds").map(String).filter(Boolean);
+  if (!name || !email || (!isClientAccount && roleIds.length === 0)) {
+    redirect(`/admin/usuarios/${id}?error=datos`);
+  }
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing && existing.id !== id) redirect(`/admin/usuarios/${id}?error=email_existente`);
 
-  const isClientRole = role === "CLIENTE";
-  const clientId = isClientRole ? String(formData.get("clientId") || "") || null : null;
-  if (isClientRole && !clientId) redirect(`/admin/usuarios/${id}?error=cliente_requerido`);
+  const clientId = isClientAccount ? String(formData.get("clientId") || "") || null : null;
+  if (isClientAccount && !clientId) redirect(`/admin/usuarios/${id}?error=cliente_requerido`);
 
-  await prisma.user.update({
-    where: { id },
-    data: {
-      name,
-      email,
-      role,
-      color: String(formData.get("color") || "").trim() || null,
-      teamId: isTeamRole(role) ? String(formData.get("teamId") || "") || null : null,
-      clientId,
-      isActive: formData.get("isActive") === "on",
-    },
-  });
+  const roles = isClientAccount
+    ? []
+    : await prisma.role.findMany({ where: { id: { in: roleIds }, archivedAt: null } });
+  if (!isClientAccount && roles.length === 0) redirect(`/admin/usuarios/${id}?error=datos`);
+
+  await prisma.$transaction([
+    prisma.userRole.deleteMany({ where: { userId: id } }),
+    prisma.user.update({
+      where: { id },
+      data: {
+        name,
+        email,
+        role: isClientAccount ? "CLIENTE" : roles[0].code,
+        color: String(formData.get("color") || "").trim() || null,
+        teamId: isClientAccount ? null : String(formData.get("teamId") || "") || null,
+        clientId,
+        isActive: formData.get("isActive") === "on",
+        roles: isClientAccount ? undefined : { create: roles.map((r) => ({ roleId: r.id })) },
+      },
+    }),
+  ]);
   await logAudit({
     type: "admin_user_updated",
     actorId: user.id,
@@ -1351,7 +1468,7 @@ export async function updateUser(id: string, formData: FormData) {
 
 export async function setUserActive(id: string, isActive: boolean) {
   const user = await getSessionUser();
-  if (!user || user.role !== "ADMIN") return;
+  if (!user || !user.roleCodes.includes("ADMIN")) return;
   await prisma.user.update({ where: { id }, data: { isActive } });
   await logAudit({
     type: isActive ? "admin_user_reactivated" : "admin_user_deactivated",
@@ -1364,7 +1481,7 @@ export async function setUserActive(id: string, isActive: boolean) {
 
 export async function createTeam(formData: FormData) {
   const user = await getSessionUser();
-  if (!user || user.role !== "ADMIN") redirect("/mi-espacio");
+  if (!user || !user.roleCodes.includes("ADMIN")) redirect("/mi-espacio");
 
   const name = String(formData.get("name") || "").trim();
   if (!name) redirect("/admin/equipos/nuevo?error=nombre");
@@ -1394,7 +1511,7 @@ export async function createTeam(formData: FormData) {
 
 export async function updateTeam(id: string, formData: FormData) {
   const user = await getSessionUser();
-  if (!user || user.role !== "ADMIN") redirect("/mi-espacio");
+  if (!user || !user.roleCodes.includes("ADMIN")) redirect("/mi-espacio");
 
   const name = String(formData.get("name") || "").trim();
   if (!name) redirect(`/admin/equipos/${id}?error=nombre`);
@@ -1431,7 +1548,7 @@ export async function updateTeam(id: string, formData: FormData) {
 
 export async function deleteTeam(id: string) {
   const user = await getSessionUser();
-  if (!user || user.role !== "ADMIN") return;
+  if (!user || !user.roleCodes.includes("ADMIN")) return;
   const team = await prisma.team.findUnique({
     where: { id },
     include: { members: { select: { id: true } }, requests: { select: { id: true } } },

@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { seedStatuses } from "../scripts/seed-statuses";
 import { seedRequestCounter } from "../scripts/seed-request-counter";
+import { seedRoles } from "../scripts/seed-roles";
 
 const prisma = new PrismaClient();
 
@@ -443,6 +444,9 @@ main()
   // solicitudes de ejemplo creadas (si la base era nueva) o ya con las
   // reales (si main() se saltó el seed por encontrar usuarios existentes).
   .then(() => seedRequestCounter(prisma))
+  // Mismo motivo (Nuevo #3): el backfill de UserRole necesita ver a los
+  // usuarios reales, no solo a los del seed de ejemplo.
+  .then(() => seedRoles(prisma))
   .catch((e) => {
     console.error(e);
     process.exit(1);

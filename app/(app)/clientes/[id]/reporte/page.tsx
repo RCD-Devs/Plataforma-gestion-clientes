@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/session";
 import { isManager } from "@/lib/authz";
+import { canOnClient } from "@/lib/permissions";
 import { softBg } from "@/lib/statuses";
 import { StatCard } from "@/components/ui";
 import { hoursLabel, shortDate, longDate } from "@/lib/format";
@@ -29,14 +30,14 @@ export default async function ClientReportPage({
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
-  if (!isManager(user.role)) redirect("/mi-espacio");
+  if (!isManager(user)) redirect("/mi-espacio");
 
   const { id } = await params;
   const sp = await searchParams;
 
   const data = await getClientReportData(id, sp.desde, sp.hasta);
   if (!data) notFound();
-  if (user.role === "COORDINADOR_CUENTA" && data.client.accountManagerId !== user.id) {
+  if (!canOnClient(user.capabilities, "clients.view", user.id, data.client)) {
     notFound();
   }
 

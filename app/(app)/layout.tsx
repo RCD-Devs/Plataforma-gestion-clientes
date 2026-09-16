@@ -16,9 +16,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <Sidebar
         user={{
           name: user.name,
-          role: user.role,
           email: user.email,
           color: user.color,
+          roleCodes: user.roleCodes,
+          roleNames: user.roleNames,
+          capabilities: user.capabilities,
         }}
       />
       <main className="flex-1 overflow-y-auto md:h-screen">{children}</main>

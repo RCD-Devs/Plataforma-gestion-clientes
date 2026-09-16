@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
-  if (user.role !== "ADMIN") redirect("/mi-espacio");
+  if (!user.roleCodes.includes("ADMIN")) redirect("/mi-espacio");
 
   return (
     <div className="flex h-full flex-col">

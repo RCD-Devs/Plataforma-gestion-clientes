@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import ExcelJS from "exceljs";
 import { getSessionUser } from "@/lib/session";
 import { isManager } from "@/lib/authz";
+import { canOnClient } from "@/lib/permissions";
 import { getClientReportData } from "@/lib/clientReport";
 import { shortDate } from "@/lib/format";
 import { round1, slaDays, classifySla, SLA_RANGES } from "@/lib/sla";
@@ -16,7 +17,7 @@ export async function GET(
 ) {
   const user = await getSessionUser();
   if (!user) return new Response("No autorizado", { status: 401 });
-  if (!isManager(user.role)) return new Response("No autorizado", { status: 403 });
+  if (!isManager(user)) return new Response("No autorizado", { status: 403 });
 
   const { id } = await params;
   const sp = req.nextUrl.searchParams;
@@ -25,7 +26,7 @@ export async function GET(
 
   const data = await getClientReportData(id, desdeParam, hastaParam);
   if (!data) return new Response("No encontrado", { status: 404 });
-  if (user.role === "COORDINADOR_CUENTA" && data.client.accountManagerId !== user.id) {
+  if (!canOnClient(user.capabilities, "clients.view", user.id, data.client)) {
     return new Response("No autorizado", { status: 403 });
   }
 

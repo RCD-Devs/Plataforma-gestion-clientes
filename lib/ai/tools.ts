@@ -9,10 +9,11 @@ import { z } from "zod";
 import { tool } from "ai";
 import { prisma } from "@/lib/db";
 import { requestVisibilityWhere, canViewRequest } from "@/lib/authz";
+import type { Capabilities } from "@/lib/permissions";
 import { getStatuses } from "@/lib/statuses";
 import { daysFromToday } from "@/lib/dates";
 
-type ToolUser = { id: string; role: string };
+type ToolUser = { id: string; role: string; capabilities: Capabilities };
 
 export function buildTools(user: ToolUser) {
   return {

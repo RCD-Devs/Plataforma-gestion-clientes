@@ -10,13 +10,15 @@ export default async function NuevoUsuarioPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
-  const [teams, clients] = await Promise.all([
+  const [teams, clients, roles] = await Promise.all([
     prisma.team.findMany({ orderBy: { name: "asc" } }),
     prisma.client.findMany({ orderBy: { name: "asc" } }),
+    prisma.role.findMany({ orderBy: { name: "asc" } }),
   ]);
 
   return (
     <UserForm
+      roles={roles}
       teams={teams}
       clients={clients}
       error={error}

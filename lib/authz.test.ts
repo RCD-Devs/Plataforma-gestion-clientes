@@ -1,17 +1,32 @@
 import { describe, it, expect } from "vitest";
-import {
-  isTeamRole,
-  isManager,
-  canActOnRequest,
-  requestVisibilityWhere,
-  clientVisibilityWhere,
-} from "./authz";
+import { isTeamRole, isManager, canActOnRequest, requestVisibilityWhere, clientVisibilityWhere } from "./authz";
+import type { Capabilities } from "./permissions";
 
-const admin = { id: "u-admin", role: "ADMIN" };
-const lider = { id: "u-lider", role: "LIDER_AREA" };
-const coordinador = { id: "u-coord", role: "COORDINADOR_CUENTA" };
-const disenador = { id: "u-diseno", role: "DISENADOR_UXUI" };
-const cliente = { id: "u-cliente", role: "CLIENTE" };
+// Mismas capacidades que scripts/seed-roles.ts otorga por defecto a cada
+// rol — un test unitario no toca la base, así que se fabrican acá en vez
+// de leer de Role/RolePermission real.
+const capsAdmin: Capabilities = {
+  "requests.access": ["all"],
+  "clients.view": ["all"],
+};
+const capsLider: Capabilities = {
+  "requests.access": ["all"],
+  "clients.view": ["all"],
+};
+const capsCoordinador: Capabilities = {
+  "requests.access": ["own_clients"],
+  "clients.view": ["own_clients"],
+};
+const capsDisenador: Capabilities = {
+  "requests.access": ["assigned"],
+};
+const capsCliente: Capabilities = {};
+
+const admin = { id: "u-admin", capabilities: capsAdmin };
+const lider = { id: "u-lider", capabilities: capsLider };
+const coordinador = { id: "u-coord", capabilities: capsCoordinador };
+const disenador = { id: "u-diseno", capabilities: capsDisenador };
+const cliente = { id: "u-cliente", capabilities: capsCliente };
 
 const reqAsignadaADisenador = {
   assigneeId: disenador.id,
@@ -20,17 +35,17 @@ const reqAsignadaADisenador = {
 };
 
 describe("isTeamRole / isManager", () => {
-  it("solo los roles internos cuentan como equipo", () => {
+  it("solo CLIENTE queda fuera del equipo interno", () => {
     expect(isTeamRole("ADMIN")).toBe(true);
     expect(isTeamRole("DESARROLLADOR")).toBe(true);
     expect(isTeamRole("CLIENTE")).toBe(false);
   });
 
-  it("solo Admin/Líder/Coordinador son manager", () => {
-    expect(isManager("ADMIN")).toBe(true);
-    expect(isManager("COORDINADOR_CUENTA")).toBe(true);
-    expect(isManager("DISENADOR_UXUI")).toBe(false);
-    expect(isManager("CLIENTE")).toBe(false);
+  it("manager es quien tiene clients.view otorgado", () => {
+    expect(isManager(admin)).toBe(true);
+    expect(isManager(coordinador)).toBe(true);
+    expect(isManager(disenador)).toBe(false);
+    expect(isManager(cliente)).toBe(false);
   });
 });
 
@@ -62,8 +77,28 @@ describe("canActOnRequest", () => {
     expect(canActOnRequest(disenador, comoColaborador)).toBe(true);
   });
 
-  it("un Cliente nunca puede actuar sobre una solicitud por esta vía", () => {
+  it("un Cliente (sin capacidades de equipo) nunca puede actuar por esta vía", () => {
     expect(canActOnRequest(cliente, reqAsignadaADisenador)).toBe(false);
+  });
+
+  it("varios roles con distinto alcance se unen (no se pisan)", () => {
+    const conDosRoles: { id: string; capabilities: Capabilities } = {
+      id: "u-multi",
+      capabilities: { "requests.access": ["own_clients", "assigned"] },
+    };
+    // Ve la de un cliente que él mismo gestiona, aunque no esté asignado...
+    const deSuPropioCliente = {
+      ...reqAsignadaADisenador,
+      client: { accountManagerId: "u-multi" },
+    };
+    expect(canActOnRequest(conDosRoles, deSuPropioCliente)).toBe(true);
+    // ...y también vería una asignada a él en un cliente ajeno.
+    const asignadaAElOtroCliente = {
+      assigneeId: "u-multi",
+      client: { accountManagerId: "otro" },
+      collaborators: [],
+    };
+    expect(canActOnRequest(conDosRoles, asignadaAElOtroCliente)).toBe(true);
   });
 });
 
@@ -75,11 +110,11 @@ describe("requestVisibilityWhere", () => {
 
   it("Coordinador se filtra por sus clientes", () => {
     expect(requestVisibilityWhere(coordinador)).toEqual({
-      client: { accountManagerId: coordinador.id },
+      OR: [{ client: { accountManagerId: coordinador.id } }],
     });
   });
 
-  it("un rol que no es de equipo no ve nada por esta vía", () => {
+  it("sin la capacidad otorgada no se ve nada por esta vía", () => {
     expect(requestVisibilityWhere(cliente)).toEqual({ id: "__ninguna__" });
   });
 });

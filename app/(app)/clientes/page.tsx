@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function ClientesPage() {
   const user = await getSessionUser();
   if (!user) redirect("/login");
-  if (!isManager(user.role)) redirect("/mi-espacio");
+  if (!isManager(user)) redirect("/mi-espacio");
 
   const clients = await prisma.client.findMany({
     where: clientVisibilityWhere(user),

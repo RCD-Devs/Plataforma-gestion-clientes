@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
 import { prisma } from "./db";
+import { buildCapabilities } from "./permissions";
 
 const COOKIE_NAME = "revo_session";
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
@@ -72,16 +73,38 @@ export async function getSessionUser() {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    include: { team: true, client: true },
+    include: {
+      team: true,
+      client: true,
+      roles: { include: { role: { include: { permissions: true } } } },
+    },
   });
   if (!user || !user.isActive) return null;
-  return user;
+
+  // Nuevo #3 — capacidades resueltas una sola vez acá; el resto de la app
+  // (lib/authz.ts, páginas, Server Actions) las lee de la sesión en vez de
+  // volver a consultar Role/RolePermission por cada chequeo.
+  const activeRoles = user.roles.filter((ur) => !ur.role.archivedAt);
+  const capabilities = buildCapabilities(
+    activeRoles.flatMap((ur) => ur.role.permissions),
+  );
+  // roleCodes es para lógica (estable aunque se renombre el rol);
+  // roleNames es solo para mostrar en pantalla.
+  const roleCodes = activeRoles.map((ur) => ur.role.code);
+  const roleNames = activeRoles.map((ur) => ur.role.name);
+
+  return { ...user, capabilities, roleCodes, roleNames };
 }
 
 export type SessionUser = NonNullable<Awaited<ReturnType<typeof getSessionUser>>>;
 
-export function redirectForRole(user: Pick<SessionUser, "role">) {
+// Solo UX (a dónde aterriza justo después de loguearse) — se mantiene un
+// chequeo directo de código de rol en vez de pasar por capabilities, para
+// no tener que enriquecer al usuario recién autenticado solo para esto.
+export function redirectForRole(user: { role: string; roleCodes: string[] }) {
   if (user.role === "CLIENTE") return "/portal";
-  if (user.role === "LIDER_AREA" || user.role === "ADMIN") return "/equipo";
+  if (user.roleCodes.includes("ADMIN") || user.roleCodes.includes("LIDER_AREA")) {
+    return "/equipo";
+  }
   return "/mi-espacio";
 }

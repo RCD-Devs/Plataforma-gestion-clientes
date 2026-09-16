@@ -6,25 +6,31 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { logout } from "@/app/actions";
 import { Avatar } from "./ui";
-import { ROLE_MAP } from "@/lib/constants";
-import { isManager } from "@/lib/authz";
+import { hasAccess, type Capabilities } from "@/lib/permissions";
 
 const items = [
   { href: "/mi-espacio", label: "Mi espacio", icon: "▣" },
-  { href: "/equipo", label: "Mi equipo", icon: "♟", leader: true },
+  { href: "/equipo", label: "Mi equipo", icon: "♟", cap: "team.view_load" as const },
   { href: "/tablero", label: "Tablero", icon: "▦" },
   { href: "/solicitudes", label: "Solicitudes", icon: "☰" },
-  { href: "/clientes", label: "Clientes", icon: "◎", manager: true },
-  { href: "/bolsa", label: "Bolsa de horas", icon: "◷", manager: true },
-  { href: "/dashboard", label: "Dashboard", icon: "▤", manager: true },
-  { href: "/notificaciones", label: "Notificaciones", icon: "✷", manager: true },
+  { href: "/clientes", label: "Clientes", icon: "◎", cap: "clients.view" as const },
+  { href: "/bolsa", label: "Bolsa de horas", icon: "◷", cap: "clients.view" as const },
+  { href: "/dashboard", label: "Dashboard", icon: "▤", cap: "clients.view" as const },
+  { href: "/notificaciones", label: "Notificaciones", icon: "✷", cap: "clients.view" as const },
   { href: "/admin", label: "Administración", icon: "⚙", admin: true },
 ];
 
 export function Sidebar({
   user,
 }: {
-  user: { name: string; role: string; email: string; color?: string | null };
+  user: {
+    name: string;
+    email: string;
+    color?: string | null;
+    roleCodes: string[];
+    roleNames: string[];
+    capabilities: Capabilities;
+  };
 }) {
   const pathname = usePathname();
   // Rec. #86 — el sidebar fijo de 240px no cabía en tablet/mobile. Bajo
@@ -77,10 +83,8 @@ export function Sidebar({
 
         <nav className="flex-1 overflow-y-auto px-3 py-2">
           {items.map((it) => {
-            if (it.leader && user.role !== "LIDER_AREA" && user.role !== "ADMIN")
-              return null;
-            if (it.manager && !isManager(user.role)) return null;
-            if (it.admin && user.role !== "ADMIN") return null;
+            if (it.cap && !hasAccess(user.capabilities, it.cap)) return null;
+            if (it.admin && !user.roleCodes.includes("ADMIN")) return null;
             const active =
               pathname === it.href || pathname.startsWith(it.href + "/");
             return (
@@ -130,7 +134,7 @@ export function Sidebar({
                 {user.name}
               </div>
               <div className="truncate text-[11px] text-white/60">
-                {ROLE_MAP[user.role]?.label ?? user.role}
+                {user.roleNames.length > 0 ? user.roleNames.join(", ") : "Sin rol asignado"}
               </div>
             </div>
           </div>
