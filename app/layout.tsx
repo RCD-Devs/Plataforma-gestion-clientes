@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import localFont from "next/font/local";
 import { Provider as RollbarProvider } from "@rollbar/react";
 import { clientConfig } from "@/lib/rollbar";
+import { Analytics } from "@vercel/analytics/next";
 
 const mortend = localFont({
   src: [
@@ -34,7 +35,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <RollbarProvider config={clientConfig}>
       <html lang="es" className={`${mortend.variable} ${openSans.variable}`}>
-        <body>{children}</body>
+        <body>
+          {children}
+          <Analytics />
+        </body>
       </html>
     </RollbarProvider>
   );

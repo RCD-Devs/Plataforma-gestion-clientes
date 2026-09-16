@@ -9,6 +9,7 @@ const tabs = [
   { href: "/admin/equipos", label: "Equipos" },
   { href: "/admin/campos", label: "Campos personalizados" },
   { href: "/admin/estados", label: "Estados" },
+  { href: "/admin/auditoria", label: "Auditoría" },
 ];
 
 export function AdminTabs() {

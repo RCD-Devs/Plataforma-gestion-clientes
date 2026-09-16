@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { prisma } from "./db";
+import { serverInstance as rollbar } from "./rollbar";
 
 function appBaseUrl() {
   return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
@@ -31,9 +32,13 @@ async function sendEmail(opts: { to: string; subject: string; html: string }) {
       subject: opts.subject,
       html: opts.html,
     });
-    if (error) console.error("Resend rechazó el correo:", error);
+    if (error) {
+      rollbar.error("Resend rechazó el correo", { extra: { to: opts.to, subject: opts.subject, error } });
+    }
   } catch (err) {
-    console.error("Error enviando correo:", err);
+    rollbar.error(err instanceof Error ? err : new Error(String(err)), {
+      extra: { to: opts.to, subject: opts.subject },
+    });
   }
 }
 
