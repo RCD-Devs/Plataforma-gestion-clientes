@@ -283,16 +283,23 @@ export async function resetPassword(formData: FormData) {
   redirect(`${dest}?reset=ok`);
 }
 
-export async function changeStatus(requestId: string, status: string) {
+// Rec. #90 — estos 4 controles (components/controls.tsx) son <select>/
+// botones no controlados: si la acción falla en silencio, el elemento ya
+// muestra visualmente el valor nuevo aunque la base no haya cambiado. El
+// { ok } de retorno le permite a controls.tsx revertir el valor y avisar.
+export async function changeStatus(
+  requestId: string,
+  status: string,
+): Promise<{ ok: boolean }> {
   const user = await getSessionUser();
   const statusMap = await getStatusMap();
-  if (!user || !statusMap[status]) return;
+  if (!user || !statusMap[status]) return { ok: false };
   const req = await prisma.request.findUnique({
     where: { id: requestId },
     include: { client: true, collaborators: true },
   });
-  if (!req || req.status === status) return;
-  if (!canActOnRequest(user, req)) return;
+  if (!req || req.status === status) return { ok: false };
+  if (!canActOnRequest(user, req)) return { ok: false };
   // finalizedAt marca el cierre real de la solicitud — es la fecha que se
   // usa para calcular el SLA (finalizedAt − createdAt) en el reporte del
   // cliente. Se limpia si la solicitud se reabre.
@@ -322,11 +329,15 @@ export async function changeStatus(requestId: string, status: string) {
   }
   refreshLists(req.key);
   revalidatePath("/portal");
+  return { ok: true };
 }
 
-export async function assignRequest(requestId: string, assigneeId: string) {
+export async function assignRequest(
+  requestId: string,
+  assigneeId: string,
+): Promise<{ ok: boolean }> {
   const user = await getSessionUser();
-  if (!user || !isManager(user.role)) return;
+  if (!user || !isManager(user.role)) return { ok: false };
   const assignee = assigneeId
     ? await prisma.user.findUnique({ where: { id: assigneeId } })
     : null;
@@ -346,16 +357,21 @@ export async function assignRequest(requestId: string, assigneeId: string) {
     },
   });
   refreshLists(req.key);
+  return { ok: true };
 }
 
-export async function updatePriority(requestId: string, priority: string) {
+export async function updatePriority(
+  requestId: string,
+  priority: string,
+): Promise<{ ok: boolean }> {
   const user = await getSessionUser();
-  if (!user || !isManager(user.role) || !PRIORITY_MAP[priority]) return;
+  if (!user || !isManager(user.role) || !PRIORITY_MAP[priority]) return { ok: false };
   const req = await prisma.request.update({
     where: { id: requestId },
     data: { priority },
   });
   refreshLists(req.key);
+  return { ok: true };
 }
 
 export async function updateRequestDetails(requestId: string, formData: FormData) {
@@ -902,15 +918,18 @@ export async function deleteAttachment(attachmentId: string) {
   revalidatePath(`/solicitudes/${attachment.request.key}`);
 }
 
-export async function setClientPriority(requestId: string, value: number) {
+export async function setClientPriority(
+  requestId: string,
+  value: number,
+): Promise<{ ok: boolean }> {
   const user = await getSessionUser();
   const v = Math.round(value);
-  if (!user || user.role !== "CLIENTE" || v < 1 || v > 5) return;
+  if (!user || user.role !== "CLIENTE" || v < 1 || v > 5) return { ok: false };
   const existing = await prisma.request.findUnique({
     where: { id: requestId },
     select: { clientId: true },
   });
-  if (!existing || existing.clientId !== user.clientId) return;
+  if (!existing || existing.clientId !== user.clientId) return { ok: false };
   const req = await prisma.request.update({
     where: { id: requestId },
     data: { clientPriority: v },
@@ -928,6 +947,7 @@ export async function setClientPriority(requestId: string, value: number) {
   revalidatePath(`/solicitudes/${req.key}`);
   revalidatePath("/solicitudes");
   revalidatePath("/mi-espacio");
+  return { ok: true };
 }
 
 // Traspaso de tarea entre perfiles (ej: diseño → desarrollo). Notifica al
