@@ -2,17 +2,28 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { setUserActive } from "@/app/actions";
 import { ActiveToggle } from "@/components/admin/ActiveToggle";
+import { UserDeleteButton } from "@/components/admin/UserDeleteButton";
 import { ROLE_MAP } from "@/lib/constants";
 import { Avatar } from "@/components/ui";
 import { getStatuses } from "@/lib/statuses";
+import { getSessionUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminUsuariosPage() {
-  const users = await prisma.user.findMany({
-    include: { team: true, client: true },
-    orderBy: { name: "asc" },
-  });
+  const [sessionUser, users] = await Promise.all([
+    getSessionUser(),
+    prisma.user.findMany({
+      include: {
+        team: true,
+        client: true,
+        assigned: { select: { id: true } },
+        timeEntries: { select: { id: true } },
+        managedClients: { select: { id: true } },
+      },
+      orderBy: { name: "asc" },
+    }),
+  ]);
 
   // Nuevo #12 — al desactivar a alguien, sus solicitudes abiertas quedan
   // asignadas sin aviso. Por decisión del dueño del proyecto (16 sep) solo
@@ -70,6 +81,7 @@ export default async function AdminUsuariosPage() {
               <th className="px-4 py-2.5 font-medium">Cliente</th>
               <th className="px-4 py-2.5 font-medium">Estado</th>
               <th className="px-4 py-2.5 font-medium"></th>
+              <th className="px-4 py-2.5 font-medium"></th>
             </tr>
           </thead>
           <tbody>
@@ -98,11 +110,22 @@ export default async function AdminUsuariosPage() {
                     Editar
                   </Link>
                 </td>
+                <td className="px-4 py-3 text-right">
+                  <UserDeleteButton
+                    id={u.id}
+                    disabled={
+                      u.id === sessionUser?.id ||
+                      u.assigned.length > 0 ||
+                      u.timeEntries.length > 0 ||
+                      u.managedClients.length > 0
+                    }
+                  />
+                </td>
               </tr>
             ))}
             {users.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-[#6b7280]">
+                <td colSpan={7} className="px-4 py-10 text-center text-[#6b7280]">
                   Aún no hay usuarios creados.
                 </td>
               </tr>

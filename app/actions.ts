@@ -1479,6 +1479,53 @@ export async function setUserActive(id: string, isActive: boolean) {
   revalidateAdmin();
 }
 
+// Mismo criterio que deleteTeam: solo se puede borrar un usuario sin
+// actividad real (nada asignado, sin horas cargadas, no es cuenta
+// gerente de ningún cliente) — si tiene algo de eso, se desactiva en vez
+// de borrar (Rmap #10: no hace falta una papelera separada). No se deja
+// borrar la propia cuenta, para no quedar sin ningún Admin con acceso.
+export async function deleteUser(id: string) {
+  const user = await getSessionUser();
+  if (!user || !user.roleCodes.includes("ADMIN")) return;
+  if (id === user.id) return;
+
+  const target = await prisma.user.findUnique({
+    where: { id },
+    include: {
+      assigned: { select: { id: true } },
+      timeEntries: { select: { id: true } },
+      managedClients: { select: { id: true } },
+    },
+  });
+  if (
+    !target ||
+    target.assigned.length > 0 ||
+    target.timeEntries.length > 0 ||
+    target.managedClients.length > 0
+  ) {
+    return;
+  }
+
+  // Metadata sin FK en cascada (Comment.authorId no se toca — un
+  // comentario sí cuenta como actividad real, pero no lo filtramos arriba
+  // porque un usuario recién creado nunca tiene uno; si algún día lo
+  // tiene, prisma.user.delete fallará por la FK y no se romperá nada).
+  await prisma.$transaction([
+    prisma.nudgeShown.deleteMany({ where: { userId: id } }),
+    prisma.aiMemoryNote.deleteMany({ where: { userId: id } }),
+    prisma.commentRead.deleteMany({ where: { userId: id } }),
+    prisma.requestCollaborator.deleteMany({ where: { userId: id } }),
+    prisma.user.delete({ where: { id } }),
+  ]);
+  await logAudit({
+    type: "admin_user_deleted",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `userId=${id}, email=${target.email}`,
+  });
+  revalidateAdmin();
+}
+
 export async function createTeam(formData: FormData) {
   const user = await getSessionUser();
   if (!user || !user.roleCodes.includes("ADMIN")) redirect("/mi-espacio");
