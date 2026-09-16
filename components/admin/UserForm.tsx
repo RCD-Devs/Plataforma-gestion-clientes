@@ -8,6 +8,7 @@ const labelCls = "mb-1 block text-xs font-semibold text-[#5d6b77]";
 
 const ERROR_MESSAGES: Record<string, string> = {
   datos: "Completa nombre, correo y rol.",
+  correo: "Ese correo no parece válido — revísalo.",
   email_existente: "Ya existe un usuario con ese correo.",
   cliente_requerido: "El rol Cliente necesita un cliente asociado.",
 };

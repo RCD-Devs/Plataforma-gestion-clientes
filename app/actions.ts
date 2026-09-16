@@ -21,6 +21,7 @@ import crypto from "crypto";
 import { notifyClient, notifyTeam } from "@/lib/email";
 import { PRIORITY_MAP } from "@/lib/constants";
 import { getStatusMap } from "@/lib/statuses";
+import { isValidEmail } from "@/lib/validate";
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
@@ -1043,7 +1044,8 @@ export async function submitRequest(formData: FormData) {
   const rawPriority = String(formData.get("priority") || "MEDIA");
   const priority = PRIORITY_MAP[rawPriority] ? rawPriority : "MEDIA";
   const dueStr = String(formData.get("dueDate") || "");
-  if (!clientId || !requesterEmail || !title) return;
+  if (!clientId || !title) redirect("/solicitar?error=datos");
+  if (!isValidEmail(requesterEmail)) redirect("/solicitar?error=correo");
 
   const req = await withKeyRetry((key) =>
     prisma.request.create({
@@ -1268,6 +1270,7 @@ export async function createUser(formData: FormData) {
   const role = String(formData.get("role") || "");
   const validRole = (TEAM_ROLES as readonly string[]).includes(role) || role === "CLIENTE";
   if (!name || !email || !validRole) redirect("/admin/usuarios/nuevo?error=datos");
+  if (!isValidEmail(email)) redirect("/admin/usuarios/nuevo?error=correo");
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) redirect("/admin/usuarios/nuevo?error=email_existente");

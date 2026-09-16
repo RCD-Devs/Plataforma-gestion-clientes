@@ -43,6 +43,16 @@ export default async function SolicitarPage({
               nuevo.
             </div>
           )}
+          {error === "datos" && (
+            <div className="rounded-lg border border-[#fda565] bg-[#fdf1e3] px-3 py-2 text-sm text-[#9a5a25]">
+              Falta seleccionar la empresa/cliente o escribir un título.
+            </div>
+          )}
+          {error === "correo" && (
+            <div className="rounded-lg border border-[#fda565] bg-[#fdf1e3] px-3 py-2 text-sm text-[#9a5a25]">
+              Ese correo no parece válido — revísalo e intenta de nuevo.
+            </div>
+          )}
           <input
             type="text"
             name="website"
