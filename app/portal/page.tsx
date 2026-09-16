@@ -124,6 +124,11 @@ export default async function PortalPage({
                 ¿Olvidaste tu contraseña?
               </Link>
             </div>
+            <div className="mt-2 text-center text-xs text-[#7f7f7f]">
+              <Link href="/privacidad" target="_blank" className="hover:underline">
+                Aviso de privacidad
+              </Link>
+            </div>
           </form>
         </div>
       </div>

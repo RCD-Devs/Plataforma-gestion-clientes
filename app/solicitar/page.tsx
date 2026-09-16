@@ -132,6 +132,13 @@ export default async function SolicitarPage({
             Podrás adjuntar archivos (PDF, PNG) y seguir el estado desde el
             portal.
           </p>
+          <p className="text-center text-xs text-[#6b7280]">
+            Al enviar aceptas nuestro{" "}
+            <a href="/privacidad" target="_blank" className="underline">
+              aviso de privacidad
+            </a>
+            .
+          </p>
         </form>
       </div>
     </div>
