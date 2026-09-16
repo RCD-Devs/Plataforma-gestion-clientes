@@ -6,6 +6,43 @@ function appBaseUrl() {
   return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 }
 
+// Envoltorio visual compartido por todos los correos transaccionales —
+// tablas + estilos inline porque los clientes de correo (Gmail, Outlook)
+// ignoran <style> externo y muchas reglas modernas de CSS.
+function emailLayout(opts: { title: string; bodyHtml: string; ctaLabel?: string; ctaUrl?: string }) {
+  const logoUrl = `${appBaseUrl()}/brand/logo-blanco.png`;
+  const cta = opts.ctaUrl
+    ? `<tr><td style="padding:28px 40px 8px;">
+        <a href="${opts.ctaUrl}" style="display:inline-block;background:#0bdbcf;color:#081826;font-weight:600;font-size:14px;text-decoration:none;padding:12px 24px;border-radius:8px;">${opts.ctaLabel}</a>
+       </td></tr>
+       <tr><td style="padding:0 40px 8px;">
+        <p style="margin:0;font-size:12px;color:#9aa3ad;word-break:break-all;">Si el botón no funciona, copia y pega este enlace: <a href="${opts.ctaUrl}" style="color:#08a89f;">${opts.ctaUrl}</a></p>
+       </td></tr>`
+    : "";
+  return `<!DOCTYPE html>
+<html lang="es">
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 16px;">
+    <tr><td align="center">
+      <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:12px;overflow:hidden;">
+        <tr><td style="background:#081826;padding:24px 40px;">
+          <img src="${logoUrl}" height="28" alt="REVO" style="display:block;" />
+        </td></tr>
+        <tr><td style="padding:32px 40px 8px;">
+          <h1 style="margin:0 0 12px;font-size:18px;color:#081826;">${opts.title}</h1>
+          <div style="font-size:14px;line-height:1.6;color:#3b4552;">${opts.bodyHtml}</div>
+        </td></tr>
+        ${cta}
+        <tr><td style="padding:24px 40px 28px;">
+          <p style="margin:0;font-size:12px;color:#9aa3ad;">Plataforma de gestión de clientes · Grupo Revo</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
 let resend: Resend | null = null;
 function resendClient() {
   const key = process.env.RESEND_API_KEY;
@@ -73,7 +110,7 @@ export async function notifyClient(opts: {
   await sendEmail({
     to: opts.to,
     subject: opts.title,
-    html: `<p>${opts.body}</p>`,
+    html: emailLayout({ title: opts.title, bodyHtml: `<p style="margin:0;">${opts.body}</p>` }),
   });
   await prisma.notification.createMany({
     data: [
@@ -104,7 +141,12 @@ export async function sendWelcomeEmail(opts: {
   await sendEmail({
     to: opts.to,
     subject: "Te dieron de alta en la Plataforma REVO",
-    html: `<p>Hola ${opts.name},</p><p>Ya tienes una cuenta en la Plataforma de gestión de clientes. Usa este enlace para definir tu contraseña (vence en 1 hora):</p><p><a href="${fullUrl}">${fullUrl}</a></p>`,
+    html: emailLayout({
+      title: `Hola ${opts.name}`,
+      bodyHtml: `<p style="margin:0;">Ya tienes una cuenta en la Plataforma de gestión de clientes. Define tu contraseña para empezar (el enlace vence en 1 hora):</p>`,
+      ctaLabel: "Definir contraseña",
+      ctaUrl: fullUrl,
+    }),
   });
   await prisma.notification.create({
     data: {
@@ -125,7 +167,12 @@ export async function sendPasswordReset(opts: {
   await sendEmail({
     to: opts.to,
     subject: "Recupera tu contraseña",
-    html: `<p>Hola ${opts.name},</p><p>Usa este enlace para elegir una nueva contraseña (vence en 1 hora):</p><p><a href="${fullUrl}">${fullUrl}</a></p>`,
+    html: emailLayout({
+      title: `Hola ${opts.name}`,
+      bodyHtml: `<p style="margin:0;">Elige una nueva contraseña para tu cuenta (el enlace vence en 1 hora):</p>`,
+      ctaLabel: "Elegir nueva contraseña",
+      ctaUrl: fullUrl,
+    }),
   });
   await prisma.notification.create({
     data: {
