@@ -23,6 +23,7 @@
     "@ai-sdk/google": "^4.0.61",
     "@ai-sdk/react": "^4.0.92",
     "@prisma/client": "^6.2.0",
+    "@rollbar/react": "^1.0.0",
     "@supabase/supabase-js": "^2.112.4",
     "ai": "^7.0.89",
     "bcryptjs": "^2.4.3",
@@ -36,6 +37,7 @@
     "react-chartjs-2": "^5.3.1",
     "react-dom": "^19.0.0",
     "resend": "^6.25.0",
+    "rollbar": "^3.1.0",
     "zod": "^4.5.4"
   },
   "devDependencies": {
