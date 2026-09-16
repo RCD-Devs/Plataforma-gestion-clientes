@@ -8,6 +8,28 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # Rec. #49 — Postgres real solo para el job de CI (efímero, se destruye
+    # al terminar), no toca la base de dev/producción. AUTH_SECRET y demás
+    # secretos de runtime no hacen falta: los tests de integración mockean
+    # la sesión (@/lib/session) en vez de generar JWT/cookies reales.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: revo_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/revo_test
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/revo_test
+      RUN_DB_TESTS: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -15,10 +37,8 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      # No hay base de datos en CI todavía (Rec. #57, ambiente de
-      # staging/preview, sigue pendiente) — prisma generate solo lee el
-      # schema, no necesita conexión real.
       - run: npx prisma generate
+      - run: npx prisma db push
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
