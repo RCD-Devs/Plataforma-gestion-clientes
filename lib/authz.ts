@@ -12,10 +12,11 @@ import {
 // esquema). Las firmas de estas funciones se mantienen iguales a las de
 // antes de la fusión con Codia Task para no tener que tocar cada archivo
 // que ya las llama — solo cambió qué hay adentro.
-export type AuthzUser = { id: string; capabilities: Capabilities };
+export type AuthzUser = { id: string; capabilities: Capabilities; ownClientIds?: string[] };
 
 type RequestLike = {
   assigneeId: string | null;
+  clientId?: string;
   client: { accountManagerId: string | null };
   collaborators?: { userId: string }[];
 };
@@ -41,7 +42,7 @@ export function isManager(user: AuthzUser): boolean {
 // nunca llega acá (usa sus propios chequeos de clientId). Un usuario con
 // varios roles ve la unión de los alcances de todos.
 export function canActOnRequest(user: AuthzUser, req: RequestLike): boolean {
-  return canOnRequest(user.capabilities, "requests.access", user.id, req);
+  return canOnRequest(user.capabilities, "requests.access", user.id, req, user.ownClientIds);
 }
 
 export function canViewRequest(user: AuthzUser, req: RequestLike): boolean {

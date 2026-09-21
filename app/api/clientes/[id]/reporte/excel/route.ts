@@ -26,7 +26,7 @@ export async function GET(
 
   const data = await getClientReportData(id, desdeParam, hastaParam);
   if (!data) return new Response("No encontrado", { status: 404 });
-  if (!canOnClient(user.capabilities, "clients.view", user.id, data.client)) {
+  if (!canOnClient(user.capabilities, "clients.view", user.id, data.client, user.ownClientIds)) {
     return new Response("No autorizado", { status: 403 });
   }
 

@@ -37,7 +37,7 @@ export default async function ClientReportPage({
 
   const data = await getClientReportData(id, sp.desde, sp.hasta);
   if (!data) notFound();
-  if (!canOnClient(user.capabilities, "clients.view", user.id, data.client)) {
+  if (!canOnClient(user.capabilities, "clients.view", user.id, data.client, user.ownClientIds)) {
     notFound();
   }
 

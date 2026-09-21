@@ -42,7 +42,7 @@ export default async function ProyectoPage({
   if (!insights) notFound();
   const { project, timeline, finalCodes, hoursByRequest } = insights;
   const can = (a: "projects.view" | "projects.manage" | "projects.budget") =>
-    canOnClient(user.capabilities, a, user.id, project.client);
+    canOnClient(user.capabilities, a, user.id, project.client, user.ownClientIds);
   if (!can("projects.view")) redirect("/mi-espacio");
   const canManage = can("projects.manage");
   const canBudget = can("projects.budget");

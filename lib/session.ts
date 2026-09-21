@@ -77,6 +77,8 @@ export async function getSessionUser() {
       team: true,
       client: true,
       roles: { include: { role: { include: { permissions: true } } } },
+      managedClients: { select: { id: true } },
+      clientMemberships: { select: { clientId: true } },
     },
   });
   if (!user || !user.isActive) return null;
@@ -93,7 +95,12 @@ export async function getSessionUser() {
   const roleCodes = activeRoles.map((ur) => ur.role.code);
   const roleNames = activeRoles.map((ur) => ur.role.name);
 
-  return { ...user, capabilities, roleCodes, roleNames };
+  // "Mis clientes": donde soy coordinador de cuenta o estoy asignado.
+  const ownClientIds = [
+    ...new Set([...user.managedClients.map((c) => c.id), ...user.clientMemberships.map((m) => m.clientId)]),
+  ];
+
+  return { ...user, capabilities, roleCodes, roleNames, ownClientIds };
 }
 
 export type SessionUser = NonNullable<Awaited<ReturnType<typeof getSessionUser>>>;

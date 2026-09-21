@@ -110,7 +110,13 @@ describe("requestVisibilityWhere", () => {
 
   it("Coordinador se filtra por sus clientes", () => {
     expect(requestVisibilityWhere(coordinador)).toEqual({
-      OR: [{ client: { accountManagerId: coordinador.id } }],
+      OR: [
+        {
+          client: {
+            OR: [{ accountManagerId: coordinador.id }, { members: { some: { userId: coordinador.id } } }],
+          },
+        },
+      ],
     });
   });
 
@@ -122,8 +128,28 @@ describe("requestVisibilityWhere", () => {
 describe("clientVisibilityWhere", () => {
   it("Coordinador solo ve sus clientes, el resto de roles ve todos", () => {
     expect(clientVisibilityWhere(coordinador)).toEqual({
-      accountManagerId: coordinador.id,
+      OR: [{ accountManagerId: coordinador.id }, { members: { some: { userId: coordinador.id } } }],
     });
     expect(clientVisibilityWhere(admin)).toEqual({});
+  });
+});
+
+describe("clientes asignados (miembros)", () => {
+  const req = (clientId: string, manager: string | null) => ({
+    assigneeId: null,
+    clientId,
+    client: { accountManagerId: manager },
+  });
+
+  it("alcance Solo sus clientes incluye los clientes donde está asignado", () => {
+    const asignado = { ...coordinador, ownClientIds: ["c-1", "c-2"] };
+    expect(canActOnRequest(asignado, req("c-1", "otro"))).toBe(true);
+    expect(canActOnRequest(asignado, req("c-2", null))).toBe(true);
+  });
+
+  it("no da acceso a clientes donde no está asignado ni es coordinador", () => {
+    const asignado = { ...coordinador, ownClientIds: ["c-1"] };
+    expect(canActOnRequest(asignado, req("c-9", "otro"))).toBe(false);
+    expect(canActOnRequest(coordinador, req("c-1", "otro"))).toBe(false);
   });
 });

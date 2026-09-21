@@ -37,6 +37,7 @@ model Client {
   hoursAdjustments  HoursAdjustment[]
   projects          Project[]
   portalViewers     UserClientAccess[]
+  members           ClientMember[]
 }
 
 // Un cliente puede tener varios proyectos (fusión con Codia Task,
@@ -149,6 +150,7 @@ model User {
   aiMemoryNotes   AiMemoryNote[]
   roles           UserRole[]
   portalAccess    UserClientAccess[]
+  clientMemberships ClientMember[]
 }
 
 // Roles y permisos como datos editables (ADR-011, Nuevo #3, 16 sep 2026).
@@ -203,6 +205,21 @@ model UserClientAccess {
   client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@id([userId, clientId])
+}
+
+// Gente asignada a un cliente (muchos-a-muchos): una persona puede trabajar
+// para varios clientes a la vez y un cliente tiene varias personas. Para
+// los roles con alcance "Solo sus clientes" (own_clients), "mis clientes"
+// = clientes donde soy coordinador de cuenta O estoy asignado acá. Además
+// alimenta "Tu equipo" del portal y las alertas de bolsa de horas.
+model ClientMember {
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@id([userId, clientId])
+  @@index([clientId])
 }
 
 model PasswordResetToken {

@@ -2,7 +2,7 @@
 // /bolsa — la página que ya calcula el ledger de cada cliente, sin cron
 // ni conexión persistente (mismo enfoque que lib/nudges.ts). Umbral: menos
 // del 20% de la bolsa por ciclo disponible, avisado una vez por semana al
-// Coordinador de cuenta del cliente.
+// Coordinador de cuenta y a las personas asignadas al cliente.
 import { prisma } from "./db";
 import { getHoursSummaries } from "./hoursLedger";
 import { notifyTeam } from "./email";
@@ -23,22 +23,37 @@ export async function checkHoursAlerts(
   }[],
   summaries: Awaited<ReturnType<typeof getHoursSummaries>>,
 ): Promise<void> {
-  const managerIds = [...new Set(clients.map((c) => c.accountManagerId).filter((v): v is string => !!v))];
-  if (managerIds.length === 0) return;
-
-  const managers = await prisma.user.findMany({
-    where: { id: { in: managerIds } },
-    select: { id: true, email: true },
-  });
-  const emailByManager = new Map(managers.map((m) => [m.id, m.email]));
-
   const below = clients.filter((c) => {
-    if (c.contractedHours <= 0 || !c.accountManagerId) return false;
+    if (c.contractedHours <= 0) return false;
     const ledger = summaries.get(c.id);
     if (!ledger) return false;
     return (ledger.available / c.contractedHours) * 100 < THRESHOLD_PCT;
   });
   if (below.length === 0) return;
+
+  // Destinatarios: el coordinador de cuenta y todas las personas asignadas
+  // al cliente (usuarios activos), sin repetir correos.
+  const belowIds = below.map((c) => c.id);
+  const managerIds = [...new Set(below.map((c) => c.accountManagerId).filter((v): v is string => !!v))];
+  const [members, managers] = await Promise.all([
+    prisma.clientMember.findMany({
+      where: { clientId: { in: belowIds }, user: { isActive: true } },
+      select: { clientId: true, user: { select: { email: true } } },
+    }),
+    prisma.user.findMany({
+      where: { id: { in: managerIds }, isActive: true },
+      select: { id: true, email: true },
+    }),
+  ]);
+  const emailByManager = new Map(managers.map((m) => [m.id, m.email]));
+  const recipients = new Map<string, Set<string>>();
+  for (const c of below) {
+    const set = new Set<string>();
+    const managerEmail = c.accountManagerId ? emailByManager.get(c.accountManagerId) : undefined;
+    if (managerEmail) set.add(managerEmail);
+    recipients.set(c.id, set);
+  }
+  for (const m of members) recipients.get(m.clientId)?.add(m.user.email);
 
   const weekKey = mondayOf(new Date());
   const already = await prisma.hoursAlertLog.findMany({
@@ -49,15 +64,17 @@ export async function checkHoursAlerts(
 
   for (const c of below) {
     if (alerted.has(c.id)) continue;
-    const email = emailByManager.get(c.accountManagerId!);
-    if (!email) continue;
+    const emails = [...(recipients.get(c.id) ?? [])];
+    if (emails.length === 0) continue;
     const ledger = summaries.get(c.id)!;
     const pct = Math.round((ledger.available / c.contractedHours) * 100);
-    await notifyTeam({
-      to: email,
-      title: `Bolsa de horas baja: ${c.name}`,
-      body: `${c.name} tiene ${hoursLabel(ledger.available)} disponibles (${pct}% de su bolsa por ciclo). Revisa si conviene avisar al cliente o ajustar el saldo.`,
-    });
+    for (const to of emails) {
+      await notifyTeam({
+        to,
+        title: `Bolsa de horas baja: ${c.name}`,
+        body: `${c.name} tiene ${hoursLabel(ledger.available)} disponibles (${pct}% de su bolsa por ciclo). Revisa si conviene avisar al cliente o ajustar el saldo.`,
+      });
+    }
     await prisma.hoursAlertLog.create({ data: { clientId: c.id, weekKey } }).catch(() => {
       // Carrera con otra request en la misma semana — el @@unique ya lo cubrió.
     });

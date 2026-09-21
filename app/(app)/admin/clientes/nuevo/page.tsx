@@ -22,6 +22,7 @@ export default async function NuevoClientePage({
   return (
     <ClientForm
       managers={managers}
+      teamUsers={users.filter((u) => u.role !== "CLIENTE" && u.isActive)}
       error={error}
       action={createClient}
       submitLabel="Crear cliente"

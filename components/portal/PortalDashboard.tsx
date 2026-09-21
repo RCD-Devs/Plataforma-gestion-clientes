@@ -30,10 +30,19 @@ export async function PortalDashboard({ client }: { client: Client }) {
   const sixAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
   const since = hasBag ? (cycleStart && cycleStart < sixAgo ? cycleStart : sixAgo) : undefined;
 
+  // Equipo: las personas asignadas al cliente (admin). Si aún no hay ninguna
+  // asignada, se deduce de quién ha trabajado en sus solicitudes.
+  const assignedIds = (
+    await prisma.clientMember.findMany({ where: { clientId: client.id }, select: { userId: true } })
+  ).map((m) => m.userId);
   const teamOr = [
-    { assigned: { some: { clientId: client.id } } },
-    { timeEntries: { some: { request: { clientId: client.id } } } },
-    { collaborations: { some: { request: { clientId: client.id } } } },
+    ...(assignedIds.length > 0
+      ? [{ id: { in: assignedIds } }]
+      : [
+          { assigned: { some: { clientId: client.id } } },
+          { timeEntries: { some: { request: { clientId: client.id } } } },
+          { collaborations: { some: { request: { clientId: client.id } } } },
+        ]),
     ...(client.accountManagerId ? [{ id: client.accountManagerId }] : []),
   ];
 

@@ -133,6 +133,11 @@ export function hasAccess(caps: Capabilities, action: ActionId): boolean {
 
 // Para vistas tipo "Solicitudes/Clientes de X" — arma el where de Prisma
 // uniendo cada alcance otorgado. "all" gana siempre (sin filtro).
+// "Mis clientes": donde soy coordinador de cuenta o estoy asignado.
+function ownClientWhere(userId: string): Prisma.ClientWhereInput {
+  return { OR: [{ accountManagerId: userId }, { members: { some: { userId } } }] };
+}
+
 export function requestScopeWhere(
   caps: Capabilities,
   action: ActionId,
@@ -141,7 +146,7 @@ export function requestScopeWhere(
   const scopes = grantedScopes(caps, action);
   if (scopes.includes("all")) return {};
   const or: Prisma.RequestWhereInput[] = [];
-  if (scopes.includes("own_clients")) or.push({ client: { accountManagerId: userId } });
+  if (scopes.includes("own_clients")) or.push({ client: ownClientWhere(userId) });
   if (scopes.includes("assigned")) {
     or.push({ OR: [{ assigneeId: userId }, { collaborators: { some: { userId } } }] });
   }
@@ -149,17 +154,26 @@ export function requestScopeWhere(
   return { OR: or };
 }
 
+// ownClientIds = clientes del usuario (coordinador o asignado), resueltos
+// una vez en la sesión; req.clientId lo trae cualquier Request cargado.
 export function matchesRequestScope(
   scope: Scope,
   userId: string,
   req: {
     assigneeId: string | null;
+    clientId?: string;
     client: { accountManagerId: string | null };
     collaborators?: { userId: string }[];
   },
+  ownClientIds: readonly string[] = [],
 ): boolean {
   if (scope === "all") return true;
-  if (scope === "own_clients") return req.client.accountManagerId === userId;
+  if (scope === "own_clients") {
+    return (
+      req.client.accountManagerId === userId ||
+      (req.clientId !== undefined && ownClientIds.includes(req.clientId))
+    );
+  }
   if (scope === "assigned") {
     return (
       req.assigneeId === userId ||
@@ -175,11 +189,13 @@ export function canOnRequest(
   userId: string,
   req: {
     assigneeId: string | null;
+    clientId?: string;
     client: { accountManagerId: string | null };
     collaborators?: { userId: string }[];
   },
+  ownClientIds: readonly string[] = [],
 ): boolean {
-  return grantedScopes(caps, action).some((s) => matchesRequestScope(s, userId, req));
+  return grantedScopes(caps, action).some((s) => matchesRequestScope(s, userId, req, ownClientIds));
 }
 
 export function clientScopeWhere(
@@ -189,7 +205,7 @@ export function clientScopeWhere(
 ): Prisma.ClientWhereInput {
   const scopes = grantedScopes(caps, action);
   if (scopes.includes("all")) return {};
-  if (scopes.includes("own_clients")) return { accountManagerId: userId };
+  if (scopes.includes("own_clients")) return ownClientWhere(userId);
   return { id: "__ninguno__" };
 }
 
@@ -199,10 +215,16 @@ export function canOnClient(
   caps: Capabilities,
   action: ActionId,
   userId: string,
-  client: { accountManagerId: string | null },
+  client: { id?: string; accountManagerId: string | null },
+  ownClientIds: readonly string[] = [],
 ): boolean {
   const scopes = grantedScopes(caps, action);
   if (scopes.includes("all")) return true;
-  if (scopes.includes("own_clients")) return client.accountManagerId === userId;
+  if (scopes.includes("own_clients")) {
+    return (
+      client.accountManagerId === userId ||
+      (client.id !== undefined && ownClientIds.includes(client.id))
+    );
+  }
   return false;
 }

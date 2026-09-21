@@ -14,13 +14,14 @@ export default async function EditarUsuarioPage({
 }) {
   const { id } = await params;
   const { error } = await searchParams;
-  const [editing, teams, clients, roles, editingRoles, editingAccess] = await Promise.all([
+  const [editing, teams, clients, roles, editingRoles, editingAccess, editingMemberships] = await Promise.all([
     prisma.user.findUnique({ where: { id } }),
     prisma.team.findMany({ orderBy: { name: "asc" } }),
     prisma.client.findMany({ orderBy: { name: "asc" } }),
     prisma.role.findMany({ orderBy: { name: "asc" } }),
     prisma.userRole.findMany({ where: { userId: id }, select: { roleId: true } }),
     prisma.userClientAccess.findMany({ where: { userId: id }, select: { clientId: true } }),
+    prisma.clientMember.findMany({ where: { userId: id }, select: { clientId: true } }),
   ]);
   if (!editing) notFound();
 
@@ -29,6 +30,7 @@ export default async function EditarUsuarioPage({
       editing={editing}
       editingRoleIds={editingRoles.map((r) => r.roleId)}
       editingPortalClientIds={editingAccess.map((a) => a.clientId)}
+      editingMemberClientIds={editingMemberships.map((m) => m.clientId)}
       roles={roles}
       teams={teams}
       clients={clients}

@@ -13,6 +13,8 @@ const ERROR_MESSAGES: Record<string, string> = {
 export function ClientForm({
   client,
   managers,
+  teamUsers,
+  memberIds,
   error,
   action,
   submitLabel,
@@ -30,6 +32,9 @@ export function ClientForm({
     isActive: boolean;
   };
   managers: { id: string; name: string }[];
+  // Equipo interno asignable al cliente y quiénes ya están asignados.
+  teamUsers: { id: string; name: string }[];
+  memberIds?: string[];
   error?: string;
   action: (formData: FormData) => void | Promise<void>;
   submitLabel: string;
@@ -129,6 +134,27 @@ export function ClientForm({
             </option>
           ))}
         </select>
+      </div>
+      <div>
+        <label className={labelCls}>Equipo asignado al cliente</label>
+        <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-[#e4e8ec] p-3">
+          {teamUsers.map((u) => (
+            <label key={u.id} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                name="memberIds"
+                value={u.id}
+                defaultChecked={memberIds?.includes(u.id) ?? false}
+                className="h-4 w-4 accent-[#0bdbcf]"
+              />
+              {u.name}
+            </label>
+          ))}
+        </div>
+        <p className="mt-1 text-[11px] text-[#6b7280]">
+          Aparecen como «Tu equipo» en el portal del cliente, reciben las alertas de bolsa de horas y, si su rol
+          tiene alcance «Solo sus clientes», ven las solicitudes de este cliente.
+        </p>
       </div>
       <label className="flex items-center gap-2 text-sm">
         <input

@@ -630,15 +630,15 @@ export async function markCommentsRead(requestId: string) {
 // Permiso de proyectos sobre un cliente concreto (alcance "own_clients" =
 // solo los clientes que el usuario coordina).
 async function canProjectAction(
-  user: { id: string; capabilities: Capabilities },
+  user: { id: string; capabilities: Capabilities; ownClientIds?: string[] },
   action: ActionId,
   clientId: string,
 ) {
   const client = await prisma.client.findUnique({
     where: { id: clientId },
-    select: { accountManagerId: true },
+    select: { id: true, accountManagerId: true },
   });
-  return !!client && canOnClient(user.capabilities, action, user.id, client);
+  return !!client && canOnClient(user.capabilities, action, user.id, client, user.ownClientIds);
 }
 
 export async function createProject(clientId: string, formData: FormData) {
@@ -684,7 +684,11 @@ const optHours = (v: FormDataEntryValue | null) => {
   return Number.isFinite(n) && n > 0 ? n : null;
 };
 
-async function projectForAction(user: { id: string; capabilities: Capabilities }, projectId: string, action: ActionId) {
+async function projectForAction(
+  user: { id: string; capabilities: Capabilities; ownClientIds?: string[] },
+  projectId: string,
+  action: ActionId,
+) {
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project || !(await canProjectAction(user, action, project.clientId))) return null;
   return project;
@@ -1483,6 +1487,17 @@ function revalidateAdmin() {
   revalidatePath("/equipo");
 }
 
+// Personas asignadas a un cliente (solo equipo interno; ids inválidos se descartan).
+async function validMemberIds(formData: FormData) {
+  const ids = formData.getAll("memberIds").map(String).filter(Boolean);
+  if (ids.length === 0) return [];
+  const found = await prisma.user.findMany({
+    where: { id: { in: ids }, role: { not: "CLIENTE" } },
+    select: { id: true },
+  });
+  return found.map((u) => u.id);
+}
+
 export async function createClient(formData: FormData) {
   const user = await getSessionUser();
   if (!user || !user.roleCodes.includes("ADMIN")) redirect("/mi-espacio");
@@ -1504,6 +1519,7 @@ export async function createClient(formData: FormData) {
       color: String(formData.get("color") || "").trim() || null,
       accountManagerId: String(formData.get("accountManagerId") || "") || null,
       isActive: formData.get("isActive") === "on",
+      members: { create: (await validMemberIds(formData)).map((userId) => ({ userId })) },
     },
   });
   await logAudit({
@@ -1523,9 +1539,11 @@ export async function updateClient(id: string, formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   if (!name) redirect(`/admin/clientes/${id}?error=nombre`);
 
+  const memberIds = await validMemberIds(formData);
   await prisma.client.update({
     where: { id },
     data: {
+      members: { deleteMany: {}, create: memberIds.map((userId) => ({ userId })) },
       name,
       code: String(formData.get("code") || "").trim() || null,
       contactEmail: String(formData.get("contactEmail") || "").trim() || null,
@@ -1600,6 +1618,15 @@ async function validPortalClientIds(formData: FormData, isClientAccount: boolean
   return found.map((c) => c.id);
 }
 
+// Clientes para los que trabaja un usuario de equipo (asignación al cliente).
+async function validMemberClientIds(formData: FormData, isClientAccount: boolean) {
+  if (isClientAccount) return [];
+  const ids = formData.getAll("memberClientIds").map(String).filter(Boolean);
+  if (ids.length === 0) return [];
+  const found = await prisma.client.findMany({ where: { id: { in: ids } }, select: { id: true } });
+  return found.map((c) => c.id);
+}
+
 export async function createUser(formData: FormData) {
   const user = await getSessionUser();
   if (!user || !user.roleCodes.includes("ADMIN")) redirect("/mi-espacio");
@@ -1641,6 +1668,9 @@ export async function createUser(formData: FormData) {
       roles: isClientAccount ? undefined : { create: roles.map((r) => ({ roleId: r.id })) },
       portalAccess: {
         create: (await validPortalClientIds(formData, isClientAccount)).map((clientId) => ({ clientId })),
+      },
+      clientMemberships: {
+        create: (await validMemberClientIds(formData, isClientAccount)).map((clientId) => ({ clientId })),
       },
     },
   });
@@ -1686,6 +1716,7 @@ export async function updateUser(id: string, formData: FormData) {
   if (!isClientAccount && roles.length === 0) redirect(`/admin/usuarios/${id}?error=datos`);
 
   const portalClientIds = await validPortalClientIds(formData, isClientAccount);
+  const memberClientIds = await validMemberClientIds(formData, isClientAccount);
   await prisma.$transaction([
     prisma.userRole.deleteMany({ where: { userId: id } }),
     prisma.userClientAccess.deleteMany({ where: { userId: id } }),
@@ -1701,6 +1732,7 @@ export async function updateUser(id: string, formData: FormData) {
         isActive: formData.get("isActive") === "on",
         roles: isClientAccount ? undefined : { create: roles.map((r) => ({ roleId: r.id })) },
         portalAccess: { create: portalClientIds.map((clientId) => ({ clientId })) },
+        clientMemberships: { deleteMany: {}, create: memberClientIds.map((clientId) => ({ clientId })) },
       },
     }),
   ]);

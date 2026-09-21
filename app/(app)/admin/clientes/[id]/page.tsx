@@ -23,7 +23,7 @@ export default async function EditarClientePage({
 }) {
   const { id } = await params;
   const { error } = await searchParams;
-  const [client, users, adjustments, projects] = await Promise.all([
+  const [client, users, adjustments, projects, members] = await Promise.all([
     prisma.client.findUnique({ where: { id } }),
     prisma.user.findMany({
       orderBy: { name: "asc" },
@@ -31,6 +31,7 @@ export default async function EditarClientePage({
     }),
     prisma.hoursAdjustment.findMany({ where: { clientId: id }, orderBy: { createdAt: "desc" } }),
     prisma.project.findMany({ where: { clientId: id }, orderBy: { createdAt: "desc" } }),
+    prisma.clientMember.findMany({ where: { clientId: id }, select: { userId: true } }),
   ]);
   if (!client) notFound();
   const managers = users
@@ -44,6 +45,8 @@ export default async function EditarClientePage({
       <ClientForm
         client={client}
         managers={managers}
+        teamUsers={users.filter((u) => u.role !== "CLIENTE" && u.isActive)}
+        memberIds={members.map((m) => m.userId)}
         error={error}
         action={updateClient.bind(null, id)}
         submitLabel="Guardar cambios"
