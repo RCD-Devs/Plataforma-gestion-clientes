@@ -61,6 +61,8 @@ export type TimelineTask = {
 export type TimelineStage = {
   id: string;
   name: string;
+  isAdditional: boolean;
+  estimatedHours: number | null;
   planned: Interval | null;
   actual: Interval | null; // desde la primera tarea hasta la última
 };
@@ -80,7 +82,14 @@ const span = (a: Date, b: Date) => Math.round(((b.getTime() - a.getTime()) / DAY
 export function buildProjectTimeline(opts: {
   startDate: Date | null;
   endDate: Date | null;
-  stages: { id: string; name: string; startDate: Date | null; endDate: Date | null }[];
+  stages: {
+    id: string;
+    name: string;
+    startDate: Date | null;
+    endDate: Date | null;
+    estimatedHours?: number | null;
+    isAdditional?: boolean;
+  }[];
   requests: {
     id: string;
     key: string;
@@ -131,6 +140,8 @@ export function buildProjectTimeline(opts: {
   const stages: TimelineStage[] = opts.stages.map((s) => ({
     id: s.id,
     name: s.name,
+    isAdditional: s.isAdditional ?? false,
+    estimatedHours: s.estimatedHours ?? null,
     planned: s.startDate && s.endDate ? { start: s.startDate, end: s.endDate } : null,
     actual: extent(tasks.filter((t) => t.stageId === s.id)),
   }));

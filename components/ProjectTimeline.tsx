@@ -122,7 +122,7 @@ export function ProjectGantt({
           {groups.map((g) => (
             <div key={g.key}>
               {g.stage && (
-                <Row label={g.label} strong>
+                <Row label={g.stage.isAdditional ? `${g.label} (adicional)` : g.label} strong>
                   {g.stage.planned && (
                     <div className="absolute top-1.5 h-2 rounded" style={{ ...bar(g.stage.planned), background: C.planned }} title={`Planificado: ${shortDate(g.stage.planned.start)} → ${shortDate(g.stage.planned.end)}`} />
                   )}
@@ -280,6 +280,100 @@ function Stat({ label, value, hint, warn }: { label: string; value: string; hint
         {value}
       </div>
       <div className="text-[11px] text-[#7f7f7f]">{hint}</div>
+    </div>
+  );
+}
+
+// Comparativo por etapa: lo propuesto en la cubicación contra lo real.
+// Las etapas adicionales (creadas con el proyecto en curso) no tienen
+// "propuesto": se listan aparte para que no distorsionen la comparación.
+export function StageComparison({
+  timeline,
+  hoursByRequest,
+}: {
+  timeline: Timeline;
+  hoursByRequest: Map<string, number>;
+}) {
+  if (timeline.stages.length === 0) {
+    return <p className="text-sm text-[#7f7f7f]">El proyecto aún no tiene etapas.</p>;
+  }
+  const rows = timeline.stages.map((s) => {
+    const tasks = timeline.tasks.filter((t) => t.stageId === s.id);
+    const hours = tasks.reduce((a, t) => a + (hoursByRequest.get(t.id) ?? 0), 0);
+    const open = tasks.some((t) => !t.done);
+    const lateDays =
+      s.planned && s.actual ? Math.max(0, Math.round((s.actual.end.getTime() - s.planned.end.getTime()) / DAY)) : 0;
+    const redHours = s.estimatedHours != null ? Math.max(0, hours - s.estimatedHours) : 0;
+    return { s, tasks, hours, open, lateDays, redHours, done: tasks.filter((t) => t.done).length };
+  });
+  const proposed = rows.filter((r) => !r.s.isAdditional);
+  const additional = rows.filter((r) => r.s.isAdditional);
+  const sum = (rs: typeof rows, f: (r: (typeof rows)[number]) => number) => rs.reduce((a, r) => a + f(r), 0);
+  const range = (i: Interval | null | undefined, open = false) =>
+    i ? `${shortDate(i.start)} → ${open ? "en curso" : shortDate(i.end)}` : "—";
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-[#e4e8ec]">
+      <table className="w-full min-w-[760px] text-sm">
+        <thead>
+          <tr className="border-b border-[#e4e8ec] text-left text-xs text-[#5d6b77]">
+            <th className="px-4 py-2.5 font-semibold">Etapa</th>
+            <th className="px-4 py-2.5 font-semibold">Propuesto</th>
+            <th className="px-4 py-2.5 font-semibold">Real</th>
+            <th className="px-4 py-2.5 font-semibold">Desvío</th>
+            <th className="px-4 py-2.5 font-semibold">Tareas</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[...proposed, ...additional].map(({ s, hours, open, lateDays, redHours, tasks, done }) => (
+            <tr key={s.id} className="border-b border-[#f1f3f4] align-top last:border-0">
+              <td className="px-4 py-2.5 font-medium">
+                {s.name}
+                {s.isAdditional && (
+                  <span className="ml-2 rounded bg-[#efe9ff] px-1.5 py-0.5 text-[10px] font-semibold text-[#5b3fd0]">
+                    Adicional
+                  </span>
+                )}
+              </td>
+              <td className="px-4 py-2.5 text-[#5d6b77]">
+                <div>{range(s.planned)}</div>
+                <div className="text-xs">{s.estimatedHours != null ? hoursLabel(s.estimatedHours) : "sin horas"}</div>
+              </td>
+              <td className="px-4 py-2.5 text-[#5d6b77]">
+                <div>{range(s.actual, open)}</div>
+                <div className="text-xs">{hoursLabel(hours)}</div>
+              </td>
+              <td className="px-4 py-2.5">
+                {lateDays > 0 || redHours > 0 ? (
+                  <div className="font-semibold text-[#d21f3c]">
+                    {lateDays > 0 && <div>{lateDays} d fuera de plazo</div>}
+                    {redHours > 0 && <div>+{hoursLabel(redHours)} en rojo</div>}
+                  </div>
+                ) : s.planned || s.estimatedHours != null ? (
+                  <span className="text-[#0e9f6e]">En plazo</span>
+                ) : (
+                  <span className="text-[#7f7f7f]">—</span>
+                )}
+              </td>
+              <td className="px-4 py-2.5 text-[#5d6b77]">
+                {done} de {tasks.length}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t border-[#e4e8ec] bg-[#f8fafb] text-xs text-[#5d6b77]">
+            <td className="px-4 py-2 font-semibold">Total propuesto</td>
+            <td className="px-4 py-2">{hoursLabel(sum(proposed, (r) => r.s.estimatedHours ?? 0))}</td>
+            <td className="px-4 py-2">{hoursLabel(sum(proposed, (r) => r.hours))}</td>
+            <td className="px-4 py-2" colSpan={2}>
+              {additional.length > 0
+                ? `+ ${additional.length} etapa${additional.length === 1 ? "" : "s"} adicional${additional.length === 1 ? "" : "es"}: ${hoursLabel(sum(additional, (r) => r.hours))}`
+                : "Sin etapas adicionales"}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
     </div>
   );
 }

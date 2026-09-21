@@ -4,7 +4,7 @@ import { PortalShell, shellProps } from "@/components/portal/PortalShell";
 import { requirePortalUser } from "@/lib/portal";
 import { loadProjectInsights } from "@/lib/projectInsights";
 import { budgetStatus } from "@/lib/projectBudget";
-import { DelayComparison, ProjectGantt } from "@/components/ProjectTimeline";
+import { DelayComparison, ProjectGantt, StageComparison } from "@/components/ProjectTimeline";
 import { Bar } from "@/components/ui";
 import { hoursLabel, shortDate } from "@/lib/format";
 
@@ -96,6 +96,11 @@ export default async function PortalProyectoPage({ params }: { params: Promise<{
         <section className="rounded-2xl border border-[#e4e8ec] bg-white p-5">
           <h2 className="mb-3 font-brand text-sm font-semibold">Carta Gantt</h2>
           <ProjectGantt timeline={timeline} taskHref={taskHref} />
+        </section>
+
+        <section className="rounded-2xl border border-[#e4e8ec] bg-white p-5">
+          <h2 className="mb-3 font-brand text-sm font-semibold">Comparativo por etapa: propuesto vs. real</h2>
+          <StageComparison timeline={timeline} hoursByRequest={hoursByRequest} />
         </section>
 
         <section className="rounded-2xl border border-[#e4e8ec] bg-white p-5">

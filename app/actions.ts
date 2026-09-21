@@ -26,6 +26,7 @@ import { PRIORITY_MAP } from "@/lib/constants";
 import { getStatusMap } from "@/lib/statuses";
 import { isValidEmail } from "@/lib/validate";
 import { getPortalContext, canActAsClient, PORTAL_CLIENT_COOKIE } from "@/lib/portal";
+import { stageDateIssue } from "@/lib/projectBudget";
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 // Invitaciones de usuarios nuevos: la persona puede tardar en abrir el correo.
@@ -698,6 +699,11 @@ export async function updateProjectBudget(projectId: string, formData: FormData)
   const startDate = optDate(formData.get("startDate"));
   const endDate = optDate(formData.get("endDate"));
   if (startDate && endDate && endDate < startDate) redirect(`/proyectos/${projectId}?error=fechas`);
+  // El marco no puede dejar afuera etapas ya definidas.
+  const stages = await prisma.projectStage.findMany({ where: { projectId } });
+  if (stages.some((s) => stageDateIssue(s, { startDate, endDate }) === "fuera_marco")) {
+    redirect(`/proyectos/${projectId}?error=etapas_fuera`);
+  }
   await prisma.project.update({
     where: { id: projectId },
     data: { startDate, endDate, estimatedHours: optHours(formData.get("estimatedHours")) },
@@ -712,23 +718,95 @@ export async function updateProjectBudget(projectId: string, formData: FormData)
   revalidatePath("/proyectos");
 }
 
+// Quién puede tocar una etapa: las propuestas son parte de la cubicación
+// (projects.budget); las adicionales, creadas con el proyecto en curso,
+// las gestiona projects.manage. Antes de confirmar la cubicación toda
+// etapa nueva es propuesta.
+function stageAction(project: { baselineAt: Date | null }, stage: { isAdditional: boolean } | null): ActionId {
+  const additional = stage ? stage.isAdditional : !!project.baselineAt;
+  return additional ? "projects.manage" : "projects.budget";
+}
+
+// Congela la cubicación: lo propuesto queda como referencia del comparativo.
+export async function confirmProjectBudget(projectId: string) {
+  const user = await getSessionUser();
+  if (!user) return;
+  const project = await projectForAction(user, projectId, "projects.budget");
+  if (!project || project.baselineAt) return;
+  if (!project.estimatedHours && !(project.startDate && project.endDate)) {
+    redirect(`/proyectos/${projectId}?error=cubicacion_vacia`);
+  }
+  // Lo adicional pasa a ser parte de la nueva referencia (si se reabrió antes).
+  await prisma.$transaction([
+    prisma.project.update({ where: { id: projectId }, data: { baselineAt: new Date() } }),
+    prisma.projectStage.updateMany({ where: { projectId }, data: { isAdditional: false } }),
+  ]);
+  await logAudit({
+    type: "project_budget_confirmed",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `projectId=${projectId}`,
+  });
+  revalidatePath(`/proyectos/${projectId}`);
+}
+
+// Reabrir la cubicación (director / projects.budget): vuelve a permitir
+// editar lo propuesto libremente hasta confirmarla de nuevo. Queda auditado
+// porque cambia la referencia del comparativo.
+export async function reopenProjectBudget(projectId: string) {
+  const user = await getSessionUser();
+  if (!user) return;
+  const project = await projectForAction(user, projectId, "projects.budget");
+  if (!project || !project.baselineAt) return;
+  await prisma.project.update({ where: { id: projectId }, data: { baselineAt: null } });
+  await logAudit({
+    type: "project_budget_reopened",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `projectId=${projectId}, confirmadaEl=${project.baselineAt.toISOString()}`,
+  });
+  revalidatePath(`/proyectos/${projectId}`);
+}
+
 export async function saveStage(projectId: string, stageId: string | null, formData: FormData) {
   const user = await getSessionUser();
   if (!user) return;
-  const project = await projectForAction(user, projectId, "projects.manage");
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return;
+  const stage = stageId ? await prisma.projectStage.findFirst({ where: { id: stageId, projectId } }) : null;
+  if (stageId && !stage) return;
+  const action = stageAction(project, stage);
+  if (!(await canProjectAction(user, action, project.clientId))) return;
+
   const name = String(formData.get("name") || "").trim();
   if (!name) return;
   const startDate = optDate(formData.get("startDate"));
   const endDate = optDate(formData.get("endDate"));
-  if (startDate && endDate && endDate < startDate) redirect(`/proyectos/${projectId}?error=fechas`);
+  const issue = stageDateIssue({ startDate, endDate }, project);
+  if (issue === "orden") redirect(`/proyectos/${projectId}?error=fechas`);
+  if (issue === "fuera_marco") redirect(`/proyectos/${projectId}?error=fuera_marco`);
+  // Con el proyecto en curso, una etapa adicional debe declarar sus fechas
+  // para poder comprobar que cabe en el marco inicial.
+  const isNewAdditional = !stage && !!project.baselineAt;
+  if (isNewAdditional && project.startDate && project.endDate && (!startDate || !endDate)) {
+    redirect(`/proyectos/${projectId}?error=fechas_requeridas`);
+  }
   const data = { name, startDate, endDate, estimatedHours: optHours(formData.get("estimatedHours")) };
-  if (stageId) {
-    await prisma.projectStage.updateMany({ where: { id: stageId, projectId }, data });
+  if (stage) {
+    await prisma.projectStage.update({ where: { id: stage.id }, data });
+    if (!stage.isAdditional && project.baselineAt) {
+      // Cambiar lo propuesto después de confirmar altera el comparativo: queda registrado.
+      await logAudit({
+        type: "project_baseline_stage_changed",
+        actorId: user.id,
+        actorEmail: user.email,
+        detail: `projectId=${projectId}, stageId=${stage.id}`,
+      });
+    }
   } else {
     const last = await prisma.projectStage.aggregate({ where: { projectId }, _max: { sortOrder: true } });
     await prisma.projectStage.create({
-      data: { ...data, projectId, sortOrder: (last._max.sortOrder ?? 0) + 1 },
+      data: { ...data, projectId, sortOrder: (last._max.sortOrder ?? 0) + 1, isAdditional: isNewAdditional },
     });
   }
   revalidatePath(`/proyectos/${projectId}`);
@@ -736,9 +814,21 @@ export async function saveStage(projectId: string, stageId: string | null, formD
 
 export async function deleteStage(projectId: string, stageId: string) {
   const user = await getSessionUser();
-  if (!user || !(await projectForAction(user, projectId, "projects.manage"))) return;
+  if (!user) return;
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  const stage = await prisma.projectStage.findFirst({ where: { id: stageId, projectId } });
+  if (!project || !stage) return;
+  if (!(await canProjectAction(user, stageAction(project, stage), project.clientId))) return;
   // Las solicitudes de la etapa quedan sin etapa (onDelete: SetNull).
-  await prisma.projectStage.deleteMany({ where: { id: stageId, projectId } });
+  await prisma.projectStage.delete({ where: { id: stage.id } });
+  if (!stage.isAdditional && project.baselineAt) {
+    await logAudit({
+      type: "project_baseline_stage_deleted",
+      actorId: user.id,
+      actorEmail: user.email,
+      detail: `projectId=${projectId}, stage=${stage.name}`,
+    });
+  }
   revalidatePath(`/proyectos/${projectId}`);
 }
 

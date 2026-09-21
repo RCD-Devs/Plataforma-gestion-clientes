@@ -4,8 +4,8 @@ import { getSessionUser } from "@/lib/session";
 import { canOnClient } from "@/lib/permissions";
 import { budgetStatus } from "@/lib/projectBudget";
 import { loadProjectInsights } from "@/lib/projectInsights";
-import { DelayComparison, ProjectGantt } from "@/components/ProjectTimeline";
-import { deleteStage, saveStage, setRequestStage, updateProjectBudget } from "@/app/actions";
+import { DelayComparison, ProjectGantt, StageComparison } from "@/components/ProjectTimeline";
+import { confirmProjectBudget, reopenProjectBudget, deleteStage, saveStage, setRequestStage, updateProjectBudget } from "@/app/actions";
 import { SubmitButton } from "@/components/SubmitButton";
 import { StatusBadge, Bar } from "@/components/ui";
 import { hoursLabel, shortDate } from "@/lib/format";
@@ -18,6 +18,13 @@ const inputCls =
 const labelCls = "mb-1 block text-xs font-semibold text-[#5d6b77]";
 const btnCls =
   "rounded-md bg-[#0bdbcf] px-3 py-2 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]";
+
+const ERRORS: Record<string, string> = {
+  fuera_marco: "La etapa debe quedar dentro del marco de fechas del proyecto (inicio y término de la cubicación).",
+  etapas_fuera: "Hay etapas fuera de esas fechas: ajústalas antes de cambiar el marco del proyecto.",
+  fechas_requeridas: "Con el proyecto en curso, la etapa adicional necesita fecha de inicio y de término.",
+  cubicacion_vacia: "Carga horas estimadas o fechas antes de confirmar la cubicación.",
+};
 
 export default async function ProyectoPage({
   params,
@@ -51,6 +58,9 @@ export default async function ProyectoPage({
     done: allDone,
   });
   const noStage = project.requests.filter((r) => !r.stageId);
+  const proposedHours = project.stages.filter((s) => !s.isAdditional).reduce((a, s) => a + (s.estimatedHours ?? 0), 0);
+  const frameMin = project.startDate ? toDateInput(project.startDate) : undefined;
+  const frameMax = project.endDate ? toDateInput(project.endDate) : undefined;
 
   return (
     <div className="flex h-full flex-col">
@@ -66,6 +76,11 @@ export default async function ProyectoPage({
         {error === "fechas" && (
           <div className="rounded-lg border border-[#fda565] bg-[#feede6] px-3 py-2 text-sm text-[#9a4a1e]">
             La fecha de término no puede ser anterior a la de inicio.
+          </div>
+        )}
+        {error && error !== "fechas" && ERRORS[error] && (
+          <div className="rounded-lg border border-[#fda565] bg-[#feede6] px-3 py-2 text-sm text-[#9a4a1e]">
+            {ERRORS[error]}
           </div>
         )}
 
@@ -144,6 +159,38 @@ export default async function ProyectoPage({
               <SubmitButton className={btnCls}>Guardar cubicación</SubmitButton>
             </form>
           )}
+          {project.baselineAt ? (
+            <div className="mt-4 rounded-lg bg-[#f4f6f8] px-3 py-2 text-xs text-[#5d6b77]">
+              Cubicación confirmada el {shortDate(project.baselineAt)}. Las etapas que se agreguen ahora son
+              adicionales y deben quedar dentro del marco{" "}
+              {project.startDate && project.endDate
+                ? `${shortDate(project.startDate)} → ${shortDate(project.endDate)}`
+                : "inicial"}
+              .
+              {canBudget && (
+                <form action={reopenProjectBudget.bind(null, project.id)} className="mt-2">
+                  <SubmitButton className="rounded-md border border-[#e4e8ec] bg-white px-3 py-1.5 text-xs font-semibold text-[#5d6b77] hover:bg-[#f8fafb]">
+                    Reabrir cubicación
+                  </SubmitButton>
+                  <span className="ml-2">
+                    Permite volver a editar lo propuesto. Al confirmarla de nuevo, las etapas adicionales pasan a
+                    ser parte de lo propuesto.
+                  </span>
+                </form>
+              )}
+            </div>
+          ) : (
+            canBudget && (
+              <form action={confirmProjectBudget.bind(null, project.id)} className="mt-4 flex flex-wrap items-center gap-3">
+                <SubmitButton className="rounded-md border border-[#0bdbcf] px-3 py-2 text-sm font-semibold text-[#065f5a] hover:bg-[#e0fbf9]">
+                  Confirmar cubicación
+                </SubmitButton>
+                <span className="text-xs text-[#5d6b77]">
+                  Congela lo propuesto (total y etapas). Las etapas que se agreguen después serán adicionales.
+                </span>
+              </form>
+            )
+          )}
           <p className="mt-3 text-[11px] text-[#7f7f7f]">
             Si se pasa de lo estimado el trabajo sigue: lo que excede queda marcado en rojo.
           </p>
@@ -155,12 +202,24 @@ export default async function ProyectoPage({
         </section>
 
         <section className="rounded-xl border border-[#e4e8ec] bg-white p-5">
+          <h2 className="mb-3 text-sm font-semibold">Comparativo por etapa: propuesto vs. real</h2>
+          <StageComparison timeline={timeline} hoursByRequest={hoursByRequest} />
+        </section>
+
+        <section className="rounded-xl border border-[#e4e8ec] bg-white p-5">
           <h2 className="mb-3 text-sm font-semibold">Comparativo de demoras</h2>
           <DelayComparison timeline={timeline} hoursByRequest={hoursByRequest} taskHref={(k) => `/solicitudes/${k}`} />
         </section>
 
         <section className="rounded-xl border border-[#e4e8ec] bg-white p-5">
-          <h2 className="mb-3 text-sm font-semibold">Etapas</h2>
+          <h2 className="mb-1 text-sm font-semibold">Etapas (parte de la cubicación)</h2>
+          <p className="mb-3 text-xs text-[#5d6b77]">
+            Son las mismas etapas que se usan en las tareas y en el Gantt.
+            {proposedHours > 0 &&
+              ` Las propuestas suman ${hoursLabel(proposedHours)}${
+                project.estimatedHours ? ` de ${hoursLabel(project.estimatedHours)} estimadas` : ""
+              }.`}
+          </p>
           {project.stages.length === 0 ? (
             <p className="text-sm text-[#7f7f7f]">Aún no hay etapas.</p>
           ) : (
@@ -178,7 +237,14 @@ export default async function ProyectoPage({
                 return (
                   <details key={s.id} className="rounded-lg border border-[#f1f3f4] px-3 py-2">
                     <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2 text-sm">
-                      <span className="font-semibold">{s.name}</span>
+                      <span className="font-semibold">
+                        {s.name}
+                        {s.isAdditional && (
+                          <span className="ml-2 rounded bg-[#efe9ff] px-1.5 py-0.5 text-[10px] font-semibold text-[#5b3fd0]">
+                            Adicional
+                          </span>
+                        )}
+                      </span>
                       <span className="text-xs text-[#5d6b77]">
                         {s.startDate && s.endDate ? `${shortDate(s.startDate)} → ${shortDate(s.endDate)} · ` : ""}
                         {reqs.length} tarea{reqs.length === 1 ? "" : "s"} · {hoursLabel(h)}
@@ -191,9 +257,9 @@ export default async function ProyectoPage({
                         )}
                       </span>
                     </summary>
-                    {canManage && (
+                    {(s.isAdditional ? canManage : canBudget) && (
                       <div className="mt-3 flex flex-wrap items-end gap-2">
-                        <StageForm action={saveStage.bind(null, project.id, s.id)} stage={s} label="Guardar" />
+                        <StageForm action={saveStage.bind(null, project.id, s.id)} stage={s} label="Guardar" min={frameMin} max={frameMax} />
                         <form action={deleteStage.bind(null, project.id, s.id)}>
                           <button className="rounded-md border border-[#e4e8ec] px-3 py-2 text-sm text-[#d21f3c] hover:bg-[#fdf2f4]">
                             Eliminar
@@ -212,10 +278,17 @@ export default async function ProyectoPage({
               )}
             </div>
           )}
-          {canManage && (
+          {(project.baselineAt ? canManage : canBudget) && (
             <div className="mt-4 border-t border-[#f1f3f4] pt-4">
-              <div className="mb-2 text-xs font-semibold text-[#5d6b77]">Nueva etapa</div>
-              <StageForm action={saveStage.bind(null, project.id, null)} label="Agregar etapa" />
+              <div className="mb-2 text-xs font-semibold text-[#5d6b77]">
+                {project.baselineAt ? "Nueva etapa adicional (dentro del marco inicial)" : "Nueva etapa propuesta"}
+              </div>
+              <StageForm
+                action={saveStage.bind(null, project.id, null)}
+                label="Agregar etapa"
+                min={frameMin}
+                max={frameMax}
+              />
             </div>
           )}
         </section>
@@ -286,10 +359,15 @@ function StageForm({
   action,
   stage,
   label,
+  min,
+  max,
 }: {
   action: (formData: FormData) => void | Promise<void>;
   stage?: { name: string; startDate: Date | null; endDate: Date | null; estimatedHours: number | null };
   label: string;
+  // Marco de fechas del proyecto: guía el selector (el servidor también valida).
+  min?: string;
+  max?: string;
 }) {
   return (
     <form action={action} className="flex flex-wrap items-end gap-2">
@@ -299,11 +377,11 @@ function StageForm({
       </div>
       <div>
         <label className={labelCls}>Inicio</label>
-        <input name="startDate" type="date" defaultValue={stage?.startDate ? toDateInput(stage.startDate) : ""} className={inputCls} />
+        <input name="startDate" type="date" min={min} max={max} defaultValue={stage?.startDate ? toDateInput(stage.startDate) : ""} className={inputCls} />
       </div>
       <div>
         <label className={labelCls}>Término</label>
-        <input name="endDate" type="date" defaultValue={stage?.endDate ? toDateInput(stage.endDate) : ""} className={inputCls} />
+        <input name="endDate" type="date" min={min} max={max} defaultValue={stage?.endDate ? toDateInput(stage.endDate) : ""} className={inputCls} />
       </div>
       <div className="w-28">
         <label className={labelCls}>Horas est.</label>

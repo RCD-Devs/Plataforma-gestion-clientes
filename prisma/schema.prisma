@@ -54,6 +54,9 @@ model Project {
   startDate      DateTime?
   endDate        DateTime?
   estimatedHours Float?
+  // Cubicación confirmada: congela lo propuesto. Las etapas que se agreguen
+  // después son adicionales y deben quedar dentro de startDate–endDate.
+  baselineAt     DateTime?
 
   clientId String
   client   Client @relation(fields: [clientId], references: [id])
@@ -73,6 +76,8 @@ model ProjectStage {
   endDate        DateTime?
   estimatedHours Float?
   sortOrder      Int       @default(0)
+  // Creada después de confirmar la cubicación (no era parte de lo propuesto).
+  isAdditional   Boolean   @default(false)
 
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)

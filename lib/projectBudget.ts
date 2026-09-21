@@ -5,6 +5,20 @@ const DAY = 86400000;
 // Día de calendario (no diferencias de ms): el cambio de hora hace días de 23/25 h.
 const dayNum = (x: Date) => Math.round(Date.UTC(x.getFullYear(), x.getMonth(), x.getDate()) / DAY);
 
+// Una etapa debe tener inicio <= término y, si el proyecto tiene marco de
+// fechas, quedar completamente dentro de él.
+export function stageDateIssue(
+  stage: { startDate: Date | null; endDate: Date | null },
+  project: { startDate: Date | null; endDate: Date | null },
+): "orden" | "fuera_marco" | null {
+  const { startDate: s, endDate: e } = stage;
+  if (s && e && dayNum(e) < dayNum(s)) return "orden";
+  if (project.startDate && s && dayNum(s) < dayNum(project.startDate)) return "fuera_marco";
+  if (project.endDate && e && dayNum(e) > dayNum(project.endDate)) return "fuera_marco";
+  if (project.startDate && project.endDate && (!s || !e)) return null; // fechas incompletas: lo decide quien llama
+  return null;
+}
+
 export type BudgetStatus = {
   hasHours: boolean;
   remainingHours: number; // nunca negativo
