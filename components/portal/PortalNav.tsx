@@ -6,6 +6,12 @@ import { usePathname } from "next/navigation";
 const ITEMS = [
   { href: "/portal", label: "Inicio", icon: "🏠", match: (p: string) => p === "/portal" },
   {
+    href: "/portal/proyectos",
+    label: "Proyectos",
+    icon: "🗂️",
+    match: (p: string) => p.startsWith("/portal/proyectos"),
+  },
+  {
     href: "/portal/solicitudes",
     label: "Mis solicitudes",
     icon: "📋",

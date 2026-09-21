@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import type { Client } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { cycleGrants, getHoursSummaries } from "@/lib/hoursLedger";
@@ -251,7 +252,9 @@ export async function PortalDashboard({ client }: { client: Client }) {
                   return (
                     <li key={p.id} className="text-sm">
                       <div className="mb-1 flex justify-between">
-                        <span className="font-semibold">{p.name}</span>
+                        <Link href={`/portal/proyectos/${p.id}`} className="font-semibold hover:text-[#08a89f] hover:underline">
+                          {p.name}
+                        </Link>
                         <span className="text-xs text-[#5d6b77]">
                           {pDone} de {p.requests.length} tareas
                         </span>

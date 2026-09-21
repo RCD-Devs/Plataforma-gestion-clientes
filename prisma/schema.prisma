@@ -264,6 +264,7 @@ model Request {
   collaborators     RequestCollaborator[]
   customFieldValues CustomFieldValue[]
   commentReads      CommentRead[]
+  statusChanges     StatusChange[]
 
   @@index([clientId])
   @@index([assigneeId])
@@ -412,7 +413,26 @@ model Status {
   // estancadas. isFinal no aplica aquí (una tarea final ya no genera esas
   // alertas por otro motivo).
   isOptional Boolean   @default(false)
+  // La tarea está esperando respuesta/insumos del cliente (ej. "En espera
+  // del cliente"): ese tiempo se atribuye al cliente en el comparativo de
+  // proyectos (Gantt del portal).
+  waitsOnClient Boolean  @default(false)
   archivedAt DateTime?
+}
+
+// Historial de cambios de estado (append-only) — permite saber cuánto
+// tiempo estuvo una tarea en cada estado. Activity guarda solo texto y no
+// sirve para calcular duraciones.
+model StatusChange {
+  id        String   @id @default(cuid())
+  status    String // Status.code
+  at        DateTime @default(now())
+  actorName String?
+
+  requestId String
+  request   Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
 }
 
 // Bitácora de seguridad — login, cambios de contraseña, etc. Separada de

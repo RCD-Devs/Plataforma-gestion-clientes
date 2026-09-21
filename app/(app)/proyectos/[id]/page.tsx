@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { canOnClient } from "@/lib/permissions";
-import { getStatuses } from "@/lib/statuses";
 import { budgetStatus } from "@/lib/projectBudget";
+import { loadProjectInsights } from "@/lib/projectInsights";
+import { DelayComparison, ProjectGantt } from "@/components/ProjectTimeline";
 import { deleteStage, saveStage, setRequestStage, updateProjectBudget } from "@/app/actions";
 import { SubmitButton } from "@/components/SubmitButton";
 import { StatusBadge, Bar } from "@/components/ui";
@@ -31,29 +31,15 @@ export default async function ProyectoPage({
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
-  const [project, statuses] = await Promise.all([
-    prisma.project.findUnique({
-      where: { id },
-      include: {
-        client: { select: { id: true, name: true, accountManagerId: true } },
-        stages: { orderBy: { sortOrder: "asc" } },
-        requests: {
-          where: { archivedAt: null },
-          orderBy: { createdAt: "asc" },
-          include: { timeEntries: { select: { hours: true } } },
-        },
-      },
-    }),
-    getStatuses(),
-  ]);
-  if (!project) notFound();
+  const insights = await loadProjectInsights(id);
+  if (!insights) notFound();
+  const { project, timeline, finalCodes, hoursByRequest } = insights;
   const can = (a: "projects.view" | "projects.manage" | "projects.budget") =>
     canOnClient(user.capabilities, a, user.id, project.client);
   if (!can("projects.view")) redirect("/mi-espacio");
   const canManage = can("projects.manage");
   const canBudget = can("projects.budget");
 
-  const finalCodes = new Set(statuses.filter((s) => s.isFinal).map((s) => s.code));
   const hoursOf = (r: (typeof project.requests)[number]) => r.timeEntries.reduce((a, t) => a + t.hours, 0);
   const consumed = project.requests.reduce((a, r) => a + hoursOf(r), 0);
   const allDone = project.requests.length > 0 && project.requests.every((r) => finalCodes.has(r.status));
@@ -161,6 +147,16 @@ export default async function ProyectoPage({
           <p className="mt-3 text-[11px] text-[#7f7f7f]">
             Si se pasa de lo estimado el trabajo sigue: lo que excede queda marcado en rojo.
           </p>
+        </section>
+
+        <section className="rounded-xl border border-[#e4e8ec] bg-white p-5">
+          <h2 className="mb-3 text-sm font-semibold">Carta Gantt</h2>
+          <ProjectGantt timeline={timeline} taskHref={(k) => `/solicitudes/${k}`} />
+        </section>
+
+        <section className="rounded-xl border border-[#e4e8ec] bg-white p-5">
+          <h2 className="mb-3 text-sm font-semibold">Comparativo de demoras</h2>
+          <DelayComparison timeline={timeline} hoursByRequest={hoursByRequest} taskHref={(k) => `/solicitudes/${k}`} />
         </section>
 
         <section className="rounded-xl border border-[#e4e8ec] bg-white p-5">

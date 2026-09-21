@@ -13,6 +13,7 @@ export type StatusInfo = {
   sortOrder: number;
   isFinal: boolean;
   isOptional: boolean;
+  waitsOnClient: boolean;
 };
 
 export const getStatuses = cache(async (): Promise<StatusInfo[]> => {

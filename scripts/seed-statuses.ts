@@ -17,6 +17,9 @@ const DEFAULT_STATUSES = [
   { code: "POR_HACER", label: "Por hacer", color: "#16324a", sortOrder: 1, isFinal: false },
   { code: "EN_PAUSA", label: "En pausa", color: "#c97416", sortOrder: 2, isFinal: false, isOptional: true },
   { code: "EN_DESARROLLO", label: "En desarrollo", color: "#08a89f", sortOrder: 3, isFinal: false },
+  // Espera respuesta del cliente (Gantt del portal): no genera alertas de SLA
+  // (isOptional) y su duración se atribuye al cliente (waitsOnClient).
+  { code: "EN_ESPERA_CLIENTE", label: "En espera del cliente", color: "#7c5cff", sortOrder: 4, isFinal: false, isOptional: true, waitsOnClient: true },
   { code: "EN_REVISION", label: "En revisión", color: "#e2532a", sortOrder: 4, isFinal: false },
   { code: "FINALIZADA", label: "Finalizada", color: "#0e9f6e", sortOrder: 5, isFinal: true },
 ];

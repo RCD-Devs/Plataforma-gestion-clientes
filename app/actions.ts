@@ -327,6 +327,7 @@ export async function changeStatus(
     data: {
       status,
       finalizedAt: statusMap[status]?.isFinal ? new Date() : null,
+      statusChanges: { create: { status, actorName: user.name } },
     },
   });
   const label = statusMap[status]?.label ?? status;
@@ -804,12 +805,13 @@ function statusFormValues(formData: FormData, fallbackSortOrder: number) {
   const color = String(formData.get("color") || "#7f7f7f").trim();
   const isFinal = formData.get("isFinal") === "on";
   const isOptional = formData.get("isOptional") === "on";
+  const waitsOnClient = formData.get("waitsOnClient") === "on";
   const sortOrderRaw = formData.get("sortOrder");
   const sortOrder =
     sortOrderRaw !== null && sortOrderRaw !== ""
       ? Number(sortOrderRaw)
       : fallbackSortOrder;
-  return { label, color, isFinal, isOptional, sortOrder };
+  return { label, color, isFinal, isOptional, waitsOnClient, sortOrder };
 }
 
 export async function createStatus(formData: FormData) {
@@ -822,14 +824,14 @@ export async function createStatus(formData: FormData) {
     .replace(/[^A-Z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
   const count = await prisma.status.count();
-  const { label, color, isFinal, isOptional, sortOrder } = statusFormValues(formData, count);
+  const { label, color, isFinal, isOptional, waitsOnClient, sortOrder } = statusFormValues(formData, count);
   if (!code || !label) redirect("/admin/estados?error=datos");
 
   const existing = await prisma.status.findUnique({ where: { code } });
   if (existing) redirect("/admin/estados?error=code_existente");
 
   const status = await prisma.status.create({
-    data: { code, label, color, isFinal, isOptional, sortOrder },
+    data: { code, label, color, isFinal, isOptional, waitsOnClient, sortOrder },
   });
   await logAudit({
     type: "admin_status_created",
@@ -846,12 +848,12 @@ export async function updateStatus(statusId: string, formData: FormData) {
   const user = await getSessionUser();
   if (!user || !user.roleCodes.includes("ADMIN")) redirect("/mi-espacio");
 
-  const { label, color, isFinal, isOptional, sortOrder } = statusFormValues(formData, 0);
+  const { label, color, isFinal, isOptional, waitsOnClient, sortOrder } = statusFormValues(formData, 0);
   if (!label) redirect("/admin/estados?error=datos");
 
   await prisma.status.update({
     where: { id: statusId },
-    data: { label, color, isFinal, isOptional, sortOrder },
+    data: { label, color, isFinal, isOptional, waitsOnClient, sortOrder },
   });
   await logAudit({
     type: "admin_status_updated",
@@ -1189,7 +1191,9 @@ export async function handoffRequest(formData: FormData) {
     data: {
       assigneeId: to.id,
       teamId: to.teamId ?? undefined,
-      ...(statusChanges ? { status: newStatus } : {}),
+      ...(statusChanges
+        ? { status: newStatus, statusChanges: { create: { status: newStatus, actorName: user.name } } }
+        : {}),
     },
   });
   await prisma.activity.create({
