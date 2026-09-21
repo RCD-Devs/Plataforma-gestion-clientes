@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Image from "next/image";
 import { prisma } from "@/lib/db";
 import { submitRequest } from "@/app/actions";
+import { ClientProjectFields } from "@/components/ClientProjectFields";
 import { REQUEST_TYPES, PRIORITIES } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,13 @@ export default async function SolicitarPage({
   const clients = await prisma.client.findMany({
     where: { isActive: true },
     orderBy: { name: "asc" },
+    include: {
+      projects: {
+        where: { archivedAt: null },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      },
+    },
   });
   const { error } = await searchParams;
 
@@ -61,23 +69,10 @@ export default async function SolicitarPage({
             aria-hidden="true"
             className="absolute left-[-9999px] h-0 w-0 opacity-0"
           />
-          <Field label="Empresa / Cliente">
-            <select
-              name="clientId"
-              required
-              className={inputCls}
-              defaultValue=""
-            >
-              <option value="" disabled>
-                Selecciona…
-              </option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </Field>
+          <ClientProjectFields
+            inputCls={inputCls}
+            clients={clients.map((c) => ({ id: c.id, name: c.name, projects: c.projects }))}
+          />
 
           <Field
             label="Tu correo"

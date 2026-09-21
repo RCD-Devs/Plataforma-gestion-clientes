@@ -1145,6 +1145,14 @@ export async function submitRequest(formData: FormData) {
   const dueStr = String(formData.get("dueDate") || "");
   if (!clientId || !title) redirect("/solicitar?error=datos");
   if (!isValidEmail(requesterEmail)) redirect("/solicitar?error=correo");
+  // Sitio/proyecto opcional: solo si pertenece a la empresa elegida.
+  const rawProject = String(formData.get("projectId") || "");
+  const project = rawProject
+    ? await prisma.project.findFirst({
+        where: { id: rawProject, clientId, archivedAt: null },
+        select: { id: true },
+      })
+    : null;
 
   const req = await withKeyRetry((key) =>
     prisma.request.create({
@@ -1156,6 +1164,7 @@ export async function submitRequest(formData: FormData) {
         priority,
         requesterEmail,
         clientId,
+        projectId: project?.id ?? null,
         status: "SIN_TRIAGE",
         dueDate: dueStr ? parseLocalDate(dueStr) : null,
       },

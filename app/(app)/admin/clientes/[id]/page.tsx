@@ -133,8 +133,10 @@ export default async function EditarClientePage({
       <div className="max-w-xl space-y-4 border-t border-[#e6e8eb] p-6">
         <h2 className="text-sm font-semibold">Proyectos</h2>
         <p className="text-xs text-[#6b7280]">
-          Cada proyecto es su propio tablero filtrado. La mantención general
-          (formulario público, portal) sigue sin proyecto asignado.
+          Cada proyecto o sitio es su propio tablero filtrado, y sus horas se
+          ven por separado en el portal del cliente. Al ingresar una solicitud
+          (formulario público o portal) el cliente puede elegir el sitio; si
+          no elige, queda como mantención general.
         </p>
 
         {projects.length > 0 && (
