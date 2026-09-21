@@ -22,7 +22,10 @@ export type ActionId =
   | "team.view_load"
   | "users.manage"
   | "clients.manage"
-  | "roles.manage";
+  | "roles.manage"
+  | "projects.view"
+  | "projects.manage"
+  | "projects.budget";
 
 export const ACTIONS: { key: ActionId; label: string; scopes: Scope[] }[] = [
   {
@@ -69,6 +72,21 @@ export const ACTIONS: { key: ActionId; label: string; scopes: Scope[] }[] = [
     key: "roles.manage",
     label: "Administrar roles y permisos",
     scopes: ["all", "none"],
+  },
+  {
+    key: "projects.view",
+    label: "Ver proyectos (ficha, etapas, consumo de horas)",
+    scopes: ["all", "own_clients", "none"],
+  },
+  {
+    key: "projects.manage",
+    label: "Crear/archivar proyectos, gestionar etapas y asignar tareas a etapas",
+    scopes: ["all", "own_clients", "none"],
+  },
+  {
+    key: "projects.budget",
+    label: "Cargar y editar la cubicación estimada (horas y fechas) del proyecto",
+    scopes: ["all", "own_clients", "none"],
   },
 ];
 

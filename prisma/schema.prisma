@@ -48,12 +48,38 @@ model Project {
   createdAt  DateTime  @default(now())
   archivedAt DateTime?
 
+  // Cubicación estimada inicial (etapa 1 de "proyecto como mini-ecosistema"):
+  // por horas, por fechas, o ambas — todo opcional. El consumo real sale de
+  // los TimeEntry de sus solicitudes; pasarse no bloquea, se marca en rojo.
+  startDate      DateTime?
+  endDate        DateTime?
+  estimatedHours Float?
+
   clientId String
   client   Client @relation(fields: [clientId], references: [id])
 
   requests Request[]
+  stages   ProjectStage[]
 
   @@index([clientId])
+}
+
+// Etapa de un proyecto (base de la carta Gantt, etapa 2). Las solicitudes
+// del proyecto se asignan a una etapa; sus horas estimadas son opcionales.
+model ProjectStage {
+  id             String    @id @default(cuid())
+  name           String
+  startDate      DateTime?
+  endDate        DateTime?
+  estimatedHours Float?
+  sortOrder      Int       @default(0)
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  requests Request[]
+
+  @@index([projectId])
 }
 
 // Ajuste manual a la bolsa de horas de un cliente (Rec. #36) — a
@@ -214,6 +240,10 @@ model Request {
   // portal; es una acción del equipo interno.
   projectId String?
   project   Project? @relation(fields: [projectId], references: [id])
+
+  // Etapa del proyecto (opcional; solo tiene sentido si hay projectId).
+  stageId String?
+  stage   ProjectStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
 
   // Subtareas: una subtarea es un Request con padre, hereda
   // clientId/projectId del padre al crearse.

@@ -34,6 +34,9 @@ const DEFAULT_PERMISSIONS: [string, ActionId, Scope][] = [
   ["ADMIN", "users.manage", "all"],
   ["ADMIN", "clients.manage", "all"],
   ["ADMIN", "roles.manage", "all"],
+  ["ADMIN", "projects.view", "all"],
+  ["ADMIN", "projects.manage", "all"],
+  ["ADMIN", "projects.budget", "all"],
 
   ["LIDER_AREA", "requests.access", "all"],
   ["LIDER_AREA", "requests.assign", "all"],
@@ -41,12 +44,16 @@ const DEFAULT_PERMISSIONS: [string, ActionId, Scope][] = [
   ["LIDER_AREA", "clients.view", "all"],
   ["LIDER_AREA", "reports.export", "all"],
   ["LIDER_AREA", "team.view_load", "all"],
+  ["LIDER_AREA", "projects.view", "all"],
+  ["LIDER_AREA", "projects.manage", "all"],
+  ["LIDER_AREA", "projects.budget", "all"],
 
   ["COORDINADOR_CUENTA", "requests.access", "own_clients"],
   ["COORDINADOR_CUENTA", "requests.assign", "all"],
   ["COORDINADOR_CUENTA", "requests.set_priority", "all"],
   ["COORDINADOR_CUENTA", "clients.view", "own_clients"],
   ["COORDINADOR_CUENTA", "reports.export", "own_clients"],
+  ["COORDINADOR_CUENTA", "projects.view", "own_clients"],
 
   ["DISENADOR_UXUI", "requests.access", "assigned"],
   ["SEO", "requests.access", "assigned"],

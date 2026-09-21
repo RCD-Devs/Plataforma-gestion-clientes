@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { updateClient, createHoursAdjustment, createProject, setProjectActive } from "@/app/actions";
@@ -146,7 +147,9 @@ export default async function EditarClientePage({
                 key={p.id}
                 className="flex items-center justify-between rounded-lg border border-[#f1f3f4] px-3 py-2 text-sm"
               >
-                <span>{p.name}</span>
+                <Link href={`/proyectos/${p.id}`} className="hover:text-[#08a89f] hover:underline">
+                  {p.name}
+                </Link>
                 <ActiveToggle id={p.id} isActive={!p.archivedAt} action={setProjectActive} />
               </div>
             ))}

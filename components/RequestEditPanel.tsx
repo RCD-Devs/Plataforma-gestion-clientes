@@ -16,6 +16,8 @@ export function RequestEditPanel({
   dueDate,
   projectId,
   projects,
+  stageId,
+  stages,
 }: {
   requestId: string;
   title: string;
@@ -24,8 +26,11 @@ export function RequestEditPanel({
   dueDate: Date | null;
   projectId: string | null;
   projects: { id: string; name: string }[];
+  stageId: string | null;
+  stages: { id: string; name: string; projectId: string }[];
 }) {
   const [open, setOpen] = useState(false);
+  const [project, setProject] = useState(projectId ?? "");
   const [pending, startTransition] = useTransition();
 
   if (!open) {
@@ -97,7 +102,12 @@ export function RequestEditPanel({
         <label className="mb-1 block text-xs font-semibold text-[#6b7280]">
           Proyecto
         </label>
-        <select name="projectId" defaultValue={projectId ?? ""} className={inputCls}>
+        <select
+          name="projectId"
+          value={project}
+          onChange={(e) => setProject(e.target.value)}
+          className={inputCls}
+        >
           <option value="">Sin proyecto (mantención general)</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -106,6 +116,28 @@ export function RequestEditPanel({
           ))}
         </select>
       </div>
+      {stages.some((s) => s.projectId === project) && (
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-[#6b7280]">
+            Etapa del proyecto
+          </label>
+          <select
+            key={project}
+            name="stageId"
+            defaultValue={stages.find((s) => s.id === stageId && s.projectId === project)?.id ?? ""}
+            className={inputCls}
+          >
+            <option value="">Sin etapa</option>
+            {stages
+              .filter((s) => s.projectId === project)
+              .map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+          </select>
+        </div>
+      )}
       <div className="flex gap-2 pt-1">
         <button
           disabled={pending}

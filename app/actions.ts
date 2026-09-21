@@ -15,7 +15,7 @@ import {
 import { hashResetToken, tokenRecordProblem } from "@/lib/reset-token";
 import { sendPasswordReset, sendWelcomeEmail } from "@/lib/email";
 import { isTeamRole, canActOnRequest } from "@/lib/authz";
-import { hasAccess, ACTIONS } from "@/lib/permissions";
+import { hasAccess, canOnClient, ACTIONS, type ActionId, type Capabilities } from "@/lib/permissions";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { logAudit } from "@/lib/audit";
 import { storeUploadedFile } from "@/lib/attachments";
@@ -415,6 +415,12 @@ export async function updateRequestDetails(requestId: string, formData: FormData
     const project = await prisma.project.findUnique({ where: { id: projectIdRaw } });
     if (project && project.clientId === existing.clientId) projectId = project.id;
   }
+  // La etapa solo vale si pertenece al proyecto elegido.
+  const stageRaw = String(formData.get("stageId") || "");
+  const stage =
+    projectId && stageRaw
+      ? await prisma.projectStage.findFirst({ where: { id: stageRaw, projectId }, select: { id: true } })
+      : null;
 
   const req = await prisma.request.update({
     where: { id: requestId },
@@ -424,6 +430,7 @@ export async function updateRequestDetails(requestId: string, formData: FormData
       type,
       dueDate: dueStr ? parseLocalDate(dueStr) : null,
       projectId,
+      stageId: stage?.id ?? null,
     },
   });
   await prisma.activity.create({
@@ -618,9 +625,23 @@ export async function markCommentsRead(requestId: string) {
   });
 }
 
+// Permiso de proyectos sobre un cliente concreto (alcance "own_clients" =
+// solo los clientes que el usuario coordina).
+async function canProjectAction(
+  user: { id: string; capabilities: Capabilities },
+  action: ActionId,
+  clientId: string,
+) {
+  const client = await prisma.client.findUnique({
+    where: { id: clientId },
+    select: { accountManagerId: true },
+  });
+  return !!client && canOnClient(user.capabilities, action, user.id, client);
+}
+
 export async function createProject(clientId: string, formData: FormData) {
   const user = await getSessionUser();
-  if (!user || !user.roleCodes.includes("ADMIN")) return;
+  if (!user || !(await canProjectAction(user, "projects.manage", clientId))) return;
   const name = String(formData.get("name") || "").trim();
   if (!name) return;
   const project = await prisma.project.create({ data: { name, clientId } });
@@ -635,7 +656,8 @@ export async function createProject(clientId: string, formData: FormData) {
 
 export async function setProjectActive(projectId: string, isActive: boolean) {
   const user = await getSessionUser();
-  if (!user || !user.roleCodes.includes("ADMIN")) return;
+  const current = await prisma.project.findUnique({ where: { id: projectId }, select: { clientId: true } });
+  if (!user || !current || !(await canProjectAction(user, "projects.manage", current.clientId))) return;
   const project = await prisma.project.update({
     where: { id: projectId },
     data: { archivedAt: isActive ? null : new Date() },
@@ -647,6 +669,90 @@ export async function setProjectActive(projectId: string, isActive: boolean) {
     detail: `projectId=${projectId}`,
   });
   revalidatePath(`/admin/clientes/${project.clientId}`);
+}
+
+// ── Proyecto como mini-ecosistema (etapa 1) ───────────────────
+
+const optDate = (v: FormDataEntryValue | null) => {
+  const s = String(v || "");
+  return s ? parseLocalDate(s) : null;
+};
+const optHours = (v: FormDataEntryValue | null) => {
+  const n = Number(String(v || "").replace(",", "."));
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+async function projectForAction(user: { id: string; capabilities: Capabilities }, projectId: string, action: ActionId) {
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project || !(await canProjectAction(user, action, project.clientId))) return null;
+  return project;
+}
+
+// Cubicación estimada inicial: horas y/o fechas (todo opcional).
+export async function updateProjectBudget(projectId: string, formData: FormData) {
+  const user = await getSessionUser();
+  if (!user) return;
+  const project = await projectForAction(user, projectId, "projects.budget");
+  if (!project) return;
+  const startDate = optDate(formData.get("startDate"));
+  const endDate = optDate(formData.get("endDate"));
+  if (startDate && endDate && endDate < startDate) redirect(`/proyectos/${projectId}?error=fechas`);
+  await prisma.project.update({
+    where: { id: projectId },
+    data: { startDate, endDate, estimatedHours: optHours(formData.get("estimatedHours")) },
+  });
+  await logAudit({
+    type: "project_budget_updated",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `projectId=${projectId}`,
+  });
+  revalidatePath(`/proyectos/${projectId}`);
+  revalidatePath("/proyectos");
+}
+
+export async function saveStage(projectId: string, stageId: string | null, formData: FormData) {
+  const user = await getSessionUser();
+  if (!user) return;
+  const project = await projectForAction(user, projectId, "projects.manage");
+  if (!project) return;
+  const name = String(formData.get("name") || "").trim();
+  if (!name) return;
+  const startDate = optDate(formData.get("startDate"));
+  const endDate = optDate(formData.get("endDate"));
+  if (startDate && endDate && endDate < startDate) redirect(`/proyectos/${projectId}?error=fechas`);
+  const data = { name, startDate, endDate, estimatedHours: optHours(formData.get("estimatedHours")) };
+  if (stageId) {
+    await prisma.projectStage.updateMany({ where: { id: stageId, projectId }, data });
+  } else {
+    const last = await prisma.projectStage.aggregate({ where: { projectId }, _max: { sortOrder: true } });
+    await prisma.projectStage.create({
+      data: { ...data, projectId, sortOrder: (last._max.sortOrder ?? 0) + 1 },
+    });
+  }
+  revalidatePath(`/proyectos/${projectId}`);
+}
+
+export async function deleteStage(projectId: string, stageId: string) {
+  const user = await getSessionUser();
+  if (!user || !(await projectForAction(user, projectId, "projects.manage"))) return;
+  // Las solicitudes de la etapa quedan sin etapa (onDelete: SetNull).
+  await prisma.projectStage.deleteMany({ where: { id: stageId, projectId } });
+  revalidatePath(`/proyectos/${projectId}`);
+}
+
+// Asignar una tarea a una etapa desde la ficha del proyecto.
+export async function setRequestStage(requestId: string, formData: FormData) {
+  const user = await getSessionUser();
+  if (!user) return;
+  const req = await prisma.request.findUnique({ where: { id: requestId }, select: { projectId: true } });
+  if (!req?.projectId || !(await projectForAction(user, req.projectId, "projects.manage"))) return;
+  const raw = String(formData.get("stageId") || "");
+  const stage = raw
+    ? await prisma.projectStage.findFirst({ where: { id: raw, projectId: req.projectId }, select: { id: true } })
+    : null;
+  await prisma.request.update({ where: { id: requestId }, data: { stageId: stage?.id ?? null } });
+  revalidatePath(`/proyectos/${req.projectId}`);
 }
 
 export async function createCustomField(formData: FormData) {

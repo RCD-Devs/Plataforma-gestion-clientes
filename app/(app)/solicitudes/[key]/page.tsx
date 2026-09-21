@@ -48,6 +48,7 @@ export default async function RequestDetail({
       assignee: true,
       team: true,
       project: true,
+      stage: true,
       parent: { select: { key: true, title: true } },
       subtasks: { orderBy: { createdAt: "asc" }, include: { assignee: true } },
       collaborators: { include: { user: true } },
@@ -61,7 +62,7 @@ export default async function RequestDetail({
   if (!req) notFound();
   if (!canViewRequest(user, req)) notFound();
 
-  const [users, projects, customFields, statuses, statusMap] = await Promise.all([
+  const [users, projects, stages, customFields, statuses, statusMap] = await Promise.all([
     prisma.user.findMany({
       where: { role: { not: "CLIENTE" } },
       orderBy: { name: "asc" },
@@ -69,6 +70,11 @@ export default async function RequestDetail({
     prisma.project.findMany({
       where: { clientId: req.clientId, archivedAt: null },
       orderBy: { name: "asc" },
+    }),
+    prisma.projectStage.findMany({
+      where: { project: { clientId: req.clientId, archivedAt: null } },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, name: true, projectId: true },
     }),
     prisma.customFieldDefinition.findMany({
       where: { archivedAt: null },
@@ -132,6 +138,8 @@ export default async function RequestDetail({
           dueDate={req.dueDate}
           projectId={req.projectId}
           projects={projects}
+          stageId={req.stageId}
+          stages={stages}
         />
       </div>
 
@@ -397,7 +405,10 @@ export default async function RequestDetail({
                 <span>{req.client.name}</span>
               </Row>
               <Row label="Proyecto">
-                <span>{req.project?.name ?? "—"}</span>
+                <span>
+                  {req.project?.name ?? "—"}
+                  {req.stage ? ` · ${req.stage.name}` : ""}
+                </span>
               </Row>
               <Row label="Solicitante">
                 <span className="truncate">{req.requesterEmail || "—"}</span>
