@@ -6,7 +6,7 @@ import { getStatuses } from "@/lib/statuses";
 import { StatusSelect } from "@/components/controls";
 import { PriorityTag, ClientTag } from "@/components/ui";
 import { HandoffPanel } from "@/components/Handoff";
-import { markTeamAlertsRead } from "@/app/actions";
+import { NotificationBell } from "@/components/NotificationBell";
 import { hoursLabel, relative, shortDate } from "@/lib/format";
 import { daysFromToday } from "@/lib/dates";
 import { getUnreadRequestIds } from "@/lib/commentReads";
@@ -97,6 +97,17 @@ export default async function MiEspacioPage({
             {user.name} · {open} tareas abiertas
           </p>
         </div>
+        <div className="flex items-center gap-3">
+        <NotificationBell
+          unread={unread}
+          items={alerts.map((n) => ({
+            id: n.id,
+            title: n.title,
+            body: n.body,
+            read: n.read,
+            when: relative(n.createdAt),
+          }))}
+        />
         <div className="flex items-center gap-1 rounded-lg border border-[#e4e8ec] p-1">
           <Link
             href="/mi-espacio"
@@ -115,12 +126,13 @@ export default async function MiEspacioPage({
             ☰ Lista
           </Link>
         </div>
+        </div>
       </header>
 
       <div className="flex-1 overflow-y-auto">
         <NudgeStream initial={nudgeItems} />
-        {(reminders.length > 0 || alerts.length > 0) && (
-          <div className="grid gap-4 border-b border-[#e4e8ec] bg-white/60 px-6 py-4 lg:grid-cols-2">
+        {reminders.length > 0 && (
+          <div className="border-b border-[#e4e8ec] bg-white/60 px-6 py-4">
             <section>
               <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#5d6b77]">
                 ⏰ Recordatorios de entrega
@@ -143,52 +155,6 @@ export default async function MiEspacioPage({
                 {reminders.length === 0 && (
                   <div className="text-sm text-[#7f7f7f]">
                     Sin entregas próximas. 👌
-                  </div>
-                )}
-              </div>
-            </section>
-            <section>
-              <div className="mb-2 flex items-center justify-between">
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-[#5d6b77]">
-                  🔔 Notificaciones{" "}
-                  {unread > 0 && (
-                    <span className="ml-1 rounded-full bg-[#fb693b] px-1.5 py-0.5 text-[10px] font-bold text-white">
-                      {unread} nuevas
-                    </span>
-                  )}
-                </h2>
-                {unread > 0 && (
-                  <form action={markTeamAlertsRead}>
-                    <button className="text-xs text-[#08a89f] hover:underline">
-                      Marcar leídas
-                    </button>
-                  </form>
-                )}
-              </div>
-              <div className="max-h-40 space-y-1.5 overflow-y-auto pr-1">
-                {alerts.map((n) => (
-                  <div
-                    key={n.id}
-                    className={`rounded-lg border px-3 py-2 text-sm ${
-                      n.read
-                        ? "border-[#e4e8ec] bg-white text-[#5d6b77]"
-                        : "border-[#0bdbcf] bg-[#e0fbf9] text-[#06413d]"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="min-w-0 truncate font-semibold">
-                        {n.title}
-                      </span>
-                      <span className="shrink-0 text-[10px] text-[#7f7f7f]">
-                        {relative(n.createdAt)}
-                      </span>
-                    </div>
-                    <div className="truncate text-xs">{n.body}</div>
-                  </div>
-                ))}
-                {alerts.length === 0 && (
-                  <div className="text-sm text-[#7f7f7f]">
-                    Sin notificaciones aún.
                   </div>
                 )}
               </div>
