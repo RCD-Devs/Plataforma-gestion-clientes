@@ -55,6 +55,8 @@ export async function GET(
     slaMedPorTipo,
     typesWithHours,
     hoursByTypeValues,
+    projectsWithHours,
+    hoursByProjectValues,
     perUser,
     statuses,
     statusCounts,
@@ -125,6 +127,16 @@ export async function GET(
     horasTipo.addRow({ tipo, horas: hoursByTypeValues[i] });
   });
 
+  const horasProyecto = workbook.addWorksheet("Horas por proyecto");
+  horasProyecto.columns = [
+    { header: "Proyecto / sitio", key: "proyecto", width: 28 },
+    { header: "Horas", key: "horas", width: 12 },
+  ];
+  horasProyecto.getRow(1).font = { bold: true };
+  projectsWithHours.forEach((proyecto, i) => {
+    horasProyecto.addRow({ proyecto, horas: hoursByProjectValues[i] });
+  });
+
   const horasPerfil = workbook.addWorksheet("Horas por perfil");
   horasPerfil.columns = [
     { header: "Perfil", key: "perfil", width: 24 },
@@ -150,6 +162,7 @@ export async function GET(
     { header: "Folio", key: "folio", width: 12 },
     { header: "Título", key: "titulo", width: 40 },
     { header: "Tipo", key: "tipo", width: 18 },
+    { header: "Proyecto", key: "proyecto", width: 22 },
     { header: "Ingreso", key: "ingreso", width: 12 },
     { header: "Finalización", key: "finalizacion", width: 14 },
     { header: "SLA (días)", key: "sla", width: 12 },
@@ -170,6 +183,7 @@ export async function GET(
       folio: r.key,
       titulo: r.title,
       tipo: r.type,
+      proyecto: r.project?.name ?? "",
       ingreso: shortDate(r.createdAt),
       finalizacion: r.finalizedAt ? shortDate(r.finalizedAt) : "",
       sla: sla ?? "",

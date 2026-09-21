@@ -67,6 +67,8 @@ export default async function ClientReportPage({
     slaMedPorTipo,
     typesWithHours,
     hoursByTypeValues,
+    projectsWithHours,
+    hoursByProjectValues,
     perUser,
     statusCounts,
   } = data;
@@ -143,6 +145,7 @@ export default async function ClientReportPage({
             colors: SLA_RANGES.map((r) => r.color),
           }}
           horasPorTipo={{ labels: typesWithHours, values: hoursByTypeValues }}
+          horasPorProyecto={{ labels: projectsWithHours, values: hoursByProjectValues }}
           distribucionEstado={{
             labels: statuses.map((s) => s.label),
             values: statusCounts,
@@ -162,6 +165,7 @@ export default async function ClientReportPage({
               key: r.key,
               title: r.title,
               type: r.type,
+              proyecto: r.project?.name ?? "—",
               ingreso: shortDate(r.createdAt),
               finalizacion: r.finalizedAt ? shortDate(r.finalizedAt) : "—",
               sla: sla != null ? `${sla} d` : "—",
@@ -341,6 +345,29 @@ export default async function ClientReportPage({
         </div>
 
         <section className="rounded-xl border border-[#e4e8ec] bg-white p-4">
+          <h2 className="mb-1 text-sm font-semibold">Horas por proyecto / sitio</h2>
+          <p className="mb-2 text-[11px] leading-snug text-[#7f7f7f]">
+            En qué proyecto se gastaron las horas del período. Las solicitudes
+            sin proyecto cuentan como mantención general.
+          </p>
+          {projectsWithHours.length > 0 ? (
+            <GroupedBarChart
+              labels={projectsWithHours}
+              a={hoursByProjectValues}
+              aLabel="Horas"
+              aColor="#7c5cff"
+              suffix="h"
+              horizontal
+              height={Math.max(160, projectsWithHours.length * 40)}
+            />
+          ) : (
+            <div className="py-10 text-center text-sm text-[#7f7f7f]">
+              Sin horas cargadas en el período.
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-xl border border-[#e4e8ec] bg-white p-4">
           <h2 className="mb-1 text-sm font-semibold">Horas por perfil</h2>
           <p className="mb-2 text-[11px] leading-snug text-[#7f7f7f]">
             Quién trabajó cuánto para este cliente en el período — respaldo
@@ -373,6 +400,7 @@ export default async function ClientReportPage({
                 <tr className="border-b border-[#e4e8ec] text-left text-xs text-[#5d6b77]">
                   <th className="px-4 py-2.5 font-semibold">Solicitud</th>
                   <th className="px-4 py-2.5 font-semibold">Tipo</th>
+                  <th className="px-4 py-2.5 font-semibold">Proyecto</th>
                   <th className="px-4 py-2.5 font-semibold">Ingreso</th>
                   <th className="px-4 py-2.5 font-semibold">Finalización</th>
                   <th className="px-4 py-2.5 font-semibold">SLA</th>
@@ -406,6 +434,7 @@ export default async function ClientReportPage({
                         </Link>
                       </td>
                       <td className="px-4 py-3 text-[#5d6b77]">{r.type}</td>
+                      <td className="px-4 py-3 text-[#5d6b77]">{r.project?.name ?? "—"}</td>
                       <td className="whitespace-nowrap px-4 py-3">
                         {shortDate(r.createdAt)}
                       </td>

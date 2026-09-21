@@ -37,6 +37,7 @@ export async function getClientReportData(
       where: { clientId, createdAt: { gte: desde, lte: hasta } },
       include: {
         assignee: true,
+        project: { select: { name: true } },
         timeEntries: { select: { hours: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -46,7 +47,10 @@ export async function getClientReportData(
         date: { gte: desde, lte: hasta },
         request: { clientId },
       },
-      include: { user: true, request: { select: { type: true } } },
+      include: {
+        user: true,
+        request: { select: { type: true, project: { select: { name: true } } } },
+      },
     }),
     getStatuses(),
     getStatusMap(),
@@ -134,6 +138,17 @@ export async function getClientReportData(
   );
   const hoursByTypeValues = typesWithHours.map((t) => round1(hoursByType.get(t)!));
 
+  // --- Horas por proyecto / sitio (sin proyecto = mantención general) ---
+  const hoursByProject = new Map<string, number>();
+  for (const t of timeEntries) {
+    const name = t.request.project?.name ?? "Mantención general";
+    hoursByProject.set(name, (hoursByProject.get(name) ?? 0) + t.hours);
+  }
+  const projectsWithHours = [...hoursByProject.keys()].sort(
+    (a, b) => hoursByProject.get(b)! - hoursByProject.get(a)!,
+  );
+  const hoursByProjectValues = projectsWithHours.map((p) => round1(hoursByProject.get(p)!));
+
   // --- Horas por perfil ---
   const hoursByUser = new Map<
     string,
@@ -181,6 +196,8 @@ export async function getClientReportData(
     slaMedPorTipo,
     typesWithHours,
     hoursByTypeValues,
+    projectsWithHours,
+    hoursByProjectValues,
     perUser,
     statusCounts,
   };

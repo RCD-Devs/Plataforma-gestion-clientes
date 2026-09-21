@@ -27,6 +27,7 @@ type DetalleRow = {
   key: string;
   title: string;
   type: string;
+  proyecto: string;
   ingreso: string;
   finalizacion: string;
   sla: string;
@@ -46,6 +47,7 @@ export function ReportExportButtons({
   slaPorTipo,
   distribucionSla,
   horasPorTipo,
+  horasPorProyecto,
   distribucionEstado,
   horasPorPerfil,
   detalle,
@@ -60,6 +62,7 @@ export function ReportExportButtons({
   slaPorTipo: { labels: string[]; promedio: number[]; mediana: number[] };
   distribucionSla: { labels: string[]; values: number[]; colors: string[] };
   horasPorTipo: { labels: string[]; values: number[] };
+  horasPorProyecto: { labels: string[]; values: number[] };
   distribucionEstado: { labels: string[]; values: number[]; colors: string[] };
   horasPorPerfil: { labels: string[]; values: number[] };
   detalle: DetalleRow[];
@@ -73,6 +76,7 @@ export function ReportExportButtons({
   const horasTipoRef = useRef<ChartJSInstance | null>(null);
   const distEstadoRef = useRef<ChartJSInstance | null>(null);
   const horasPerfilRef = useRef<ChartJSInstance | null>(null);
+  const horasProyectoRef = useRef<ChartJSInstance | null>(null);
 
   const excelHref = `/api/clientes/${clientId}/reporte/excel?desde=${toDateInput(desde)}&hasta=${toDateInput(hasta)}`;
 
@@ -147,6 +151,9 @@ export function ReportExportButtons({
     if (horasPorTipo.labels.length > 0) {
       addChartImage(horasTipoRef.current, "Horas por tipo de solicitud");
     }
+    if (horasPorProyecto.labels.length > 0) {
+      addChartImage(horasProyectoRef.current, "Horas por proyecto / sitio", pageWidth - margin * 2, Math.max(40, horasPorProyecto.labels.length * 8));
+    }
     addChartImage(distEstadoRef.current, "Distribución por estado");
     if (horasPorPerfil.labels.length > 0) {
       addChartImage(horasPerfilRef.current, "Horas por perfil", pageWidth - margin * 2, Math.max(40, horasPorPerfil.labels.length * 8));
@@ -160,11 +167,12 @@ export function ReportExportButtons({
     const autoTable = (await import("jspdf-autotable")).default;
     autoTable(doc, {
       startY: 24,
-      head: [["Folio", "Título", "Tipo", "Ingreso", "Finalización", "SLA", "Estado", "Responsable", "Horas"]],
+      head: [["Folio", "Título", "Tipo", "Proyecto", "Ingreso", "Finalización", "SLA", "Estado", "Responsable", "Horas"]],
       body: detalle.map((r) => [
         r.key,
         r.title,
         r.type,
+        r.proyecto,
         r.ingreso,
         r.finalizacion,
         r.sla,
@@ -251,6 +259,20 @@ export function ReportExportButtons({
                 aColor="#fb693b"
                 suffix="h"
                 ref={horasTipoRef}
+              />
+            </div>
+          )}
+          {horasPorProyecto.labels.length > 0 && (
+            <div style={{ width: 640, height: Math.max(160, horasPorProyecto.labels.length * 40) }}>
+              <GroupedBarChart
+                labels={horasPorProyecto.labels}
+                a={horasPorProyecto.values}
+                aLabel="Horas"
+                aColor="#7c5cff"
+                suffix="h"
+                horizontal
+                height={Math.max(160, horasPorProyecto.labels.length * 40)}
+                ref={horasProyectoRef}
               />
             </div>
           )}
