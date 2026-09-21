@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requirePortalUser } from "@/lib/portal";
-import { PortalShell } from "@/components/portal/PortalShell";
+import { PortalShell, shellProps } from "@/components/portal/PortalShell";
 import { addComment } from "@/app/actions";
 import { StatusBadge, PriorityTag } from "@/components/ui";
 import { ClientPriorityStars } from "@/components/controls";
@@ -16,7 +16,8 @@ export default async function PortalRequestDetail({
   params: Promise<{ key: string }>;
 }) {
   const { key } = await params;
-  const { client, email } = await requirePortalUser();
+  const ctx = await requirePortalUser();
+  const { client } = ctx;
 
   const req = await prisma.request.findUnique({
     where: { key },
@@ -28,7 +29,7 @@ export default async function PortalRequestDetail({
   if (!req || req.clientId !== client.id) notFound();
 
   return (
-    <PortalShell clientName={client.name} email={email}>
+    <PortalShell {...shellProps(ctx)}>
       <div>
         <Link
           href="/portal/solicitudes"

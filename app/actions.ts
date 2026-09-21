@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -24,6 +25,7 @@ import { notifyClient, notifyTeam } from "@/lib/email";
 import { PRIORITY_MAP } from "@/lib/constants";
 import { getStatusMap } from "@/lib/statuses";
 import { isValidEmail } from "@/lib/validate";
+import { getPortalContext, canActAsClient, PORTAL_CLIENT_COOKIE } from "@/lib/portal";
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 // Invitaciones de usuarios nuevos: la persona puede tardar en abrir el correo.
@@ -606,7 +608,7 @@ export async function markCommentsRead(requestId: string) {
   const allowed =
     user.role === "CLIENTE"
       ? user.clientId === req.clientId
-      : canActOnRequest(user, req);
+      : canActOnRequest(user, req) || (await canActAsClient(user, req.clientId));
   if (!allowed) return;
 
   await prisma.commentRead.upsert({
@@ -899,7 +901,7 @@ export async function addComment(formData: FormData) {
   // equipo exige sesión interna. El autor sale de la sesión, no del form.
   let authorName: string;
   if (isClient) {
-    if (!user || user.role !== "CLIENTE" || user.clientId !== req.clientId) return;
+    if (!user || !(await canActAsClient(user, req.clientId))) return;
     authorName = user.email;
   } else {
     if (!user || !isTeamRole(user.role)) return;
@@ -1022,12 +1024,12 @@ export async function setClientPriority(
 ): Promise<{ ok: boolean }> {
   const user = await getSessionUser();
   const v = Math.round(value);
-  if (!user || user.role !== "CLIENTE" || v < 1 || v > 5) return { ok: false };
+  if (!user || v < 1 || v > 5) return { ok: false };
   const existing = await prisma.request.findUnique({
     where: { id: requestId },
     select: { clientId: true },
   });
-  if (!existing || existing.clientId !== user.clientId) return { ok: false };
+  if (!existing || !(await canActAsClient(user, existing.clientId))) return { ok: false };
   const req = await prisma.request.update({
     where: { id: requestId },
     data: { clientPriority: v },
@@ -1182,13 +1184,33 @@ export async function submitRequest(formData: FormData) {
 // El login del portal usa la misma acción `login` (arriba) con
 // target="portal"; logout usa la misma `logout`.
 
-export async function submitClientRequest(formData: FormData) {
+// Selector "ver como cliente": solo acepta clientes a los que el usuario
+// tiene acceso (getPortalContext ignora cualquier otro valor).
+export async function setPortalClient(formData: FormData) {
   const user = await getSessionUser();
-  if (!user || user.role !== "CLIENTE" || !user.client) redirect("/portal");
-  const email = user.email;
-  const client = user.client;
+  if (!user) return;
+  const clientId = String(formData.get("clientId") || "");
+  if (await canActAsClient(user, clientId)) {
+    (await cookies()).set(PORTAL_CLIENT_COOKIE, clientId, { path: "/", httpOnly: true, sameSite: "lax" });
+  }
+  redirect("/portal");
+}
+
+export async function submitClientRequest(formData: FormData) {
+  const ctx = await getPortalContext();
+  if (!ctx) redirect("/portal");
+  const email = ctx.user.email;
+  const client = ctx.client;
 
   const type = String(formData.get("type") || "Otro");
+  // Sitio/proyecto opcional: solo si pertenece a este cliente.
+  const rawProject = String(formData.get("projectId") || "");
+  const project = rawProject
+    ? await prisma.project.findFirst({
+        where: { id: rawProject, clientId: client.id, archivedAt: null },
+        select: { id: true },
+      })
+    : null;
   const description = String(formData.get("description") || "").trim();
   const rawPriority = String(formData.get("priority") || "MEDIA");
   const priority = PRIORITY_MAP[rawPriority] ? rawPriority : "MEDIA";
@@ -1210,6 +1232,7 @@ export async function submitClientRequest(formData: FormData) {
         priority,
         requesterEmail: email,
         clientId: client.id,
+        projectId: project?.id ?? null,
         status: "SIN_TRIAGE",
         dueDate: dueStr ? parseLocalDate(dueStr) : null,
       },
@@ -1358,6 +1381,16 @@ export async function createHoursAdjustment(clientId: string, formData: FormData
   redirect(`/admin/clientes/${clientId}`);
 }
 
+// Clientes que un usuario de equipo puede ver/usar como cliente en el
+// portal (solo aplica a cuentas de equipo; ids inexistentes se descartan).
+async function validPortalClientIds(formData: FormData, isClientAccount: boolean) {
+  if (isClientAccount) return [];
+  const ids = formData.getAll("portalClientIds").map(String).filter(Boolean);
+  if (ids.length === 0) return [];
+  const found = await prisma.client.findMany({ where: { id: { in: ids } }, select: { id: true } });
+  return found.map((c) => c.id);
+}
+
 export async function createUser(formData: FormData) {
   const user = await getSessionUser();
   if (!user || !user.roleCodes.includes("ADMIN")) redirect("/mi-espacio");
@@ -1397,6 +1430,9 @@ export async function createUser(formData: FormData) {
       isActive: true,
       mustChangePassword: true,
       roles: isClientAccount ? undefined : { create: roles.map((r) => ({ roleId: r.id })) },
+      portalAccess: {
+        create: (await validPortalClientIds(formData, isClientAccount)).map((clientId) => ({ clientId })),
+      },
     },
   });
   await logAudit({
@@ -1440,8 +1476,10 @@ export async function updateUser(id: string, formData: FormData) {
     : await prisma.role.findMany({ where: { id: { in: roleIds }, archivedAt: null } });
   if (!isClientAccount && roles.length === 0) redirect(`/admin/usuarios/${id}?error=datos`);
 
+  const portalClientIds = await validPortalClientIds(formData, isClientAccount);
   await prisma.$transaction([
     prisma.userRole.deleteMany({ where: { userId: id } }),
+    prisma.userClientAccess.deleteMany({ where: { userId: id } }),
     prisma.user.update({
       where: { id },
       data: {
@@ -1453,6 +1491,7 @@ export async function updateUser(id: string, formData: FormData) {
         clientId,
         isActive: formData.get("isActive") === "on",
         roles: isClientAccount ? undefined : { create: roles.map((r) => ({ roleId: r.id })) },
+        portalAccess: { create: portalClientIds.map((clientId) => ({ clientId })) },
       },
     }),
   ]);

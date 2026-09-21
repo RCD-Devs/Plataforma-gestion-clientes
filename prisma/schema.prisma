@@ -36,6 +36,7 @@ model Client {
   users             User[]            @relation("clientUsers")
   hoursAdjustments  HoursAdjustment[]
   projects          Project[]
+  portalViewers     UserClientAccess[]
 }
 
 // Un cliente puede tener varios proyectos (fusión con Codia Task,
@@ -116,6 +117,7 @@ model User {
   nudgesShown     NudgeShown[]
   aiMemoryNotes   AiMemoryNote[]
   roles           UserRole[]
+  portalAccess    UserClientAccess[]
 }
 
 // Roles y permisos como datos editables (ADR-011, Nuevo #3, 16 sep 2026).
@@ -158,6 +160,18 @@ model UserRole {
   role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@id([userId, roleId])
+}
+
+// Acceso de un usuario de equipo al portal de un cliente ("ver como
+// cliente"): permite revisar proyectos internos con la misma pantalla que
+// ve el cliente, y crear solicitudes/comentar como tal. Lo define el Admin.
+model UserClientAccess {
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@id([userId, clientId])
 }
 
 model PasswordResetToken {

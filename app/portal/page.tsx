@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/session";
+import { getPortalContext } from "@/lib/portal";
 import { login } from "@/app/actions";
 import { SubmitButton } from "@/components/SubmitButton";
 import { PortalShell } from "@/components/portal/PortalShell";
@@ -18,13 +18,8 @@ export default async function PortalPage({
   searchParams: Promise<{ error?: string; reset?: string }>;
 }) {
   const { error, reset } = await searchParams;
-  const user = await getSessionUser();
-  if (user && user.role === "CLIENTE" && user.mustChangePassword) {
-    redirect("/cambiar-clave");
-  }
-  const session = user && user.role === "CLIENTE" && user.client
-    ? { email: user.email, client: user.client }
-    : null;
+  const session = await getPortalContext();
+  if (session?.user.mustChangePassword) redirect("/cambiar-clave");
 
   if (!session) {
     return (
@@ -132,9 +127,15 @@ export default async function PortalPage({
     );
   }
 
-  const { email, client } = session;
+  const { client } = session;
   return (
-    <PortalShell clientName={client.name} email={email}>
+    <PortalShell
+      clientName={client.name}
+      email={session.user.email}
+      viewAs={session.viewAs}
+      clients={session.clients}
+      activeClientId={client.id}
+    >
       <PortalDashboard client={client} />
     </PortalShell>
   );

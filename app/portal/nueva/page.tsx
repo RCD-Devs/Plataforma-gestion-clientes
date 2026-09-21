@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { submitClientRequest } from "@/app/actions";
 import { SubmitButton } from "@/components/SubmitButton";
-import { PortalShell } from "@/components/portal/PortalShell";
+import { PortalShell, shellProps } from "@/components/portal/PortalShell";
+import { prisma } from "@/lib/db";
 import { requirePortalUser } from "@/lib/portal";
 import { REQUEST_TYPES, PRIORITIES } from "@/lib/constants";
 
@@ -16,10 +17,16 @@ export default async function NuevaSolicitudPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
-  const { client, email } = await requirePortalUser();
+  const ctx = await requirePortalUser();
+  const { client } = ctx;
+  const projects = await prisma.project.findMany({
+    where: { clientId: client.id, archivedAt: null },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
 
   return (
-    <PortalShell clientName={client.name} email={email}>
+    <PortalShell {...shellProps(ctx)}>
       <section className="max-w-xl rounded-2xl border border-[#e4e8ec] bg-white p-5">
         <h1 className="font-brand text-sm font-semibold">Nueva solicitud</h1>
         <p className="mb-4 mt-1 text-xs text-[#5d6b77]">
@@ -41,6 +48,18 @@ export default async function NuevaSolicitudPage({
               ))}
             </select>
           </Field>
+          {projects.length > 0 && (
+            <Field label="Sitio / proyecto">
+              <select name="projectId" className={inputCls} defaultValue="">
+                <option value="">General (no aplica a un sitio)</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
           <Field label="Descripción">
             <textarea
               name="description"

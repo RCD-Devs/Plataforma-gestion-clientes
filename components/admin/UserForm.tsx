@@ -15,6 +15,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 export function UserForm({
   editing,
   editingRoleIds,
+  editingPortalClientIds,
   roles,
   teams,
   clients,
@@ -33,6 +34,8 @@ export function UserForm({
   };
   // Roles ya asignados a `editing` (vacío/no aplica al crear).
   editingRoleIds?: string[];
+  // Clientes cuyo portal puede ver/usar este usuario de equipo.
+  editingPortalClientIds?: string[];
   roles: { id: string; name: string; archivedAt: Date | null }[];
   teams: { id: string; name: string }[];
   clients: { id: string; name: string }[];
@@ -143,6 +146,26 @@ export function UserForm({
             Obligatorio solo para Cliente del portal.
           </p>
         </div>
+      </div>
+      <div>
+        <label className={labelCls}>Acceso al portal de clientes (ver como cliente)</label>
+        <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-[#e4e8ec] p-3">
+          {clients.map((c) => (
+            <label key={c.id} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                name="portalClientIds"
+                value={c.id}
+                defaultChecked={editingPortalClientIds?.includes(c.id) ?? false}
+                className="h-4 w-4 accent-[#0bdbcf]"
+              />
+              {c.name}
+            </label>
+          ))}
+        </div>
+        <p className="mt-1 text-[11px] text-[#6b7280]">
+          Solo equipo interno: podrá abrir el portal de estos clientes, crear solicitudes y comentar como cliente.
+        </p>
       </div>
       {editing && (
         <label className="flex items-center gap-2 text-sm">

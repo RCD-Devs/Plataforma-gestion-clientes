@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { StatusBadge, PriorityTag } from "@/components/ui";
-import { PortalShell } from "@/components/portal/PortalShell";
+import { PortalShell, shellProps } from "@/components/portal/PortalShell";
 import { requirePortalUser } from "@/lib/portal";
 import { shortDate } from "@/lib/format";
 
@@ -13,19 +13,21 @@ export default async function SolicitudesPage({
   searchParams: Promise<{ ok?: string }>;
 }) {
   const { ok } = await searchParams;
-  const { client, email } = await requirePortalUser();
+  const ctx = await requirePortalUser();
+  const { client, email } = ctx;
 
   const requests = await prisma.request.findMany({
     where: { clientId: client.id },
     include: {
       attachments: { select: { id: true } },
       comments: { select: { id: true } },
+      project: { select: { name: true } },
     },
     orderBy: { createdAt: "desc" },
   });
 
   return (
-    <PortalShell clientName={client.name} email={email}>
+    <PortalShell {...shellProps(ctx)}>
       {ok && (
         <div className="mb-5 flex items-center gap-2 rounded-xl border border-[#0bdbcf] bg-[#e0fbf9] px-4 py-3 text-sm text-[#065f5a]">
           <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#0bdbcf] text-xs font-bold text-[#081826]">
@@ -64,6 +66,11 @@ export default async function SolicitudesPage({
                   <Link href={`/portal/solicitud/${r.key}`} className="block">
                     <div className="flex items-center gap-2 text-xs text-[#7f7f7f]">
                       {r.key} · {r.type}
+                      {r.project && (
+                        <span className="rounded bg-[#f1f3f4] px-1.5 py-0.5 text-[10px] font-semibold text-[#5d6b77]">
+                          {r.project.name}
+                        </span>
+                      )}
                       {r.requesterEmail === email && (
                         <span className="rounded bg-[#e0fbf9] px-1.5 py-0.5 text-[10px] font-semibold text-[#065f5a]">
                           tuya
