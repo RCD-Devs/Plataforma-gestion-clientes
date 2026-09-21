@@ -1484,6 +1484,34 @@ export async function setUserActive(id: string, isActive: boolean) {
 // gerente de ningún cliente) — si tiene algo de eso, se desactiva en vez
 // de borrar (Rmap #10: no hace falta una papelera separada). No se deja
 // borrar la propia cuenta, para no quedar sin ningún Admin con acceso.
+// Reenvía el link de alta a quien aún no define contraseña (el anterior queda
+// invalidado por issuePasswordResetToken).
+export async function resendInvite(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await getSessionUser();
+  if (!user || !user.roleCodes.includes("ADMIN")) return { ok: false, error: "Sin permiso" };
+  const target = await prisma.user.findUnique({ where: { id } });
+  if (!target || !target.isActive) return { ok: false, error: "Usuario inactivo o inexistente" };
+  if (target.passwordHash) return { ok: false, error: "Ya definió su contraseña" };
+  try {
+    const rawToken = await issuePasswordResetToken(target.id, INVITE_TOKEN_TTL_MS);
+    await sendWelcomeEmail({
+      to: target.email,
+      name: target.name,
+      resetUrl: `/restablecer-contrasena?token=${rawToken}`,
+    });
+  } catch {
+    return { ok: false, error: "No se pudo enviar el correo" };
+  }
+  await logAudit({
+    type: "admin_invite_resent",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `userId=${target.id}, email=${target.email}`,
+  });
+  revalidateAdmin();
+  return { ok: true };
+}
+
 export async function deleteUser(id: string) {
   const user = await getSessionUser();
   if (!user || !user.roleCodes.includes("ADMIN")) return;

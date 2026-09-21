@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { setUserActive } from "@/app/actions";
 import { ActiveToggle } from "@/components/admin/ActiveToggle";
+import { ResendInviteButton } from "@/components/admin/ResendInviteButton";
 import { UserDeleteButton } from "@/components/admin/UserDeleteButton";
 import { ROLE_MAP } from "@/lib/constants";
 import { Avatar } from "@/components/ui";
@@ -9,6 +10,31 @@ import { getStatuses } from "@/lib/statuses";
 import { getSessionUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
+
+const fmt = (d: Date) => d.toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" });
+
+// Estado de la contraseña: distingue "nunca la definió" (invitación pendiente
+// o vencida) de "ya la definió".
+function passwordStatus(u: {
+  passwordHash: string | null;
+  mustChangePassword: boolean;
+  passwordChangedAt: Date | null;
+  resetTokens: { usedAt: Date | null; expiresAt: Date }[];
+}) {
+  if (!u.passwordHash) {
+    const t = u.resetTokens[0];
+    return t && !t.usedAt && t.expiresAt > new Date()
+      ? { label: "Invitación pendiente", detail: `vence ${fmt(t.expiresAt)}`, cls: "bg-[#fff4e5] text-[#9a4a1e]" }
+      : { label: "Invitación vencida", detail: "necesita enlace nuevo", cls: "bg-[#feede6] text-[#b42318]" };
+  }
+  if (u.mustChangePassword)
+    return { label: "Debe cambiarla", detail: "", cls: "bg-[#fff4e5] text-[#9a4a1e]" };
+  return {
+    label: "Definida",
+    detail: u.passwordChangedAt ? fmt(u.passwordChangedAt) : "",
+    cls: "bg-[#e6f7f5] text-[#08a89f]",
+  };
+}
 
 export default async function AdminUsuariosPage() {
   const [sessionUser, users] = await Promise.all([
@@ -20,6 +46,7 @@ export default async function AdminUsuariosPage() {
         assigned: { select: { id: true } },
         timeEntries: { select: { id: true } },
         managedClients: { select: { id: true } },
+        resetTokens: { orderBy: { createdAt: "desc" }, take: 1 },
       },
       orderBy: { name: "asc" },
     }),
@@ -79,6 +106,7 @@ export default async function AdminUsuariosPage() {
               <th className="px-4 py-2.5 font-medium">Rol</th>
               <th className="px-4 py-2.5 font-medium">Equipo</th>
               <th className="px-4 py-2.5 font-medium">Cliente</th>
+              <th className="px-4 py-2.5 font-medium">Contraseña</th>
               <th className="px-4 py-2.5 font-medium">Estado</th>
               <th className="px-4 py-2.5 font-medium"></th>
               <th className="px-4 py-2.5 font-medium"></th>
@@ -99,6 +127,22 @@ export default async function AdminUsuariosPage() {
                 <td className="px-4 py-3">{ROLE_MAP[u.role]?.label ?? u.role}</td>
                 <td className="px-4 py-3 text-[#6b7280]">{u.team?.name || "—"}</td>
                 <td className="px-4 py-3 text-[#6b7280]">{u.client?.name || "—"}</td>
+                <td className="px-4 py-3">
+                  {(() => {
+                    const ps = passwordStatus(u);
+                    return (
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${ps.cls}`}>
+                        {ps.label}
+                        {ps.detail && <span className="font-normal"> · {ps.detail}</span>}
+                      </span>
+                    );
+                  })()}
+                  {!u.passwordHash && u.isActive && (
+                    <div className="mt-1">
+                      <ResendInviteButton id={u.id} />
+                    </div>
+                  )}
+                </td>
                 <td className="px-4 py-3">
                   <ActiveToggle id={u.id} isActive={u.isActive} action={setUserActive} />
                 </td>
@@ -125,7 +169,7 @@ export default async function AdminUsuariosPage() {
             ))}
             {users.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-[#6b7280]">
+                <td colSpan={8} className="px-4 py-10 text-center text-[#6b7280]">
                   Aún no hay usuarios creados.
                 </td>
               </tr>
