@@ -656,6 +656,42 @@ export async function createProject(clientId: string, formData: FormData) {
   revalidatePath(`/admin/clientes/${clientId}`);
 }
 
+// Crear proyecto desde /proyectos/nuevo: nombre + cliente y, si el usuario
+// puede cargar cubicación (projects.budget), fechas y horas estimadas.
+export async function createNewProject(formData: FormData) {
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+  const clientId = String(formData.get("clientId") || "");
+  const name = String(formData.get("name") || "").trim();
+  const back = (error: string) => `/proyectos/nuevo?error=${error}${clientId ? `&cliente=${clientId}` : ""}`;
+  if (!clientId) redirect(back("cliente"));
+  if (!name) redirect(back("nombre"));
+  if (!(await canProjectAction(user, "projects.manage", clientId))) redirect("/proyectos");
+
+  const withBudget = await canProjectAction(user, "projects.budget", clientId);
+  const startDate = withBudget ? optDate(formData.get("startDate")) : null;
+  const endDate = withBudget ? optDate(formData.get("endDate")) : null;
+  if (startDate && endDate && endDate < startDate) redirect(back("fechas"));
+
+  const project = await prisma.project.create({
+    data: {
+      name,
+      clientId,
+      startDate,
+      endDate,
+      estimatedHours: withBudget ? optHours(formData.get("estimatedHours")) : null,
+    },
+  });
+  await logAudit({
+    type: "admin_project_created",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `projectId=${project.id}, clientId=${clientId}`,
+  });
+  revalidatePath("/proyectos");
+  redirect(`/proyectos/${project.id}`);
+}
+
 export async function setProjectActive(projectId: string, isActive: boolean) {
   const user = await getSessionUser();
   const current = await prisma.project.findUnique({ where: { id: projectId }, select: { clientId: true } });
