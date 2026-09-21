@@ -1194,7 +1194,7 @@ export async function submitClientRequest(formData: FormData) {
   const priority = PRIORITY_MAP[rawPriority] ? rawPriority : "MEDIA";
   const dueStr = String(formData.get("dueDate") || "");
   const file = formData.get("file") as File | null;
-  if (!description) redirect("/portal?error=descripcion");
+  if (!description) redirect("/portal/nueva?error=descripcion");
 
   const firstLine = description.split("\n")[0];
   const title =
@@ -1233,8 +1233,8 @@ export async function submitClientRequest(formData: FormData) {
     body: `Recibimos tu solicitud de ${type} para ${client.name}. Su folio es ${req.key} y su estado es "Sin triaje". Te avisaremos por correo cada cambio de estado.`,
   });
   refreshLists();
-  revalidatePath("/portal");
-  redirect(`/portal?ok=${req.key}`);
+  revalidatePath("/portal", "layout");
+  redirect(`/portal/solicitudes?ok=${req.key}`);
 }
 
 // ---------- Administración: clientes, usuarios, equipos (Rec. #27-#30) ----------

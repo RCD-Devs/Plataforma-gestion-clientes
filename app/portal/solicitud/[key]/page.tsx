@@ -1,9 +1,9 @@
 import Link from "next/link";
-import Image from "next/image";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { getSessionUser } from "@/lib/session";
-import { addComment, logout } from "@/app/actions";
+import { requirePortalUser } from "@/lib/portal";
+import { PortalShell } from "@/components/portal/PortalShell";
+import { addComment } from "@/app/actions";
 import { StatusBadge, PriorityTag } from "@/components/ui";
 import { ClientPriorityStars } from "@/components/controls";
 import { longDate, relative } from "@/lib/format";
@@ -16,11 +16,7 @@ export default async function PortalRequestDetail({
   params: Promise<{ key: string }>;
 }) {
   const { key } = await params;
-  const user = await getSessionUser();
-  if (!user || user.role !== "CLIENTE" || !user.client) redirect("/portal");
-  if (user.mustChangePassword) redirect("/cambiar-clave");
-  const email = user.email;
-  const client = user.client;
+  const { client, email } = await requirePortalUser();
 
   const req = await prisma.request.findUnique({
     where: { key },
@@ -32,35 +28,10 @@ export default async function PortalRequestDetail({
   if (!req || req.clientId !== client.id) notFound();
 
   return (
-    <div className="min-h-screen bg-[#f4f6f8]">
-      <header className="border-b border-[#e4e8ec] bg-white">
-        <div className="mx-auto flex w-full max-w-4xl items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-3">
-            <Link href="/portal">
-              <Image src="/brand/logo.png" alt="REVO" width={96} height={43} />
-            </Link>
-            <div className="hidden h-8 w-px bg-[#e4e8ec] sm:block" />
-            <div className="hidden font-brand text-sm font-semibold sm:block">
-              Portal del cliente
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="text-right leading-tight">
-              <div className="text-sm font-semibold">{client.name}</div>
-              <div className="text-xs text-[#5d6b77]">{email}</div>
-            </div>
-            <form action={logout}>
-              <button className="rounded-lg border border-[#e4e8ec] px-3 py-1.5 text-xs text-[#5d6b77] hover:bg-[#f4f6f8]">
-                Salir
-              </button>
-            </form>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto w-full max-w-4xl px-4 py-6">
+    <PortalShell clientName={client.name} email={email}>
+      <div>
         <Link
-          href="/portal"
+          href="/portal/solicitudes"
           className="text-sm text-[#08a89f] hover:underline"
         >
           ← Mis solicitudes
@@ -199,8 +170,8 @@ export default async function PortalRequestDetail({
             </button>
           </form>
         </div>
-      </main>
-    </div>
+      </div>
+    </PortalShell>
   );
 }
 
