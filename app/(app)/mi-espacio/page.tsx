@@ -11,7 +11,7 @@ import { hoursLabel, relative, shortDate } from "@/lib/format";
 import { daysFromToday } from "@/lib/dates";
 import { getUnreadRequestIds } from "@/lib/commentReads";
 import { getPendingNudge } from "@/lib/nudges";
-import { NudgeStream } from "@/components/NudgeStream";
+import { DeliveriesPopover } from "@/components/DeliveriesPopover";
 import { escalateSlaAlerts } from "@/lib/slaAlerts";
 
 export const dynamic = "force-dynamic";
@@ -98,8 +98,19 @@ export default async function MiEspacioPage({
           </p>
         </div>
         <div className="flex items-center gap-3">
+        <DeliveriesPopover
+          items={reminders.map(({ t, due }) => ({
+            id: t.id,
+            key: t.key,
+            title: t.title,
+            client: t.client.name,
+            tone: due!.tone,
+            text: due!.text,
+          }))}
+        />
         <NotificationBell
           unread={unread}
+          initialNudges={nudgeItems ?? []}
           items={alerts.map((n) => ({
             id: n.id,
             title: n.title,
@@ -129,41 +140,8 @@ export default async function MiEspacioPage({
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto">
-        <NudgeStream initial={nudgeItems} />
-        {reminders.length > 0 && (
-          <div className="border-b border-[#e4e8ec] bg-white/60 px-6 py-4">
-            <section>
-              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#5d6b77]">
-                ⏰ Recordatorios de entrega
-              </h2>
-              <div className="space-y-1.5">
-                {reminders.slice(0, 5).map(({ t, due }) => (
-                  <Link
-                    key={t.id}
-                    href={`/solicitudes/${t.key}`}
-                    className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm ${toneCls[due!.tone]}`}
-                  >
-                    <span className="min-w-0 truncate">
-                      <span className="font-semibold">{t.key}</span> · {t.title}
-                    </span>
-                    <span className="shrink-0 text-xs font-semibold">
-                      {due!.text}
-                    </span>
-                  </Link>
-                ))}
-                {reminders.length === 0 && (
-                  <div className="text-sm text-[#7f7f7f]">
-                    Sin entregas próximas. 👌
-                  </div>
-                )}
-              </div>
-            </section>
-          </div>
-        )}
-
         {asList ? (
-          <div className="p-6">
+          <div className="flex-1 overflow-y-auto p-6">
             <div className="overflow-x-auto rounded-xl border border-[#e4e8ec] bg-white">
               <table className="w-full min-w-[760px] text-sm">
                 <thead>
@@ -264,12 +242,12 @@ export default async function MiEspacioPage({
             </div>
           </div>
         ) : (
-          <div className="thin-scroll flex gap-4 overflow-x-auto p-6">
+          <div className="thin-scroll flex min-h-[60vh] flex-1 gap-4 overflow-x-auto p-6">
             {statuses.map((s) => {
               const items = tasks.filter((t) => t.status === s.code);
               return (
-                <div key={s.code} className="flex w-80 shrink-0 flex-col">
-                  <div className="mb-3 flex items-center gap-2">
+                <div key={s.code} className="flex min-h-0 w-80 shrink-0 flex-col rounded-xl bg-[#eef1f4] p-2">
+                  <div className="mb-2 flex items-center gap-2 px-1">
                     <span
                       style={{ background: s.color }}
                       className="h-2.5 w-2.5 rounded-full"
@@ -279,7 +257,7 @@ export default async function MiEspacioPage({
                       {items.length}
                     </span>
                   </div>
-                  <div className="flex flex-col gap-2.5">
+                  <div className="thin-scroll flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto">
                     {items.map((t) => {
                       const due = dueInfo(t.dueDate, finalCodes.has(t.status));
                       const hrs = t.timeEntries.reduce((a, e) => a + e.hours, 0);
@@ -358,7 +336,6 @@ export default async function MiEspacioPage({
             })}
           </div>
         )}
-      </div>
     </div>
   );
 }

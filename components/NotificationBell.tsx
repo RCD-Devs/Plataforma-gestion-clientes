@@ -1,7 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { markTeamAlertsRead } from "@/app/actions";
+import { Popover } from "./Popover";
+import type { NudgeItem, NudgeKind } from "@/lib/nudges";
 
 export type BellItem = {
   id: string;
@@ -11,75 +14,117 @@ export type BellItem = {
   when: string;
 };
 
-// Campanita con popover: las notificaciones quedan ocultas hasta que se abre.
-export function NotificationBell({ items, unread }: { items: BellItem[]; unread: number }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+// Los vencimientos van en el panel de entregas (⏰), no acá.
+const NUDGE_LABELS: Partial<Record<NudgeKind, { icon: string; title: (n: number) => string }>> = {
+  MISSING_TIMES: { icon: "⏱️", title: (n) => `${n} tarea${n === 1 ? "" : "s"} sin horas cargadas` },
+  STALE_STATUS: { icon: "🐢", title: (n) => `${n} tarea${n === 1 ? "" : "s"} sin movimiento hace 3+ días` },
+  MISSING_COMMENTS: { icon: "💬", title: (n) => `${n} tarea${n === 1 ? "" : "s"} sin un comentario tuyo` },
+};
+
+// Campanita: notificaciones y pendientes ("dale una pasada a esto") ocultos
+// hasta abrir el panel. Los pendientes se actualizan en vivo (SSE) como antes.
+export function NotificationBell({
+  items,
+  unread,
+  initialNudges,
+}: {
+  items: BellItem[];
+  unread: number;
+  initialNudges: NudgeItem[];
+}) {
+  const [nudges, setNudges] = useState<NudgeItem[]>(initialNudges);
 
   useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    const source = new EventSource("/api/nudges/stream");
+    source.onmessage = (event) => {
+      try {
+        setNudges(JSON.parse(event.data));
+      } catch {
+        // Mensaje corrupto: el próximo tick trae uno bueno.
+      }
     };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    document.addEventListener("mousedown", onClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+    return () => source.close();
+  }, []);
+
+  const pending = nudges.filter((n) => NUDGE_LABELS[n.kind]);
+  const badge = unread + pending.length;
 
   return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        aria-label={unread > 0 ? `Notificaciones, ${unread} nuevas` : "Notificaciones"}
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-        className="relative rounded-lg border border-[#e4e8ec] px-2.5 py-1.5 text-base hover:bg-[#f4f6f8]"
-      >
-        🔔
-        {unread > 0 && (
-          <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#fb693b] px-1 text-[10px] font-bold text-white">
-            {unread > 9 ? "9+" : unread}
-          </span>
+    <Popover
+      ariaLabel={badge > 0 ? `Notificaciones, ${badge} pendientes` : "Notificaciones"}
+      trigger={
+        <>
+          <span aria-hidden>🔔</span>
+          {badge > 0 && (
+            <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#fb693b] px-1 text-[10px] font-bold text-white">
+              {badge > 9 ? "9+" : badge}
+            </span>
+          )}
+        </>
+      }
+    >
+      <div className="max-h-[70vh] overflow-y-auto">
+        {pending.length > 0 && (
+          <section className="border-b border-[#e4e8ec] bg-[#fdf1e3]/60 px-4 py-3">
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#9a5a25]">
+              Pendientes
+            </h2>
+            <div className="space-y-3">
+              {pending.map((item) => {
+                const label = NUDGE_LABELS[item.kind]!;
+                return (
+                  <div key={item.kind}>
+                    <div className="mb-1 text-xs font-semibold text-[#7a4419]">
+                      {label.icon} {label.title(item.taskCount)}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {item.tasks.map((t) => (
+                        <Link
+                          key={t.id}
+                          href={`/solicitudes/${t.key}`}
+                          className="rounded-md border border-[#fda565] bg-white px-2 py-0.5 text-xs text-[#5d3a16] hover:bg-[#fdf1e3]"
+                        >
+                          {t.key}
+                        </Link>
+                      ))}
+                      {item.taskCount > item.tasks.length && (
+                        <span className="px-1 py-0.5 text-xs text-[#9a5a25]">
+                          +{item.taskCount - item.tasks.length} más
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
         )}
-      </button>
 
-      {open && (
-        <div className="absolute right-0 z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[#e4e8ec] bg-white shadow-lg">
-          <div className="flex items-center justify-between border-b border-[#e4e8ec] px-4 py-2.5">
-            <h2 className="text-sm font-semibold">Notificaciones</h2>
-            {unread > 0 && (
-              <form action={markTeamAlertsRead}>
-                <button className="text-xs text-[#08a89f] hover:underline">
-                  Marcar leídas
-                </button>
-              </form>
-            )}
-          </div>
-          <div className="max-h-96 divide-y divide-[#f1f3f4] overflow-y-auto">
-            {items.map((n) => (
-              <div
-                key={n.id}
-                className={`px-4 py-3 ${n.read ? "" : "bg-[#e0fbf9]/60"}`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <span className="text-sm font-semibold">{n.title}</span>
-                  <span className="shrink-0 text-[10px] text-[#7f7f7f]">{n.when}</span>
-                </div>
-                <p className="mt-0.5 line-clamp-3 text-xs text-[#5d6b77]">{n.body}</p>
-              </div>
-            ))}
-            {items.length === 0 && (
-              <div className="px-4 py-8 text-center text-sm text-[#7f7f7f]">
-                Sin notificaciones aún.
-              </div>
-            )}
-          </div>
+        <div className="flex items-center justify-between border-b border-[#e4e8ec] px-4 py-2.5">
+          <h2 className="text-sm font-semibold">Notificaciones</h2>
+          {unread > 0 && (
+            <form action={markTeamAlertsRead}>
+              <button className="text-xs text-[#08a89f] hover:underline">Marcar leídas</button>
+            </form>
+          )}
         </div>
-      )}
-    </div>
+        <div className="divide-y divide-[#f1f3f4]">
+          {items.map((n) => (
+            <div key={n.id} className={`px-4 py-3 ${n.read ? "" : "bg-[#e0fbf9]/60"}`}>
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-sm font-semibold">{n.title}</span>
+                <span className="shrink-0 text-[10px] text-[#7f7f7f]">{n.when}</span>
+              </div>
+              <p className="mt-0.5 line-clamp-3 text-xs text-[#5d6b77]">{n.body}</p>
+            </div>
+          ))}
+          {items.length === 0 && (
+            <div className="px-4 py-8 text-center text-sm text-[#7f7f7f]">
+              Sin notificaciones aún.
+            </div>
+          )}
+        </div>
+      </div>
+    </Popover>
   );
 }
