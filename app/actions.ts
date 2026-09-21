@@ -11,6 +11,7 @@ import {
   rotateUserPassword,
   PasswordPolicyError,
 } from "@/lib/password";
+import { hashResetToken, tokenRecordProblem } from "@/lib/reset-token";
 import { sendPasswordReset, sendWelcomeEmail } from "@/lib/email";
 import { isTeamRole, canActOnRequest } from "@/lib/authz";
 import { hasAccess, ACTIONS } from "@/lib/permissions";
@@ -25,15 +26,13 @@ import { getStatusMap } from "@/lib/statuses";
 import { isValidEmail } from "@/lib/validate";
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
-
-function hashResetToken(token: string) {
-  return crypto.createHash("sha256").update(token).digest("hex");
-}
+// Invitaciones de usuarios nuevos: la persona puede tardar en abrir el correo.
+const INVITE_TOKEN_TTL_MS = 72 * 60 * 60 * 1000;
 
 // Usado tanto por "olvidé mi contraseña" como por el alta de usuarios desde
 // /admin — en ambos casos la persona necesita un link para definir/cambiar
 // su contraseña.
-async function issuePasswordResetToken(userId: string) {
+async function issuePasswordResetToken(userId: string, ttlMs = RESET_TOKEN_TTL_MS) {
   const rawToken = crypto.randomBytes(32).toString("hex");
   await prisma.passwordResetToken.updateMany({
     where: { userId, usedAt: null },
@@ -43,7 +42,7 @@ async function issuePasswordResetToken(userId: string) {
     data: {
       userId,
       tokenHash: hashResetToken(rawToken),
-      expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS),
+      expiresAt: new Date(Date.now() + ttlMs),
     },
   });
   return rawToken;
@@ -259,7 +258,7 @@ export async function resetPassword(formData: FormData) {
   const fail = (error: string) =>
     redirect(`/restablecer-contrasena?token=${encodeURIComponent(token)}&error=${encodeURIComponent(error)}`);
 
-  if (!token) fail("El enlace de recuperación no es válido o ya expiró");
+  if (!token) fail("Falta el enlace. Abre el enlace completo del correo.");
   if (password !== confirmPassword) fail("Las contraseñas no coinciden");
 
   const tokenHash = hashResetToken(token);
@@ -267,8 +266,9 @@ export async function resetPassword(formData: FormData) {
     where: { tokenHash },
     include: { user: true },
   });
-  if (!record || record.usedAt || record.expiresAt < new Date()) {
-    fail("El enlace de recuperación no es válido o ya expiró");
+  const problem = tokenRecordProblem(record);
+  if (!record || problem) {
+    fail(problem ?? "Este enlace no es válido.");
     return;
   }
 
@@ -1406,7 +1406,7 @@ export async function createUser(formData: FormData) {
     detail: `userId=${created.id}, email=${created.email}, roles=${isClientAccount ? "CLIENTE" : roles.map((r) => r.code).join(",")}`,
   });
 
-  const rawToken = await issuePasswordResetToken(created.id);
+  const rawToken = await issuePasswordResetToken(created.id, INVITE_TOKEN_TTL_MS);
   await sendWelcomeEmail({
     to: created.email,
     name: created.name,

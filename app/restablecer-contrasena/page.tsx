@@ -1,11 +1,11 @@
 import Image from "next/image";
 import { resetPassword } from "@/app/actions";
-import { SubmitButton } from "@/components/SubmitButton";
+import Link from "next/link";
+import { prisma } from "@/lib/db";
+import { hashResetToken, tokenRecordProblem } from "@/lib/reset-token";
+import { PasswordFields } from "@/components/PasswordFields";
 
 export const dynamic = "force-dynamic";
-
-const inputCls =
-  "w-full rounded-lg border border-[#e4e8ec] px-3 py-2 text-sm outline-none focus:border-[#0bdbcf]";
 
 export default async function RestablecerContrasenaPage({
   searchParams,
@@ -13,6 +13,10 @@ export default async function RestablecerContrasenaPage({
   searchParams: Promise<{ token?: string; error?: string }>;
 }) {
   const { token, error } = await searchParams;
+  const record = token
+    ? await prisma.passwordResetToken.findUnique({ where: { tokenHash: hashResetToken(token) } })
+    : null;
+  const tokenProblem = token ? tokenRecordProblem(record) : null;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#f4f6f8] p-6">
@@ -34,44 +38,17 @@ export default async function RestablecerContrasenaPage({
           </div>
         )}
 
-        {!token ? (
-          <p className="text-center text-sm text-[#9a4a1e]">
-            Falta el enlace de recuperación.
-          </p>
+        {!token || tokenProblem ? (
+          <div className="space-y-3 text-center text-sm text-[#9a4a1e]">
+            <p>{tokenProblem ?? "Falta el enlace. Abre el enlace completo del correo."}</p>
+            <Link href="/recuperar-contrasena" className="font-semibold text-[#08a89f] hover:underline">
+              Pedir un enlace nuevo
+            </Link>
+          </div>
         ) : (
           <form action={resetPassword} className="space-y-3">
             <input type="hidden" name="token" value={token} />
-            <div>
-              <label className="mb-1 block text-sm font-semibold">
-                Contraseña nueva
-              </label>
-              <input
-                name="password"
-                type="password"
-                required
-                className={inputCls}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-semibold">
-                Repite la contraseña nueva
-              </label>
-              <input
-                name="confirmPassword"
-                type="password"
-                required
-                className={inputCls}
-              />
-            </div>
-            <p className="text-xs text-[#7f7f7f]">
-              Mínimo 8 caracteres, con una mayúscula y un símbolo (! @ # $ % & * ? + -).
-            </p>
-            <SubmitButton
-              className="w-full rounded-lg bg-[#0bdbcf] py-2.5 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]"
-              pendingLabel="Guardando…"
-            >
-              Guardar contraseña
-            </SubmitButton>
+            <PasswordFields name="password" />
           </form>
         )}
       </div>

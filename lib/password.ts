@@ -1,14 +1,14 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "./db";
 import type { User } from "@prisma/client";
+import { missingPasswordRules, PASSWORD_SYMBOLS } from "./password-rules";
 
 // Misma política que ya usa Codia Task en producción
 // (RCD CodiaTask/backend/src/utils/password.js) — se porta tal cual para
 // mantener un solo criterio entre los dos sistemas.
 export const PASSWORD_MAX_AGE_DAYS = 182;
 
-export const STRONG_PASSWORD_MESSAGE =
-  "La contraseña debe tener mínimo 8 caracteres, una mayúscula y un símbolo (! @ # $ % & * ? + -)";
+export const STRONG_PASSWORD_MESSAGE = `La contraseña debe tener mínimo 8 caracteres, una mayúscula y un símbolo (${PASSWORD_SYMBOLS})`;
 export const REUSE_PASSWORD_MESSAGE =
   "No puedes reutilizar la contraseña anterior de forma seguida";
 export const SAME_AS_CURRENT_MESSAGE =
@@ -17,10 +17,7 @@ export const SAME_AS_CURRENT_MESSAGE =
 export class PasswordPolicyError extends Error {}
 
 export function isStrongPassword(password: string) {
-  const value = String(password || "");
-  return (
-    value.length >= 8 && /[A-Z]/.test(value) && /[!@#$%&*?+\-]/.test(value)
-  );
+  return missingPasswordRules(password).length === 0;
 }
 
 function isPasswordExpired(passwordChangedAt: Date | null) {
@@ -56,7 +53,9 @@ export async function assertNewPasswordAllowed(
   previousHash: string | null,
 ) {
   if (!isStrongPassword(newPassword)) {
-    throw new PasswordPolicyError(STRONG_PASSWORD_MESSAGE);
+    throw new PasswordPolicyError(
+      `Tu contraseña no cumple los requisitos. Falta: ${missingPasswordRules(newPassword).join("; ").toLowerCase()}.`,
+    );
   }
   if (currentHash && (await hashesMatch(newPassword, currentHash))) {
     throw new PasswordPolicyError(SAME_AS_CURRENT_MESSAGE);

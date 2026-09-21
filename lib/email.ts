@@ -143,7 +143,7 @@ export async function sendWelcomeEmail(opts: {
     subject: "Te dieron de alta en la Plataforma REVO",
     html: emailLayout({
       title: `Hola ${opts.name}`,
-      bodyHtml: `<p style="margin:0;">Ya tienes una cuenta en la Plataforma de gestión de clientes. Define tu contraseña para empezar (el enlace vence en 1 hora):</p>`,
+      bodyHtml: `<p style="margin:0;">Ya tienes una cuenta en la Plataforma de gestión de clientes. Define tu contraseña para empezar (el enlace vence en 72 horas y solo sirve el último que recibas):</p>`,
       ctaLabel: "Definir contraseña",
       ctaUrl: fullUrl,
     }),
@@ -169,7 +169,7 @@ export async function sendPasswordReset(opts: {
     subject: "Recupera tu contraseña",
     html: emailLayout({
       title: `Hola ${opts.name}`,
-      bodyHtml: `<p style="margin:0;">Elige una nueva contraseña para tu cuenta (el enlace vence en 1 hora):</p>`,
+      bodyHtml: `<p style="margin:0;">Elige una nueva contraseña para tu cuenta (el enlace vence en 1 hora y solo sirve el último que recibas):</p>`,
       ctaLabel: "Elegir nueva contraseña",
       ctaUrl: fullUrl,
     }),

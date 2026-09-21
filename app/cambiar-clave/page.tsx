@@ -2,7 +2,7 @@ import Image from "next/image";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/session";
 import { changePassword } from "@/app/actions";
-import { SubmitButton } from "@/components/SubmitButton";
+import { PasswordFields } from "@/components/PasswordFields";
 
 export const dynamic = "force-dynamic";
 
@@ -58,42 +58,13 @@ export default async function CambiarClavePage({
               <input
                 name="currentPassword"
                 type="password"
+                autoComplete="current-password"
                 required
                 className={inputCls}
               />
             </div>
           )}
-          <div>
-            <label className="mb-1 block text-sm font-semibold">
-              Contraseña nueva
-            </label>
-            <input
-              name="newPassword"
-              type="password"
-              required
-              className={inputCls}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-semibold">
-              Repite la contraseña nueva
-            </label>
-            <input
-              name="confirmPassword"
-              type="password"
-              required
-              className={inputCls}
-            />
-          </div>
-          <p className="text-xs text-[#7f7f7f]">
-            Mínimo 8 caracteres, con una mayúscula y un símbolo (! @ # $ % & * ? + -).
-          </p>
-          <SubmitButton
-            className="w-full rounded-lg bg-[#0bdbcf] py-2.5 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]"
-            pendingLabel="Guardando…"
-          >
-            Guardar contraseña
-          </SubmitButton>
+          <PasswordFields name="newPassword" />
         </form>
       </div>
     </div>
