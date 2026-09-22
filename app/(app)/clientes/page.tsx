@@ -64,7 +64,7 @@ export default async function ClientesPage() {
                     {c.requests.length} solicitudes · {open} abiertas
                   </span>
                   <Link
-                    href={`/clientes/${withSlug(c.id, c.name)}/reporte`}
+                    href={`/clientes/${c.slug ?? withSlug(c.id, c.name)}/reporte`}
                     className="font-semibold text-[#08a89f] hover:underline"
                   >
                     Ver reporte →

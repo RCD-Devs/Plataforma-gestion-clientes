@@ -7,6 +7,16 @@ import { getStatuses, getStatusMap } from "./statuses";
 import { REQUEST_TYPES } from "./constants";
 import { getHoursSummaries } from "./hoursLedger";
 import { endOfToday } from "./dates";
+import { idFromSlug } from "./slug";
+
+// Segmento de /clientes/[param]/reporte al id real: slug puro primero,
+// luego el híbrido id-nombre (o el id solo) de antes — ningún link
+// guardado se rompe.
+export async function resolveClientId(param: string): Promise<string> {
+  const bySlug = await prisma.client.findFirst({ where: { slug: param }, select: { id: true } });
+  if (bySlug) return bySlug.id;
+  return idFromSlug(param);
+}
 import {
   slaDays,
   classifySla,

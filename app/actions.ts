@@ -30,6 +30,7 @@ import { stageDateIssue } from "@/lib/projectBudget";
 import { parseLocalDate, zonedTimeToUtc } from "@/lib/dates";
 import { overlapsOf } from "@/lib/scheduleBlocks";
 import { uniqueSlug } from "@/lib/slug";
+import { projectHref } from "@/lib/projectInsights";
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 // Invitaciones de usuarios nuevos: la persona puede tardar en abrir el correo.
@@ -643,7 +644,7 @@ export async function createProject(clientId: string, formData: FormData) {
   if (!user || !(await canProjectAction(user, "projects.manage", clientId))) return;
   const name = String(formData.get("name") || "").trim();
   if (!name) return;
-  const slug = await uniqueSlug(name, (s) => projectSlugTaken(s));
+  const slug = await uniqueSlug(name, (s) => projectSlugTaken(s, clientId));
   const project = await prisma.project.create({ data: { name, clientId, slug } });
   await logAudit({
     type: "admin_project_created",
@@ -671,7 +672,7 @@ export async function createNewProject(formData: FormData) {
   const endDate = withBudget ? optDate(formData.get("endDate")) : null;
   if (startDate && endDate && endDate < startDate) redirect(back("fechas"));
 
-  const slug = await uniqueSlug(name, (s) => projectSlugTaken(s));
+  const slug = await uniqueSlug(name, (s) => projectSlugTaken(s, clientId));
   const project = await prisma.project.create({
     data: {
       name,
@@ -689,11 +690,14 @@ export async function createNewProject(formData: FormData) {
     detail: `projectId=${project.id}, clientId=${clientId}`,
   });
   revalidatePath("/proyectos");
-  redirect(`/proyectos/${project.slug}`);
+  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true, name: true, slug: true } });
+  redirect(projectHref(project, client!));
 }
 
-async function projectSlugTaken(slug: string) {
-  return (await prisma.project.count({ where: { slug } })) > 0;
+// Único POR CLIENTE, no global — dos clientes pueden tener cada uno su
+// propio "sitio-web" sin chocar (/proyectos/{cliente}/sitio-web).
+async function projectSlugTaken(slug: string, clientId: string) {
+  return (await prisma.project.count({ where: { slug, clientId } })) > 0;
 }
 
 export async function setProjectActive(projectId: string, isActive: boolean) {
@@ -1616,9 +1620,11 @@ export async function createClient(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   if (!name) redirect("/admin/clientes/nuevo?error=nombre");
 
+  const slug = await uniqueSlug(name, async (s) => (await prisma.client.count({ where: { slug: s } })) > 0);
   const client = await prisma.client.create({
     data: {
       name,
+      slug,
       code: String(formData.get("code") || "").trim() || null,
       contactEmail: String(formData.get("contactEmail") || "").trim() || null,
       contractedHours: Number(formData.get("contractedHours") || 0) || 0,

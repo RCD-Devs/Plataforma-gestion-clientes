@@ -25,6 +25,11 @@ datasource db {
 model Client {
   id           String  @id @default(cuid())
   name         String
+  // URL legible ("clinica-los-coihues"): único, no cambia si se renombra el
+  // cliente (evita romper links guardados). Nullable por lo mismo que
+  // Project.slug — los clientes existentes lo reciben en el backfill del
+  // seed, no en el db push.
+  slug         String? @unique
   code         String?
   contactEmail String?
   // Horas que otorga cada ciclo de la bolsa (Rec. #36) — no es un total
@@ -55,11 +60,13 @@ model Client {
 model Project {
   id         String    @id @default(cuid())
   name       String
-  // URL legible ("clinica-los-coihues"): único, no cambia si el proyecto se
-  // renombra (evita romper links guardados). Nullable porque los proyectos
-  // ya existentes lo reciben recién en el backfill del seed, no en el
-  // db push — ver scripts/seed-project-slugs.ts.
-  slug       String?   @unique
+  // URL legible ("sitio-web", dentro de /proyectos/{cliente}/{esto}): único
+  // POR CLIENTE, no global — dos clientes distintos pueden tener cada uno
+  // su "sitio-web" sin chocar. No cambia si el proyecto se renombra (evita
+  // romper links guardados). Nullable porque los proyectos ya existentes lo
+  // reciben recién en el backfill del seed, no en el db push — ver
+  // scripts/seed-project-slugs.ts.
+  slug       String?
   createdAt  DateTime  @default(now())
   archivedAt DateTime?
 
@@ -79,6 +86,7 @@ model Project {
   requests Request[]
   stages   ProjectStage[]
 
+  @@unique([clientId, slug])
   @@index([clientId])
 }
 

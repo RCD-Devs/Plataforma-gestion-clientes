@@ -1,13 +1,39 @@
 import { prisma } from "./db";
 import { getStatuses } from "./statuses";
 import { buildProjectTimeline } from "./projectTimeline";
-import { idFromSlug } from "./slug";
+import { idFromSlug, withSlug } from "./slug";
 
-// Segmento de la URL (/proyectos/[param]) al id real: prueba primero como
-// slug puro ("clinica-los-coihues"), y si no calza cae al formato híbrido
-// de antes (id-nombre, o el id solo) — así ningún link guardado se rompe.
+// URL de un proyecto: /proyectos/{cliente}/{proyecto}, cada segmento con su
+// slug si ya lo tiene, o el híbrido id-nombre si todavía no (recién creado
+// antes de que corra el backfill).
+export function projectHref(
+  project: { id: string; slug: string | null; name: string },
+  client: { id: string; slug: string | null; name: string },
+): string {
+  const clientSeg = client.slug ?? withSlug(client.id, client.name);
+  const projectSeg = project.slug ?? withSlug(project.id, project.name);
+  return `/proyectos/${clientSeg}/${projectSeg}`;
+}
+
+// /proyectos/{cliente}/{proyecto} al id real del proyecto. El slug de
+// proyecto es único POR CLIENTE, no global, así que se busca por ambos a
+// la vez; si no calza (el segmento de cliente quedó desactualizado o es
+// el híbrido id-nombre de una etapa anterior), se ignora y se busca el
+// proyecto solo por su propio segmento.
+export async function resolveProjectPath(clientParam: string, projectParam: string): Promise<string | null> {
+  const bySlugs = await prisma.project.findFirst({
+    where: { slug: projectParam, client: { slug: clientParam } },
+    select: { id: true },
+  });
+  if (bySlugs) return bySlugs.id;
+  return resolveProjectId(projectParam);
+}
+
+// Compat: un solo segmento (/proyectos/{param}) — formato de antes de
+// anidar por cliente. Sigue resolviendo slug puro, híbrido id-nombre, o
+// el id solo, para lo que haya quedado guardado como link.
 export async function resolveProjectId(param: string): Promise<string | null> {
-  const bySlug = await prisma.project.findUnique({ where: { slug: param }, select: { id: true } });
+  const bySlug = await prisma.project.findFirst({ where: { slug: param }, select: { id: true } });
   if (bySlug) return bySlug.id;
   const byId = await prisma.project.findUnique({ where: { id: idFromSlug(param) }, select: { id: true } });
   return byId?.id ?? null;
