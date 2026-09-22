@@ -1118,6 +1118,77 @@ export async function logHours(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
+// Corrección de horas ya cargadas (typo, fecha errada, etc.) — a
+// diferencia de comentarios (donde solo el autor edita lo suyo), acá
+// cualquiera con el permiso hours.manage puede corregir horas de
+// cualquier persona, porque el problema típico es "alguien más se dio
+// cuenta del error", no el propio autor.
+async function timeEntryForAction(
+  user: { id: string; capabilities: Capabilities; ownClientIds?: string[] },
+  entryId: string,
+) {
+  const entry = await prisma.timeEntry.findUnique({
+    where: { id: entryId },
+    include: { request: { include: { client: true } } },
+  });
+  if (!entry) return null;
+  return canOnClient(user.capabilities, "hours.manage", user.id, entry.request.client, user.ownClientIds)
+    ? entry
+    : null;
+}
+
+export async function updateTimeEntry(entryId: string, formData: FormData) {
+  const user = await getSessionUser();
+  if (!user) return;
+  const entry = await timeEntryForAction(user, entryId);
+  if (!entry) return;
+  const hours = parseFloat(String(formData.get("hours") || "0"));
+  if (!hours || hours <= 0) return;
+  const note = String(formData.get("note") || "").trim();
+  const dateStr = String(formData.get("date") || "");
+
+  await prisma.timeEntry.update({
+    where: { id: entryId },
+    data: { hours, note: note || null, ...(dateStr ? { date: parseLocalDate(dateStr) } : {}) },
+  });
+  await prisma.activity.create({
+    data: {
+      requestId: entry.requestId,
+      type: "time_edited",
+      message: `Corrigió una carga de horas de ${entry.userId === user.id ? "sí mismo" : "otra persona"} a ${hours} h`,
+      actorName: user.name,
+    },
+  });
+  revalidatePath(`/solicitudes/${entry.request.key}`);
+  revalidatePath("/bolsa");
+  revalidatePath("/dashboard");
+}
+
+export async function deleteTimeEntry(entryId: string) {
+  const user = await getSessionUser();
+  if (!user) return;
+  const entry = await timeEntryForAction(user, entryId);
+  if (!entry) return;
+
+  // Si nació de un bloque del calendario, se desvincula (el bloque queda
+  // "sin confirmar" otra vez) en vez de quedar apuntando a nada.
+  await prisma.$transaction([
+    prisma.scheduleBlock.updateMany({ where: { timeEntryId: entryId }, data: { timeEntryId: null } }),
+    prisma.timeEntry.delete({ where: { id: entryId } }),
+  ]);
+  await prisma.activity.create({
+    data: {
+      requestId: entry.requestId,
+      type: "time_edited",
+      message: `Eliminó una carga de ${entry.hours} h`,
+      actorName: user.name,
+    },
+  });
+  revalidatePath(`/solicitudes/${entry.request.key}`);
+  revalidatePath("/bolsa");
+  revalidatePath("/dashboard");
+}
+
 export async function addComment(formData: FormData) {
   const user = await getSessionUser();
   const requestId = String(formData.get("requestId") || "");

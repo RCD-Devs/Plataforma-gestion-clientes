@@ -503,7 +503,10 @@ function ConfirmBlockModal({
 }) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
-  const durationH = Math.round(((block.endD.getTime() - block.startD.getTime()) / 3600000) * 10) / 10;
+  // Redondeado al cuarto de hora (no al décimo): los bloques ya quedan
+  // alineados a 15 min, pero 3.75 h redondeado a 1 decimal da 3.8 — un
+  // valor que el input (step="0.25") rechaza, pidiendo 3.75 o 4.
+  const durationH = Math.round((block.endD.getTime() - block.startD.getTime()) / 3600000 / 0.25) * 0.25;
 
   return (
     <Modal title={`${block.request.key} · ${block.request.title}`} onClose={onClose}>

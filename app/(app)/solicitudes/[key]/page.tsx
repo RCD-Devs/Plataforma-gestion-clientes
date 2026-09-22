@@ -4,6 +4,8 @@ import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { canViewRequest } from "@/lib/authz";
+import { canOnClient } from "@/lib/permissions";
+import { TimeEntryActions } from "@/components/TimeEntryActions";
 import {
   StatusSelect,
   AssigneeSelect,
@@ -61,6 +63,7 @@ export default async function RequestDetail({
   });
   if (!req) notFound();
   if (!canViewRequest(user, req)) notFound();
+  const canManageHours = canOnClient(user.capabilities, "hours.manage", user.id, req.client, user.ownClientIds);
 
   const [users, projects, stages, customFields, statuses, statusMap] = await Promise.all([
     prisma.user.findMany({
@@ -451,17 +454,22 @@ export default async function RequestDetail({
             </div>
             <div className="space-y-1.5">
               {req.timeEntries.map((t) => (
-                <div
-                  key={t.id}
-                  className="flex items-center justify-between text-xs"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <Avatar name={t.user.name} color={t.user.color} size={18} />
-                    {t.user.name}
-                  </span>
-                  <span className="text-[#6b7280]">
-                    {hoursLabel(t.hours)} · {shortDate(t.date)}
-                  </span>
+                <div key={t.id} className="text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Avatar name={t.user.name} color={t.user.color} size={18} />
+                      {t.user.name}
+                    </span>
+                    <span className="text-[#6b7280]">
+                      {hoursLabel(t.hours)} · {shortDate(t.date)}
+                      {t.note ? ` · ${t.note}` : ""}
+                    </span>
+                  </div>
+                  {canManageHours && (
+                    <div className="mt-0.5 flex justify-end">
+                      <TimeEntryActions entryId={t.id} hours={t.hours} date={t.date} note={t.note} />
+                    </div>
+                  )}
                 </div>
               ))}
               {req.timeEntries.length === 0 && (

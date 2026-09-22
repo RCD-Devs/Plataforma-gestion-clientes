@@ -25,7 +25,8 @@ export type ActionId =
   | "roles.manage"
   | "projects.view"
   | "projects.manage"
-  | "projects.budget";
+  | "projects.budget"
+  | "hours.manage";
 
 export const ACTIONS: { key: ActionId; label: string; scopes: Scope[] }[] = [
   {
@@ -86,6 +87,11 @@ export const ACTIONS: { key: ActionId; label: string; scopes: Scope[] }[] = [
   {
     key: "projects.budget",
     label: "Cargar y editar la cubicación estimada (horas y fechas) del proyecto",
+    scopes: ["all", "own_clients", "none"],
+  },
+  {
+    key: "hours.manage",
+    label: "Editar o eliminar horas ya cargadas por cualquier persona (corrección de errores)",
     scopes: ["all", "own_clients", "none"],
   },
 ];
