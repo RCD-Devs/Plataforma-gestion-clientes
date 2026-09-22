@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { PortalShell, shellProps } from "@/components/portal/PortalShell";
+import { withSlug } from "@/lib/slug";
 import { requirePortalUser } from "@/lib/portal";
 import { getStatuses } from "@/lib/statuses";
 import { budgetStatus } from "@/lib/projectBudget";
@@ -48,7 +49,7 @@ export default async function PortalProyectosPage() {
             return (
               <Link
                 key={p.id}
-                href={`/portal/proyectos/${p.id}`}
+                href={`/portal/proyectos/${withSlug(p.id, p.name)}`}
                 className="rounded-2xl border border-[#e4e8ec] bg-white p-5 hover:border-[#0bdbcf]"
               >
                 <div className="font-semibold">{p.name}</div>

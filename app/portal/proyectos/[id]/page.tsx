@@ -7,11 +7,13 @@ import { budgetStatus } from "@/lib/projectBudget";
 import { DelayComparison, ProjectGantt, StageComparison } from "@/components/ProjectTimeline";
 import { Bar } from "@/components/ui";
 import { hoursLabel, shortDate } from "@/lib/format";
+import { idFromSlug } from "@/lib/slug";
 
 export const dynamic = "force-dynamic";
 
 export default async function PortalProyectoPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+  const { id: rawId } = await params;
+  const id = idFromSlug(rawId);
   const ctx = await requirePortalUser();
   const insights = await loadProjectInsights(id);
   // Un cliente solo ve proyectos propios (y no archivados).

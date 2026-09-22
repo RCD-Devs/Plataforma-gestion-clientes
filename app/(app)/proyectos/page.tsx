@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { withSlug } from "@/lib/slug";
 import { getSessionUser } from "@/lib/session";
 import { hasAccess, clientScopeWhere } from "@/lib/permissions";
 import { getStatuses } from "@/lib/statuses";
@@ -152,7 +153,7 @@ export default async function ProyectosPage({
               {items.map(({ p, consumed, done, b, badge }) => (
                 <Link
                   key={p.id}
-                  href={`/proyectos/${p.id}`}
+                  href={`/proyectos/${withSlug(p.id, p.name)}`}
                   className="group rounded-2xl border border-[#e4e8ec] bg-white p-4 transition hover:border-[#0bdbcf] hover:shadow-sm"
                 >
                   <div className="flex items-start justify-between gap-2">

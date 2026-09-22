@@ -10,6 +10,7 @@ import { SubmitButton } from "@/components/SubmitButton";
 import { StatusBadge, Bar } from "@/components/ui";
 import { hoursLabel, shortDate } from "@/lib/format";
 import { toDateInput } from "@/lib/dates";
+import { idFromSlug } from "@/lib/slug";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +34,8 @@ export default async function ProyectoPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ error?: string }>;
 }) {
-  const { id } = await params;
+  const { id: rawId } = await params;
+  const id = idFromSlug(rawId);
   const { error } = await searchParams;
   const user = await getSessionUser();
   if (!user) redirect("/login");

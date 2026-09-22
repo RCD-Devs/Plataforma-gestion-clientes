@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { withSlug } from "@/lib/slug";
 import { updateClient, createHoursAdjustment, createProject, setProjectActive } from "@/app/actions";
 import { hasAccess, attachCapabilities } from "@/lib/permissions";
 import { ClientForm } from "@/components/admin/ClientForm";
@@ -150,7 +151,7 @@ export default async function EditarClientePage({
                 key={p.id}
                 className="flex items-center justify-between rounded-lg border border-[#f1f3f4] px-3 py-2 text-sm"
               >
-                <Link href={`/proyectos/${p.id}`} className="hover:text-[#08a89f] hover:underline">
+                <Link href={`/proyectos/${withSlug(p.id, p.name)}`} className="hover:text-[#08a89f] hover:underline">
                   {p.name}
                 </Link>
                 <ActiveToggle id={p.id} isActive={!p.archivedAt} action={setProjectActive} />
