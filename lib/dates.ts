@@ -22,6 +22,12 @@ export function toDateInput(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+// Un input type=date entrega "YYYY-MM-DD"; new Date() lo interpretaría como
+// medianoche UTC (día anterior en Chile). Se fija mediodía local.
+export function parseLocalDate(s: string) {
+  return new Date(`${s}T12:00:00`);
+}
+
 // Lunes de la semana de d, como "YYYY-MM-DD" — clave de throttle semanal
 // (ver HoursAlertLog).
 export function mondayOf(d: Date) {

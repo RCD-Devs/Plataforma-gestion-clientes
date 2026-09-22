@@ -105,13 +105,10 @@ export async function getSessionUser() {
 
 export type SessionUser = NonNullable<Awaited<ReturnType<typeof getSessionUser>>>;
 
-// Solo UX (a dónde aterriza justo después de loguearse) — se mantiene un
-// chequeo directo de código de rol en vez de pasar por capabilities, para
-// no tener que enriquecer al usuario recién autenticado solo para esto.
+// Solo UX (a dónde aterriza justo después de loguearse) — todo el mundo,
+// incluido Admin/Líder, aterriza en su propio espacio de trabajo, no en la
+// carga del equipo (eso se consulta a propósito en /equipo, no de entrada).
 export function redirectForRole(user: { role: string; roleCodes: string[] }) {
   if (user.role === "CLIENTE") return "/portal";
-  if (user.roleCodes.includes("ADMIN") || user.roleCodes.includes("LIDER_AREA")) {
-    return "/equipo";
-  }
   return "/mi-espacio";
 }

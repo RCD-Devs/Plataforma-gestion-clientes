@@ -141,6 +141,7 @@ model User {
 
   assigned        Request[]              @relation("assignee")
   timeEntries     TimeEntry[]
+  scheduleBlocks  ScheduleBlock[]
   comments        Comment[]
   resetTokens     PasswordResetToken[]
   managedClients  Client[]               @relation("clientAccountManager")
@@ -286,6 +287,7 @@ model Request {
   collaborators     RequestCollaborator[]
   customFieldValues CustomFieldValue[]
   commentReads      CommentRead[]
+  scheduleBlocks    ScheduleBlock[]
   statusChanges     StatusChange[]
 
   @@index([clientId])
@@ -391,6 +393,33 @@ model TimeEntry {
 
   @@index([requestId])
   @@index([userId])
+  scheduleBlock ScheduleBlock?
+}
+
+// Perfil personal (etapa 1, 22 sep 2026) — bloque de horario en el
+// calendario semanal de cada persona: "planeo trabajar en esta tarea tal
+// día a tal hora". Se puede pisar en horario a propósito (no es una
+// agenda de disponibilidad, la UI solo avisa del choque). Al confirmarlo
+// genera un TimeEntry real con la duración del bloque, editable antes de
+// guardar — timeEntryId queda null hasta ese momento.
+model ScheduleBlock {
+  id        String   @id @default(cuid())
+  start     DateTime
+  end       DateTime
+  note      String?
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  requestId String
+  request   Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  timeEntryId String?    @unique
+  timeEntry   TimeEntry? @relation(fields: [timeEntryId], references: [id])
+
+  @@index([userId])
+  @@index([requestId])
 }
 
 model Activity {

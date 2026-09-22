@@ -27,6 +27,8 @@ import { getStatusMap } from "@/lib/statuses";
 import { isValidEmail } from "@/lib/validate";
 import { getPortalContext, canActAsClient, PORTAL_CLIENT_COOKIE } from "@/lib/portal";
 import { stageDateIssue } from "@/lib/projectBudget";
+import { parseLocalDate } from "@/lib/dates";
+import { overlapsOf } from "@/lib/scheduleBlocks";
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 // Invitaciones de usuarios nuevos: la persona puede tardar en abrir el correo.
@@ -49,12 +51,6 @@ async function issuePasswordResetToken(userId: string, ttlMs = RESET_TOKEN_TTL_M
     },
   });
   return rawToken;
-}
-
-// Un input type=date entrega "YYYY-MM-DD"; new Date() lo interpretaría como
-// medianoche UTC (día anterior en Chile). Se fija mediodía local.
-function parseLocalDate(s: string) {
-  return new Date(`${s}T12:00:00`);
 }
 
 // Contador atómico (Rec. #65/#67) — antes escaneaba todas las solicitudes
@@ -1953,4 +1949,155 @@ export async function deleteTeam(id: string) {
     detail: `teamId=${id}, name=${team.name}`,
   });
   revalidateAdmin();
+}
+
+// ── Perfil personal: calendario de bloques de horario (etapa 1) ────────
+// No son server actions ligadas a un <form> — se llaman desde el cliente
+// (useTransition) porque el calendario necesita el resultado (choques de
+// horario, id creado) para actualizar la vista sin recargar la página.
+
+type ScheduleResult = { ok: boolean; overlaps?: { key: string; title: string; start: string; end: string }[] };
+
+function parseDateTimeLocal(s: string): Date | null {
+  // <input type="datetime-local"> entrega "YYYY-MM-DDTHH:mm" en hora local.
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+async function ownedBlock(userId: string, blockId: string) {
+  const block = await prisma.scheduleBlock.findUnique({ where: { id: blockId } });
+  return block && block.userId === userId ? block : null;
+}
+
+async function overlapWarnings(userId: string, start: Date, end: Date, excludeId?: string) {
+  const blocks = await prisma.scheduleBlock.findMany({
+    where: { userId, id: excludeId ? { not: excludeId } : undefined },
+    include: { request: { select: { key: true, title: true } } },
+  });
+  return overlapsOf(blocks, start, end).map((b) => ({
+    key: b.request.key,
+    title: b.request.title,
+    start: b.start.toISOString(),
+    end: b.end.toISOString(),
+  }));
+}
+
+// Crea el bloque, ligado a una tarea existente o a una nueva creada al
+// vuelo con los mismos campos que una tarea común (tipo, cliente,
+// prioridad, etc.). El choque de horario nunca bloquea: solo se informa.
+export async function createScheduleBlock(formData: FormData): Promise<ScheduleResult> {
+  const user = await getSessionUser();
+  if (!user || !isTeamRole(user.role)) return { ok: false };
+
+  const start = parseDateTimeLocal(String(formData.get("start") || ""));
+  const end = parseDateTimeLocal(String(formData.get("end") || ""));
+  if (!start || !end || end <= start) return { ok: false };
+
+  const mode = String(formData.get("mode") || "existing");
+  let requestId = String(formData.get("requestId") || "");
+
+  if (mode === "new") {
+    const clientId = String(formData.get("clientId") || "");
+    const title = String(formData.get("title") || "").trim();
+    if (!clientId || !title) return { ok: false };
+    const rawProject = String(formData.get("projectId") || "");
+    const project = rawProject
+      ? await prisma.project.findFirst({ where: { id: rawProject, clientId, archivedAt: null }, select: { id: true } })
+      : null;
+    const type = String(formData.get("type") || "Otro");
+    const rawPriority = String(formData.get("priority") || "MEDIA");
+    const priority = PRIORITY_MAP[rawPriority] ? rawPriority : "MEDIA";
+    const req = await withKeyRetry((key) =>
+      prisma.request.create({
+        data: {
+          key,
+          title,
+          type,
+          description: String(formData.get("description") || ""),
+          priority,
+          clientId,
+          projectId: project?.id ?? null,
+          assigneeId: user.id,
+          status: "POR_HACER",
+        },
+      }),
+    );
+    await prisma.activity.create({
+      data: { requestId: req.id, type: "created", message: "Creó la tarea desde su calendario", actorName: user.name },
+    });
+    requestId = req.id;
+  } else {
+    if (!requestId) return { ok: false };
+    const exists = await prisma.request.findUnique({ where: { id: requestId }, select: { id: true } });
+    if (!exists) return { ok: false };
+  }
+
+  const block = await prisma.scheduleBlock.create({
+    data: { userId: user.id, requestId, start, end, note: String(formData.get("note") || "").trim() || null },
+  });
+  const overlaps = await overlapWarnings(user.id, start, end, block.id);
+  revalidatePath("/perfil");
+  return { ok: true, overlaps };
+}
+
+// Mover o redimensionar un bloque (arrastrar en el calendario).
+export async function updateScheduleBlock(blockId: string, start: string, end: string): Promise<ScheduleResult> {
+  const user = await getSessionUser();
+  if (!user) return { ok: false };
+  const block = await ownedBlock(user.id, blockId);
+  if (!block) return { ok: false };
+  const s = parseDateTimeLocal(start);
+  const e = parseDateTimeLocal(end);
+  if (!s || !e || e <= s) return { ok: false };
+
+  await prisma.scheduleBlock.update({ where: { id: blockId }, data: { start: s, end: e } });
+  const overlaps = await overlapWarnings(user.id, s, e, blockId);
+  revalidatePath("/perfil");
+  return { ok: true, overlaps };
+}
+
+export async function deleteScheduleBlock(blockId: string): Promise<{ ok: boolean }> {
+  const user = await getSessionUser();
+  if (!user) return { ok: false };
+  const block = await ownedBlock(user.id, blockId);
+  if (!block) return { ok: false };
+  await prisma.scheduleBlock.delete({ where: { id: blockId } });
+  revalidatePath("/perfil");
+  return { ok: true };
+}
+
+// Confirma el bloque como horas reales: crea el TimeEntry (editable antes
+// de guardar, precargado con la duración del bloque) y lo enlaza.
+export async function confirmScheduleBlockHours(blockId: string, formData: FormData): Promise<{ ok: boolean }> {
+  const user = await getSessionUser();
+  if (!user) return { ok: false };
+  const block = await ownedBlock(user.id, blockId);
+  if (!block || block.timeEntryId) return { ok: false };
+  const hours = parseFloat(String(formData.get("hours") || "0"));
+  if (!hours || hours <= 0) return { ok: false };
+  const note = String(formData.get("note") || "").trim();
+  const dateStr = String(formData.get("date") || "");
+
+  const entry = await prisma.timeEntry.create({
+    data: {
+      requestId: block.requestId,
+      userId: user.id,
+      hours,
+      note: note || null,
+      date: dateStr ? parseLocalDate(dateStr) : block.start,
+    },
+  });
+  await prisma.scheduleBlock.update({ where: { id: blockId }, data: { timeEntryId: entry.id } });
+  await prisma.activity.create({
+    data: {
+      requestId: block.requestId,
+      type: "time_logged",
+      message: `Cargó ${hours} h desde su calendario${note ? ` — ${note}` : ""}`,
+      actorName: user.name,
+    },
+  });
+  revalidatePath("/perfil");
+  revalidatePath("/bolsa");
+  revalidatePath("/dashboard");
+  return { ok: true };
 }

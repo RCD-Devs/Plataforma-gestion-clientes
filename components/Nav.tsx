@@ -128,7 +128,11 @@ export function Sidebar({
         </nav>
 
         <div className="border-t border-white/10 p-3">
-          <div className="flex items-center gap-2">
+          <Link
+            href="/perfil"
+            onClick={closeOnNavigate}
+            className="flex items-center gap-2 rounded-lg p-1 -m-1 hover:bg-white/5"
+          >
             <Avatar name={user.name} color={user.color} size={30} />
             <div className="min-w-0 leading-tight">
               <div className="truncate text-sm font-semibold text-white">
@@ -138,7 +142,7 @@ export function Sidebar({
                 {user.roleNames.length > 0 ? user.roleNames.join(", ") : "Sin rol asignado"}
               </div>
             </div>
-          </div>
+          </Link>
           <form action={logout} className="mt-2">
             <button className="w-full rounded-md border border-white/15 py-1.5 text-xs text-white/80 hover:bg-white/5 hover:text-white">
               Cerrar sesión
