@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { markTeamAlertsRead } from "@/app/actions";
 import { Popover } from "./Popover";
-import type { NudgeItem, NudgeKind } from "@/lib/nudges";
+import { NUDGE_LABELS, type NudgeItem } from "@/lib/nudges";
 
 export type BellItem = {
   id: string;
@@ -12,13 +12,6 @@ export type BellItem = {
   body: string;
   read: boolean;
   when: string;
-};
-
-// Los vencimientos van en el panel de entregas (⏰), no acá.
-const NUDGE_LABELS: Partial<Record<NudgeKind, { icon: string; title: (n: number) => string }>> = {
-  MISSING_TIMES: { icon: "⏱️", title: (n) => `${n} tarea${n === 1 ? "" : "s"} sin horas cargadas` },
-  STALE_STATUS: { icon: "🐢", title: (n) => `${n} tarea${n === 1 ? "" : "s"} sin movimiento hace 3+ días` },
-  MISSING_COMMENTS: { icon: "💬", title: (n) => `${n} tarea${n === 1 ? "" : "s"} sin un comentario tuyo` },
 };
 
 // Campanita: notificaciones y pendientes ("dale una pasada a esto") ocultos

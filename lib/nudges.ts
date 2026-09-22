@@ -25,6 +25,16 @@ export type NudgeKind =
 
 export type NudgeTask = { id: string; key: string; title: string };
 
+// Etiquetas compartidas por la campanita y el dashboard personal. DUE_DATES
+// no tiene entrada acá a propósito — los vencimientos ya tienen su propio
+// panel (⏰ Entregas / "Próximas entregas"), mostrarlo también acá sería
+// redundante.
+export const NUDGE_LABELS: Partial<Record<NudgeKind, { icon: string; title: (n: number) => string }>> = {
+  MISSING_TIMES: { icon: "⏱️", title: (n) => `${n} tarea${n === 1 ? "" : "s"} sin horas cargadas` },
+  STALE_STATUS: { icon: "🐢", title: (n) => `${n} tarea${n === 1 ? "" : "s"} sin movimiento hace 3+ días` },
+  MISSING_COMMENTS: { icon: "💬", title: (n) => `${n} tarea${n === 1 ? "" : "s"} sin un comentario tuyo` },
+};
+
 export type NudgeItem = {
   kind: NudgeKind;
   taskCount: number;
