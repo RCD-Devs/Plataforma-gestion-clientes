@@ -23,9 +23,9 @@ export type CalendarBlock = {
 
 export type CalendarTask = { id: string; key: string; title: string; clientName: string };
 
-const START_HOUR = 7;
-const END_HOUR = 21;
-const PX_PER_MIN = 1.1; // 66px por hora
+const START_HOUR = 0;
+const END_HOUR = 24;
+const PX_PER_MIN = 0.8; // 48px por hora — día completo sin quedar excesivamente largo
 const DAY_LABELS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 const MIN_DURATION_MIN = 15;
 
@@ -59,6 +59,7 @@ export function PersonalCalendar({
   const router = useRouter();
   const [, startTransition] = useTransition();
   const gridRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const days = useMemo(() => {
     const monday = new Date(`${weekStart}T00:00:00`);
     return Array.from({ length: 7 }, (_, i) => {
@@ -204,6 +205,14 @@ export function PersonalCalendar({
   const topOf = (d: Date) => ((d.getHours() - START_HOUR) * 60 + d.getMinutes()) * PX_PER_MIN;
   const heightOf = (a: Date, b: Date) => Math.max(((b.getTime() - a.getTime()) / 60000) * PX_PER_MIN, 18);
 
+  // Día completo (00:00-24:00): abre centrado en la hora actual en vez de
+  // arrancar desde medianoche cada vez.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = Math.max(topOf(new Date()) - el.clientHeight / 2, 0);
+  }, [weekStart]);
+
   const overlapIds = useMemo(() => {
     const bad = new Set<string>();
     for (let i = 0; i < items.length; i++) {
@@ -227,7 +236,7 @@ export function PersonalCalendar({
           </button>
         </div>
       )}
-      <div className="overflow-x-auto rounded-xl border border-[#e4e8ec] bg-white">
+      <div ref={scrollRef} className="max-h-[75vh] overflow-auto rounded-xl border border-[#e4e8ec] bg-white">
         <div className="flex min-w-[820px]">
           <div className="w-14 shrink-0 border-r border-[#f1f3f4]">
             <div className="h-10 border-b border-[#f1f3f4]" />
@@ -265,6 +274,11 @@ export function PersonalCalendar({
                     {hours.map((h) => (
                       <div key={h} className="absolute inset-x-0 border-b border-[#f6f7f8]" style={{ top: (h - START_HOUR) * 60 * PX_PER_MIN }} />
                     ))}
+                    {isToday && (
+                      <div className="absolute inset-x-0 z-10 border-t-2 border-[#fb693b]" style={{ top: topOf(new Date()) }}>
+                        <span className="absolute -left-1 -top-[5px] h-2.5 w-2.5 rounded-full bg-[#fb693b]" />
+                      </div>
+                    )}
                     {draft && draft.day === i && (
                       <div
                         className="absolute inset-x-1 rounded-md border-2 border-dashed border-[#0bdbcf] bg-[#0bdbcf]/10"

@@ -6,18 +6,7 @@ import { cycleGrants, getHoursSummaries } from "@/lib/hoursLedger";
 import { getStatuses } from "@/lib/statuses";
 import { Avatar, Bar } from "@/components/ui";
 import { hoursLabel, longDate } from "@/lib/format";
-import { BreakdownTabs, DonutChart, MonthBars, type Slice } from "./Charts";
-
-const PALETTE = ["#0bdbcf", "#081826", "#fb693b", "#7c5cff", "#fda565", "#08a89f", "#c97416", "#d21f3c"];
-const OTHER_COLOR = "#c9d1d9";
-
-// Top N + "Otras" agrupando el resto, con colores de la paleta.
-function toSlices(rows: { label: string; value: number; href?: string }[], max = 6): Slice[] {
-  const sorted = [...rows].sort((a, b) => b.value - a.value);
-  const head = sorted.slice(0, max).map((r, i) => ({ ...r, color: PALETTE[i % PALETTE.length] }));
-  const rest = sorted.slice(max).reduce((a, r) => a + r.value, 0);
-  return rest > 0 ? [...head, { label: "Otras", value: rest, color: OTHER_COLOR }] : head;
-}
+import { BreakdownTabs, DonutChart, MonthBars, toSlices, OTHER_COLOR, type Slice } from "@/components/Charts";
 
 export async function PortalDashboard({ client }: { client: Client }) {
   const now = new Date();

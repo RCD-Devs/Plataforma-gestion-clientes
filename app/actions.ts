@@ -27,7 +27,7 @@ import { getStatusMap } from "@/lib/statuses";
 import { isValidEmail } from "@/lib/validate";
 import { getPortalContext, canActAsClient, PORTAL_CLIENT_COOKIE } from "@/lib/portal";
 import { stageDateIssue } from "@/lib/projectBudget";
-import { parseLocalDate } from "@/lib/dates";
+import { parseLocalDate, zonedTimeToUtc } from "@/lib/dates";
 import { overlapsOf } from "@/lib/scheduleBlocks";
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
@@ -1959,9 +1959,11 @@ export async function deleteTeam(id: string) {
 type ScheduleResult = { ok: boolean; overlaps?: { key: string; title: string; start: string; end: string }[] };
 
 function parseDateTimeLocal(s: string): Date | null {
-  // <input type="datetime-local"> entrega "YYYY-MM-DDTHH:mm" en hora local.
-  const d = new Date(s);
-  return Number.isNaN(d.getTime()) ? null : d;
+  // <input type="datetime-local"> entrega "YYYY-MM-DDTHH:mm" en hora de
+  // Chile (así lo arma toLocalInput en el cliente) — zonedTimeToUtc, no
+  // new Date(s), porque acá corre con la zona horaria del proceso, que en
+  // Vercel es UTC y no Chile.
+  return zonedTimeToUtc(s);
 }
 
 async function ownedBlock(userId: string, blockId: string) {

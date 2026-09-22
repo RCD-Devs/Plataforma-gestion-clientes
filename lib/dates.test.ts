@@ -1,5 +1,44 @@
 import { describe, it, expect } from "vitest";
-import { daysFromToday, toDateInput, mondayOf, endOfToday, DAY } from "./dates";
+import { daysFromToday, toDateInput, mondayOf, endOfToday, zonedTimeToUtc, DAY } from "./dates";
+
+// Formatea un instante en America/Santiago como "YYYY-MM-DDTHH:mm", para
+// comprobar la ida y vuelta sin asumir a mano el desfase de Chile (varía
+// con el horario de verano).
+function formatSantiago(d: Date): string {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Santiago",
+      hour12: false,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).formatToParts(d).map((x) => [x.type, x.value]),
+  );
+  const hour = p.hour === "24" ? "00" : p.hour;
+  return `${p.year}-${p.month}-${p.day}T${hour}:${p.minute}`;
+}
+
+describe("zonedTimeToUtc", () => {
+  it("la hora de pared en Santiago, al formatearla de vuelta, coincide con la original", () => {
+    for (const wallClock of ["2026-01-15T15:00", "2026-07-15T15:00", "2026-09-22T15:00", "2026-12-31T23:30"]) {
+      const utc = zonedTimeToUtc(wallClock)!;
+      expect(formatSantiago(utc)).toBe(wallClock);
+    }
+  });
+
+  it("Santiago va detrás de UTC (el instante UTC cae después en el reloj)", () => {
+    const utc = zonedTimeToUtc("2026-09-22T15:00")!;
+    // 15:00 hora Chile es más tarde que 15:00 UTC del mismo día.
+    expect(utc.getTime()).toBeGreaterThan(Date.UTC(2026, 8, 22, 15, 0));
+  });
+
+  it("formato inválido devuelve null", () => {
+    expect(zonedTimeToUtc("2026-09-22")).toBeNull();
+    expect(zonedTimeToUtc("no es una fecha")).toBeNull();
+  });
+});
 
 describe("daysFromToday", () => {
   it("da 0 para hoy, sin importar la hora del día", () => {

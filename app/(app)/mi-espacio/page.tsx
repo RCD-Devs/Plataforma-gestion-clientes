@@ -8,24 +8,13 @@ import { PriorityTag, ClientTag } from "@/components/ui";
 import { HandoffPanel } from "@/components/Handoff";
 import { NotificationBell } from "@/components/NotificationBell";
 import { hoursLabel, relative, shortDate } from "@/lib/format";
-import { daysFromToday } from "@/lib/dates";
+import { dueInfo } from "@/lib/dates";
 import { getUnreadRequestIds } from "@/lib/commentReads";
 import { getPendingNudge } from "@/lib/nudges";
 import { DeliveriesPopover } from "@/components/DeliveriesPopover";
 import { escalateSlaAlerts } from "@/lib/slaAlerts";
 
 export const dynamic = "force-dynamic";
-
-function dueInfo(dueDate: Date | null, isFinal: boolean) {
-  if (!dueDate || isFinal) return null;
-  const days = daysFromToday(dueDate);
-  if (days < 0)
-    return { tone: "late" as const, text: `Vencida hace ${-days} día${days === -1 ? "" : "s"}` };
-  if (days === 0) return { tone: "today" as const, text: "Vence hoy" };
-  if (days <= 3)
-    return { tone: "soon" as const, text: `Vence en ${days} día${days === 1 ? "" : "s"}` };
-  return null;
-}
 
 const toneCls = {
   late: "border-[#f7c3c9] bg-[#fdeef0] text-[#a01830]",
