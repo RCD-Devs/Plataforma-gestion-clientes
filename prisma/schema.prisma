@@ -1,6 +1,15 @@
 // Plataforma de gestión de clientes — Grupo Revo / Rompecabeza
 // PostgreSQL (Vercel / Neon / Supabase). Los estados y roles siguen en String.
 // DATABASE_URL: pooler (app). DIRECT_URL: conexión directa (db push / migrate).
+//
+// El build (package.json) corre "prisma db push --accept-data-loss": sin el
+// flag, Vercel no tiene con quién confirmar el prompt y el deploy queda
+// bloqueado apenas se agrega CUALQUIER columna @unique (pasó con
+// Project.slug — el warning era falso, la columna es nullable y todas las
+// filas existentes parten en null, Postgres permite varios NULL bajo
+// unique). Antes de un cambio que SÍ borre datos de verdad (dropear una
+// columna con datos, achicar un tipo), aplícalo a mano primero y revisa el
+// plan que imprime `prisma db push` sin el flag.
 
 generator client {
   provider      = "prisma-client-js"
