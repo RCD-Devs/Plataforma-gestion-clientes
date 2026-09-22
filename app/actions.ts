@@ -29,6 +29,7 @@ import { getPortalContext, canActAsClient, PORTAL_CLIENT_COOKIE } from "@/lib/po
 import { stageDateIssue } from "@/lib/projectBudget";
 import { parseLocalDate, zonedTimeToUtc } from "@/lib/dates";
 import { overlapsOf } from "@/lib/scheduleBlocks";
+import { uniqueSlug } from "@/lib/slug";
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 // Invitaciones de usuarios nuevos: la persona puede tardar en abrir el correo.
@@ -642,7 +643,8 @@ export async function createProject(clientId: string, formData: FormData) {
   if (!user || !(await canProjectAction(user, "projects.manage", clientId))) return;
   const name = String(formData.get("name") || "").trim();
   if (!name) return;
-  const project = await prisma.project.create({ data: { name, clientId } });
+  const slug = await uniqueSlug(name, (s) => projectSlugTaken(s));
+  const project = await prisma.project.create({ data: { name, clientId, slug } });
   await logAudit({
     type: "admin_project_created",
     actorId: user.id,
@@ -669,9 +671,11 @@ export async function createNewProject(formData: FormData) {
   const endDate = withBudget ? optDate(formData.get("endDate")) : null;
   if (startDate && endDate && endDate < startDate) redirect(back("fechas"));
 
+  const slug = await uniqueSlug(name, (s) => projectSlugTaken(s));
   const project = await prisma.project.create({
     data: {
       name,
+      slug,
       clientId,
       startDate,
       endDate,
@@ -685,7 +689,11 @@ export async function createNewProject(formData: FormData) {
     detail: `projectId=${project.id}, clientId=${clientId}`,
   });
   revalidatePath("/proyectos");
-  redirect(`/proyectos/${project.id}`);
+  redirect(`/proyectos/${project.slug}`);
+}
+
+async function projectSlugTaken(slug: string) {
+  return (await prisma.project.count({ where: { slug } })) > 0;
 }
 
 export async function setProjectActive(projectId: string, isActive: boolean) {

@@ -2,18 +2,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PortalShell, shellProps } from "@/components/portal/PortalShell";
 import { requirePortalUser } from "@/lib/portal";
-import { loadProjectInsights } from "@/lib/projectInsights";
+import { loadProjectInsights, resolveProjectId } from "@/lib/projectInsights";
 import { budgetStatus } from "@/lib/projectBudget";
 import { DelayComparison, ProjectGantt, StageComparison } from "@/components/ProjectTimeline";
 import { Bar } from "@/components/ui";
 import { hoursLabel, shortDate } from "@/lib/format";
-import { idFromSlug } from "@/lib/slug";
 
 export const dynamic = "force-dynamic";
 
 export default async function PortalProyectoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: rawId } = await params;
-  const id = idFromSlug(rawId);
+  const id = (await resolveProjectId(rawId)) ?? "";
   const ctx = await requirePortalUser();
   const insights = await loadProjectInsights(id);
   // Un cliente solo ve proyectos propios (y no archivados).

@@ -151,7 +151,7 @@ export default async function EditarClientePage({
                 key={p.id}
                 className="flex items-center justify-between rounded-lg border border-[#f1f3f4] px-3 py-2 text-sm"
               >
-                <Link href={`/proyectos/${withSlug(p.id, p.name)}`} className="hover:text-[#08a89f] hover:underline">
+                <Link href={`/proyectos/${p.slug ?? withSlug(p.id, p.name)}`} className="hover:text-[#08a89f] hover:underline">
                   {p.name}
                 </Link>
                 <ActiveToggle id={p.id} isActive={!p.archivedAt} action={setProjectActive} />

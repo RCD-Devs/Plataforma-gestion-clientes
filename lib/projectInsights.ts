@@ -1,6 +1,17 @@
 import { prisma } from "./db";
 import { getStatuses } from "./statuses";
 import { buildProjectTimeline } from "./projectTimeline";
+import { idFromSlug } from "./slug";
+
+// Segmento de la URL (/proyectos/[param]) al id real: prueba primero como
+// slug puro ("clinica-los-coihues"), y si no calza cae al formato híbrido
+// de antes (id-nombre, o el id solo) — así ningún link guardado se rompe.
+export async function resolveProjectId(param: string): Promise<string | null> {
+  const bySlug = await prisma.project.findUnique({ where: { slug: param }, select: { id: true } });
+  if (bySlug) return bySlug.id;
+  const byId = await prisma.project.findUnique({ where: { id: idFromSlug(param) }, select: { id: true } });
+  return byId?.id ?? null;
+}
 
 // Carga un proyecto con todo lo necesario para ficha/portal: horas
 // consumidas y línea de tiempo (Gantt + comparativo de demoras).

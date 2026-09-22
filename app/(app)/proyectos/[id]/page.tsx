@@ -3,14 +3,13 @@ import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/session";
 import { canOnClient } from "@/lib/permissions";
 import { budgetStatus } from "@/lib/projectBudget";
-import { loadProjectInsights } from "@/lib/projectInsights";
+import { loadProjectInsights, resolveProjectId } from "@/lib/projectInsights";
 import { DelayComparison, ProjectGantt, StageComparison } from "@/components/ProjectTimeline";
 import { confirmProjectBudget, reopenProjectBudget, deleteStage, saveStage, setRequestStage, updateProjectBudget } from "@/app/actions";
 import { SubmitButton } from "@/components/SubmitButton";
 import { StatusBadge, Bar } from "@/components/ui";
 import { hoursLabel, shortDate } from "@/lib/format";
 import { toDateInput } from "@/lib/dates";
-import { idFromSlug } from "@/lib/slug";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +34,7 @@ export default async function ProyectoPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { id: rawId } = await params;
-  const id = idFromSlug(rawId);
+  const id = (await resolveProjectId(rawId)) ?? "";
   const { error } = await searchParams;
   const user = await getSessionUser();
   if (!user) redirect("/login");

@@ -49,7 +49,7 @@ export default async function PortalProyectosPage() {
             return (
               <Link
                 key={p.id}
-                href={`/portal/proyectos/${withSlug(p.id, p.name)}`}
+                href={`/portal/proyectos/${p.slug ?? withSlug(p.id, p.name)}`}
                 className="rounded-2xl border border-[#e4e8ec] bg-white p-5 hover:border-[#0bdbcf]"
               >
                 <div className="font-semibold">{p.name}</div>

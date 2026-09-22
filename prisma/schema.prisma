@@ -46,6 +46,11 @@ model Client {
 model Project {
   id         String    @id @default(cuid())
   name       String
+  // URL legible ("clinica-los-coihues"): único, no cambia si el proyecto se
+  // renombra (evita romper links guardados). Nullable porque los proyectos
+  // ya existentes lo reciben recién en el backfill del seed, no en el
+  // db push — ver scripts/seed-project-slugs.ts.
+  slug       String?   @unique
   createdAt  DateTime  @default(now())
   archivedAt DateTime?
 

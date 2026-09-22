@@ -21,3 +21,15 @@ export function withSlug(id: string, name: string): string {
 export function idFromSlug(param: string): string {
   return param.split("-")[0];
 }
+
+// Slug único de verdad (guardado en la base, sin el id) — para modelos que
+// pueden tener URLs limpias tipo /proyectos/clinica-los-coihues. Si el
+// nombre ya está tomado, agrega -2, -3... `exists` es quien pregunta a la
+// base (queda genérico y sin depender de un modelo en particular).
+export async function uniqueSlug(name: string, exists: (slug: string) => Promise<boolean>): Promise<string> {
+  const root = slugify(name) || "item";
+  let slug = root;
+  let n = 2;
+  while (await exists(slug)) slug = `${root}-${n++}`;
+  return slug;
+}
