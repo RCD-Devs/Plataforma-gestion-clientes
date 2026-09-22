@@ -11,7 +11,11 @@ const CSP = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
   "font-src 'self'",
-  "connect-src 'self'",
+  // api.rollbar.com: sin esto, el reporte de errores del navegador
+  // (app/error.tsx, app/global-error.tsx) queda bloqueado en silencio y
+  // nunca llega — se detectó investigando un 500 en producción sin poder
+  // ver el detalle real del error en ningún lado.
+  "connect-src 'self' https://api.rollbar.com",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
