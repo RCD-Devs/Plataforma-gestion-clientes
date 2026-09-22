@@ -26,7 +26,7 @@ export default async function PerfilPage({
   if (user.role === "CLIENTE") redirect("/portal");
 
   const { week, tab } = await searchParams;
-  const activeTab = tab === "resumen" ? "resumen" : "calendario";
+  const activeTab = tab === "calendario" ? "calendario" : "resumen";
 
   return (
     <div className="flex h-full flex-col">
@@ -44,11 +44,11 @@ export default async function PerfilPage({
 
       <div className="border-b border-[#e4e8ec] bg-white px-6">
         <div role="tablist" className="flex gap-4">
-          <Link href="/perfil?tab=calendario" className={tabCls(activeTab === "calendario")}>
-            Calendario
-          </Link>
           <Link href="/perfil?tab=resumen" className={tabCls(activeTab === "resumen")}>
             Resumen
+          </Link>
+          <Link href="/perfil?tab=calendario" className={tabCls(activeTab === "calendario")}>
+            Calendario
           </Link>
         </div>
       </div>
@@ -129,15 +129,15 @@ async function CalendarTab({
     <>
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm">
-          <Link href={`/perfil?week=${prevWeek}`} className="rounded-lg border border-[#e4e8ec] px-2.5 py-1.5 hover:bg-[#f4f6f8]">
+          <Link href={`/perfil?tab=calendario&week=${prevWeek}`} className="rounded-lg border border-[#e4e8ec] px-2.5 py-1.5 hover:bg-[#f4f6f8]">
             ← Semana anterior
           </Link>
           {!isCurrentWeek && (
-            <Link href="/perfil" className="rounded-lg border border-[#e4e8ec] px-2.5 py-1.5 hover:bg-[#f4f6f8]">
+            <Link href="/perfil?tab=calendario" className="rounded-lg border border-[#e4e8ec] px-2.5 py-1.5 hover:bg-[#f4f6f8]">
               Hoy
             </Link>
           )}
-          <Link href={`/perfil?week=${nextWeek}`} className="rounded-lg border border-[#e4e8ec] px-2.5 py-1.5 hover:bg-[#f4f6f8]">
+          <Link href={`/perfil?tab=calendario&week=${nextWeek}`} className="rounded-lg border border-[#e4e8ec] px-2.5 py-1.5 hover:bg-[#f4f6f8]">
             Semana siguiente →
           </Link>
         </div>
