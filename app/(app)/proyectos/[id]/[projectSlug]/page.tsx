@@ -30,10 +30,15 @@ export default async function ProyectoPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ clientSlug: string; projectSlug: string }>;
+  // El folder se llama [id] (no [clientSlug]) a propósito: Next.js exige
+  // el MISMO nombre de segmento dinámico en toda ruta que comparta esa
+  // posición bajo /proyectos — ya lo ocupaba el compat de un solo
+  // segmento (../[id]/page.tsx). Nombres distintos ('id' vs 'clientSlug')
+  // hacían caer TODO el sitio con 500 al iniciar, no solo esta ruta.
+  params: Promise<{ id: string; projectSlug: string }>;
   searchParams: Promise<{ error?: string }>;
 }) {
-  const { clientSlug, projectSlug } = await params;
+  const { id: clientSlug, projectSlug } = await params;
   const id = (await resolveProjectPath(clientSlug, projectSlug)) ?? "";
   const { error } = await searchParams;
   const user = await getSessionUser();
