@@ -8,6 +8,7 @@ const labelCls = "mb-1 block text-xs font-semibold text-[#5d6b77]";
 
 const ERROR_MESSAGES: Record<string, string> = {
   nombre: "El nombre del cliente es obligatorio.",
+  codigo_existente: "Ese código ya lo usa otro cliente — prueba con otro, o déjalo vacío para que se genere solo.",
 };
 
 export function ClientForm({
@@ -58,7 +59,10 @@ export function ClientForm({
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className={labelCls}>Código</label>
-          <input name="code" defaultValue={client?.code ?? ""} className={inputCls} />
+          <input name="code" defaultValue={client?.code ?? ""} placeholder="Se genera solo si lo dejas vacío" className={inputCls} />
+          <p className="mt-1 text-[11px] text-[#6b7280]">
+            Prefijo de sus folios (ej. ACHS-1, ACHS-2…). Único entre clientes.
+          </p>
         </div>
         <div>
           <label className={labelCls}>Correo de contacto</label>

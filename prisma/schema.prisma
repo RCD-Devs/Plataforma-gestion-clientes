@@ -30,7 +30,12 @@ model Client {
   // Project.slug — los clientes existentes lo reciben en el backfill del
   // seed, no en el db push.
   slug         String? @unique
-  code         String?
+  // Prefijo de folio de sus solicitudes (ACHS-1, ACHS-2...) — único. Antes
+  // era decorativo y nextKey() usaba "MBA" fijo para TODO folio de
+  // cualquier cliente; ahora cada cliente tiene su propio contador (ver
+  // lib/clientCode.ts). Si se deja vacío al crear, se genera desde el
+  // nombre.
+  code         String? @unique
   contactEmail String?
   // Horas que otorga cada ciclo de la bolsa (Rec. #36) — no es un total
   // fijo de por vida, se renueva solo cada cycleMonths meses.

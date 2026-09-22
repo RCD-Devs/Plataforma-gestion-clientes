@@ -31,6 +31,7 @@ import { parseLocalDate, zonedTimeToUtc } from "@/lib/dates";
 import { overlapsOf } from "@/lib/scheduleBlocks";
 import { uniqueSlug } from "@/lib/slug";
 import { projectHref } from "@/lib/projectInsights";
+import { uniqueClientCode } from "@/lib/clientCode";
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 // Invitaciones de usuarios nuevos: la persona puede tardar en abrir el correo.
@@ -61,24 +62,43 @@ async function issuePasswordResetToken(userId: string, ttlMs = RESET_TOKEN_TTL_M
 // podían leer al mismo tiempo y generar el mismo folio. El UPDATE/INSERT
 // de Counter es atómico en Postgres: dos transacciones concurrentes nunca
 // obtienen el mismo valor.
-async function nextKey() {
+// Contador propio POR CLIENTE (antes era uno solo global con "MBA" fijo,
+// sin relación con el cliente real — ver lib/clientCode.ts). El id del
+// Counter es directamente el código del cliente.
+async function nextKey(clientCode: string) {
   const counter = await prisma.counter.upsert({
-    where: { id: "request_key" },
-    create: { id: "request_key", value: 1 },
+    where: { id: clientCode },
+    create: { id: clientCode, value: 1 },
     update: { value: { increment: 1 } },
   });
-  return `MBA-${counter.value}`;
+  return `${clientCode}-${counter.value}`;
+}
+
+async function clientCodeTaken(code: string) {
+  return (await prisma.client.count({ where: { code } })) > 0;
+}
+
+// Código de folio del cliente — si todavía no tiene uno (no debería pasar
+// tras el backfill de scripts/seed-client-codes.ts, pero por si acaso lo
+// pide una solicitud antes de que corra), se genera y se guarda al vuelo.
+async function clientFolioCode(clientId: string): Promise<string> {
+  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { code: true, name: true } });
+  if (client?.code) return client.code;
+  const code = await uniqueClientCode(client?.name ?? "Cliente", clientCodeTaken);
+  if (client) await prisma.client.update({ where: { id: clientId }, data: { code } }).catch(() => {});
+  return code;
 }
 
 // Rec. #66 — defensa adicional ante una colisión de Request.key (por
 // ejemplo si alguna vez se inserta un folio a mano fuera del contador):
 // reintenta con un folio nuevo en vez de fallar la creación completa.
 async function withKeyRetry<T>(
+  clientCode: string,
   create: (key: string) => Promise<T>,
   attempts = 3,
 ): Promise<T> {
   for (let i = 0; i < attempts; i++) {
-    const key = await nextKey();
+    const key = await nextKey(clientCode);
     try {
       return await create(key);
     } catch (err) {
@@ -506,7 +526,8 @@ export async function createSubtask(parentId: string, formData: FormData) {
   const title = String(formData.get("title") || "").trim();
   if (!title) return;
 
-  const sub = await withKeyRetry((key) =>
+  const clientCode = await clientFolioCode(parent.clientId);
+  const sub = await withKeyRetry(clientCode, (key) =>
     prisma.request.create({
       data: {
         key,
@@ -1473,7 +1494,8 @@ export async function submitRequest(formData: FormData) {
       })
     : null;
 
-  const req = await withKeyRetry((key) =>
+  const clientCode = await clientFolioCode(clientId);
+  const req = await withKeyRetry(clientCode, (key) =>
     prisma.request.create({
       data: {
         key,
@@ -1550,7 +1572,8 @@ export async function submitClientRequest(formData: FormData) {
   const title =
     firstLine.length > 70 ? `${firstLine.slice(0, 67).trimEnd()}…` : firstLine;
 
-  const req = await withKeyRetry((key) =>
+  const clientCode = client.code ?? (await clientFolioCode(client.id));
+  const req = await withKeyRetry(clientCode, (key) =>
     prisma.request.create({
       data: {
         key,
@@ -1621,11 +1644,14 @@ export async function createClient(formData: FormData) {
   if (!name) redirect("/admin/clientes/nuevo?error=nombre");
 
   const slug = await uniqueSlug(name, async (s) => (await prisma.client.count({ where: { slug: s } })) > 0);
+  const rawCode = String(formData.get("code") || "").trim().toUpperCase();
+  if (rawCode && (await clientCodeTaken(rawCode))) redirect("/admin/clientes/nuevo?error=codigo_existente");
+  const code = rawCode || (await uniqueClientCode(name, clientCodeTaken));
   const client = await prisma.client.create({
     data: {
       name,
       slug,
-      code: String(formData.get("code") || "").trim() || null,
+      code,
       contactEmail: String(formData.get("contactEmail") || "").trim() || null,
       contractedHours: Number(formData.get("contractedHours") || 0) || 0,
       cycleMonths: Math.max(1, Number(formData.get("cycleMonths") || 1) || 1),
@@ -1656,13 +1682,20 @@ export async function updateClient(id: string, formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   if (!name) redirect(`/admin/clientes/${id}?error=nombre`);
 
+  // Vacío = no tocar el código (es el prefijo de sus folios; nulearlo
+  // dejaría huérfano el contador de sus solicitudes ya creadas).
+  const rawCode = String(formData.get("code") || "").trim().toUpperCase();
+  if (rawCode && (await prisma.client.count({ where: { code: rawCode, id: { not: id } } })) > 0) {
+    redirect(`/admin/clientes/${id}?error=codigo_existente`);
+  }
+
   const memberIds = await validMemberIds(formData);
   await prisma.client.update({
     where: { id },
     data: {
       members: { deleteMany: {}, create: memberIds.map((userId) => ({ userId })) },
       name,
-      code: String(formData.get("code") || "").trim() || null,
+      code: rawCode || undefined,
       contactEmail: String(formData.get("contactEmail") || "").trim() || null,
       contractedHours: Number(formData.get("contractedHours") || 0) || 0,
       cycleMonths: Math.max(1, Number(formData.get("cycleMonths") || 1) || 1),
@@ -2094,7 +2127,8 @@ export async function createScheduleBlock(formData: FormData): Promise<ScheduleR
     const type = String(formData.get("type") || "Otro");
     const rawPriority = String(formData.get("priority") || "MEDIA");
     const priority = PRIORITY_MAP[rawPriority] ? rawPriority : "MEDIA";
-    const req = await withKeyRetry((key) =>
+    const clientCode = await clientFolioCode(clientId);
+    const req = await withKeyRetry(clientCode, (key) =>
       prisma.request.create({
         data: {
           key,

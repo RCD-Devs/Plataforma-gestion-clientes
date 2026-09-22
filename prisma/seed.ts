@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { seedStatuses } from "../scripts/seed-statuses";
 import { seedRequestCounter } from "../scripts/seed-request-counter";
 import { seedRoles } from "../scripts/seed-roles";
+import { seedClientCodes } from "../scripts/seed-client-codes";
 import { seedClientSlugs } from "../scripts/seed-client-slugs";
 import { seedProjectSlugs } from "../scripts/seed-project-slugs";
 
@@ -449,6 +450,7 @@ main()
   // Mismo motivo (Nuevo #3): el backfill de UserRole necesita ver a los
   // usuarios reales, no solo a los del seed de ejemplo.
   .then(() => seedRoles(prisma))
+  .then(() => seedClientCodes(prisma))
   .then(() => seedClientSlugs(prisma))
   .then(() => seedProjectSlugs(prisma))
   .catch((e) => {
