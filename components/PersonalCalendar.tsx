@@ -33,11 +33,13 @@ const fmtTime = (d: Date) => d.toLocaleTimeString("es-CL", { hour: "2-digit", mi
 const toLocalInput = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 
+// Inversa de topOf(): y=0 en la grilla es START_HOUR, no medianoche — hay
+// que sumar ese desfase de vuelta, o cualquier clic aterriza 7 horas antes.
 function minutesFromTop(dayStart: Date, y: number, snap = 15): Date {
   const raw = y / PX_PER_MIN;
   const snapped = Math.round(raw / snap) * snap;
   const clamped = Math.min(Math.max(snapped, 0), (END_HOUR - START_HOUR) * 60);
-  return new Date(dayStart.getTime() + clamped * 60000);
+  return new Date(dayStart.getTime() + (START_HOUR * 60 + clamped) * 60000);
 }
 
 // Calendario semanal de bloques de horario — arrastrar en vacío crea, sobre
