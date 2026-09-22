@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { isManager, clientVisibilityWhere } from "@/lib/authz";
+import { withSlug } from "@/lib/slug";
 import { Bar } from "@/components/ui";
 import { hoursLabel } from "@/lib/format";
 import { getHoursSummaries } from "@/lib/hoursLedger";
@@ -63,7 +64,7 @@ export default async function ClientesPage() {
                     {c.requests.length} solicitudes · {open} abiertas
                   </span>
                   <Link
-                    href={`/clientes/${c.id}/reporte`}
+                    href={`/clientes/${withSlug(c.id, c.name)}/reporte`}
                     className="font-semibold text-[#08a89f] hover:underline"
                   >
                     Ver reporte →

@@ -14,6 +14,7 @@ import {
   ReportDoughnut,
 } from "@/components/ReportCharts";
 import { getClientReportData } from "@/lib/clientReport";
+import { idFromSlug } from "@/lib/slug";
 import { ReportExportButtons } from "@/components/ReportExportButtons";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +33,8 @@ export default async function ClientReportPage({
   if (!user) redirect("/login");
   if (!isManager(user)) redirect("/mi-espacio");
 
-  const { id } = await params;
+  const { id: rawId } = await params;
+  const id = idFromSlug(rawId);
   const sp = await searchParams;
 
   const data = await getClientReportData(id, sp.desde, sp.hasta);
