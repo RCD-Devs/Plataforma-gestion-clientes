@@ -2,23 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import type { Slice } from "@/lib/chartSlices";
 
-export type Slice = { label: string; value: number; color: string; href?: string };
+export type { Slice };
 
 const R = 40;
 const C = 2 * Math.PI * R;
-
-export const PALETTE = ["#0bdbcf", "#081826", "#fb693b", "#7c5cff", "#fda565", "#08a89f", "#c97416", "#d21f3c"];
-export const OTHER_COLOR = "#c9d1d9";
-
-// Top N + "Otras" agrupando el resto, con colores de la paleta — para
-// cualquier donut de "¿en qué se fue X?" (horas por cliente, por tarea…).
-export function toSlices(rows: { label: string; value: number; href?: string }[], max = 6): Slice[] {
-  const sorted = [...rows].sort((a, b) => b.value - a.value);
-  const head = sorted.slice(0, max).map((r, i) => ({ ...r, color: PALETTE[i % PALETTE.length] }));
-  const rest = sorted.slice(max).reduce((a, r) => a + r.value, 0);
-  return rest > 0 ? [...head, { label: "Otras", value: rest, color: OTHER_COLOR }] : head;
-}
 
 const fmt = (n: number, unit: string) => `${Math.round(n * 10) / 10}${unit}`;
 

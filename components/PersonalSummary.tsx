@@ -1,7 +1,8 @@
 import Link from "next/link";
 import type { PersonalDashboardData } from "@/lib/personalDashboard";
 import { NUDGE_LABELS } from "@/lib/nudges";
-import { BreakdownTabs, DonutChart, MonthBars, toSlices } from "@/components/Charts";
+import { BreakdownTabs, DonutChart, MonthBars } from "@/components/Charts";
+import { toSlices } from "@/lib/chartSlices";
 import { hoursLabel } from "@/lib/format";
 
 const toneCls = {

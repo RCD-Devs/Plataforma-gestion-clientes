@@ -6,7 +6,8 @@ import { cycleGrants, getHoursSummaries } from "@/lib/hoursLedger";
 import { getStatuses } from "@/lib/statuses";
 import { Avatar, Bar } from "@/components/ui";
 import { hoursLabel, longDate } from "@/lib/format";
-import { BreakdownTabs, DonutChart, MonthBars, toSlices, OTHER_COLOR, type Slice } from "@/components/Charts";
+import { BreakdownTabs, DonutChart, MonthBars } from "@/components/Charts";
+import { toSlices, OTHER_COLOR, type Slice } from "@/lib/chartSlices";
 
 export async function PortalDashboard({ client }: { client: Client }) {
   const now = new Date();
