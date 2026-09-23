@@ -1531,14 +1531,20 @@ export async function submitRequest(formData: FormData) {
     : null;
 
   // Responsable opcional: solo cuenta si quien envía es del equipo interno
-  // con permiso de asignar (mismo permiso que assignRequest). En el
+  // con permiso de asignar (mismo permiso que assignRequest) y el perfil
+  // está asociado a ESE cliente (encargado de cuenta o miembro). En el
   // formulario público anónimo el campo no existe y aquí se ignora igual.
   const rawAssignee = String(formData.get("assigneeId") || "");
   const sessionUser = rawAssignee ? await getSessionUser() : null;
   const assignee =
     sessionUser && hasAccess(sessionUser.capabilities, "requests.assign")
       ? await prisma.user.findFirst({
-          where: { id: rawAssignee, role: { not: "CLIENTE" }, isActive: true },
+          where: {
+            id: rawAssignee,
+            role: { not: "CLIENTE" },
+            isActive: true,
+            OR: [{ managedClients: { some: { id: clientId } } }, { clientMemberships: { some: { clientId } } }],
+          },
           select: { id: true, name: true, teamId: true },
         })
       : null;

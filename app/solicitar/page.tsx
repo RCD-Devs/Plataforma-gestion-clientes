@@ -6,6 +6,7 @@ import { ClientProjectFields } from "@/components/ClientProjectFields";
 import { REQUEST_TYPES, PRIORITIES } from "@/lib/constants";
 import { getSessionUser } from "@/lib/session";
 import { hasAccess } from "@/lib/permissions";
+import { clientVisibilityWhere } from "@/lib/authz";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +18,17 @@ export default async function SolicitarPage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
+  const { error } = await searchParams;
+  // Público anónimo: todas las empresas activas. Equipo interno: solo sus
+  // clientes (mismo alcance que el resto de la app) y, con permiso de
+  // asignar, el responsable entre los perfiles asociados a cada cliente
+  // (encargado de cuenta + miembros).
+  const user = await getSessionUser();
+  const internal = !!user && user.role !== "CLIENTE";
+  const canAssign = internal && hasAccess(user.capabilities, "requests.assign");
+  const activeInternal = { role: { not: "CLIENTE" }, isActive: true };
   const clients = await prisma.client.findMany({
-    where: { isActive: true },
+    where: { isActive: true, ...(internal ? clientVisibilityWhere(user) : {}) },
     orderBy: { name: "asc" },
     include: {
       projects: {
@@ -26,20 +36,22 @@ export default async function SolicitarPage({
         orderBy: { name: "asc" },
         select: { id: true, name: true },
       },
+      accountManager: { select: { id: true, name: true, role: true, isActive: true } },
+      members: {
+        where: { user: activeInternal },
+        select: { user: { select: { id: true, name: true } } },
+      },
     },
   });
-  const { error } = await searchParams;
-  // Equipo interno con permiso de asignar: puede dejar el responsable
-  // puesto desde ya. El público anónimo no ve el campo.
-  const user = await getSessionUser();
-  const canAssign = !!user && user.role !== "CLIENTE" && hasAccess(user.capabilities, "requests.assign");
-  const assignees = canAssign
-    ? await prisma.user.findMany({
-        where: { role: { not: "CLIENTE" }, isActive: true },
-        orderBy: { name: "asc" },
-        select: { id: true, name: true },
-      })
-    : [];
+  const assigneesOf = (c: (typeof clients)[number]) => {
+    if (!canAssign) return undefined;
+    const am = c.accountManager;
+    const list = [
+      ...(am && am.isActive && am.role !== "CLIENTE" ? [{ id: am.id, name: am.name }] : []),
+      ...c.members.map((m) => m.user),
+    ];
+    return [...new Map(list.map((u) => [u.id, u])).values()].sort((a, b) => a.name.localeCompare(b.name));
+  };
 
   return (
     <div className="min-h-screen bg-[#f4f6f8] py-10">
@@ -84,7 +96,12 @@ export default async function SolicitarPage({
           />
           <ClientProjectFields
             inputCls={inputCls}
-            clients={clients.map((c) => ({ id: c.id, name: c.name, projects: c.projects }))}
+            clients={clients.map((c) => ({
+              id: c.id,
+              name: c.name,
+              projects: c.projects,
+              assignees: assigneesOf(c),
+            }))}
           />
 
           <Field
@@ -142,19 +159,6 @@ export default async function SolicitarPage({
               <input name="dueDate" type="date" className={inputCls} />
             </Field>
           </div>
-
-          {canAssign && (
-            <Field label="Responsable" hint="Opcional · si lo dejas vacío queda sin asignar">
-              <select name="assigneeId" className={inputCls} defaultValue="">
-                <option value="">Sin asignar</option>
-                {assignees.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          )}
 
           <button className="w-full rounded-lg bg-[#0bdbcf] py-2.5 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]">
             Enviar solicitud

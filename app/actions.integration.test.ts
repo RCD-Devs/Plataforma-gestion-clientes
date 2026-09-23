@@ -225,13 +225,13 @@ describe.skipIf(!process.env.RUN_DB_TESTS)(
       await prisma.project.delete({ where: { id: project.id } });
     });
 
-    it("submitRequest: un interno con requests.assign deja el responsable; anónimo no", async () => {
-      const form = (title: string) => {
+    it("submitRequest: responsable solo si quien envía puede asignar y el perfil es del cliente", async () => {
+      const form = (title: string, assigneeId = coordA.id) => {
         const fd = new FormData();
         fd.set("clientId", clientA.id);
         fd.set("requesterEmail", "pide@test.local");
         fd.set("title", title);
-        fd.set("assigneeId", coordA.id);
+        fd.set("assigneeId", assigneeId);
         return fd;
       };
       const created = async (title: string) =>
@@ -242,12 +242,17 @@ describe.skipIf(!process.env.RUN_DB_TESTS)(
       const withAssignee = await created(`Con responsable ${suffix}`);
       expect(withAssignee.assigneeId).toBe(coordA.id);
 
+      // coordB no es encargado ni miembro de clientA: se ignora.
+      await expect(submitRequest(form(`Ajeno ${suffix}`, coordB.id))).rejects.toThrow(RedirectSignal);
+      const foreign = await created(`Ajeno ${suffix}`);
+      expect(foreign.assigneeId).toBeNull();
+
       currentUser = null;
       await expect(submitRequest(form(`Anonima ${suffix}`))).rejects.toThrow(RedirectSignal);
       const anon = await created(`Anonima ${suffix}`);
       expect(anon.assigneeId).toBeNull();
 
-      await prisma.request.deleteMany({ where: { id: { in: [withAssignee.id, anon.id] } } });
+      await prisma.request.deleteMany({ where: { id: { in: [withAssignee.id, foreign.id, anon.id] } } });
     });
   },
 );
