@@ -238,7 +238,7 @@ describe.skipIf(!process.env.RUN_DB_TESTS)(
       await prisma.project.delete({ where: { id: project.id } });
     });
 
-    it("submitRequest: responsable solo si quien envía puede asignar y el perfil es del cliente", async () => {
+    it("submitRequest: solo equipo interno; responsable solo si puede asignar y el perfil es del cliente", async () => {
       const form = (title: string, assigneeId = coordA.id) => {
         const fd = new FormData();
         fd.set("clientId", clientA.id);
@@ -260,12 +260,14 @@ describe.skipIf(!process.env.RUN_DB_TESTS)(
       const foreign = await created(`Ajeno ${suffix}`);
       expect(foreign.assigneeId).toBeNull();
 
+      // Sin sesión (o como cliente) el formulario interno no crea nada.
       currentUser = null;
-      await expect(submitRequest(form(`Anonima ${suffix}`))).rejects.toThrow(RedirectSignal);
-      const anon = await created(`Anonima ${suffix}`);
-      expect(anon.assigneeId).toBeNull();
+      await expect(submitRequest(form(`Anonima ${suffix}`))).rejects.toThrow("redirect:/login");
+      currentUser = CLIENTE_FIXTURE;
+      await expect(submitRequest(form(`Anonima ${suffix}`))).rejects.toThrow("redirect:/login");
+      expect(await prisma.request.count({ where: { title: `Anonima ${suffix}` } })).toBe(0);
 
-      await prisma.request.deleteMany({ where: { id: { in: [withAssignee.id, foreign.id, anon.id] } } });
+      await prisma.request.deleteMany({ where: { id: { in: [withAssignee.id, foreign.id] } } });
     });
 
     it("archivar cliente: histórico de solo lectura; reactivarlo restaura en pausa solo ese lote", async () => {

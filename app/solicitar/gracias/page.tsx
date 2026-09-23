@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getSessionUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -7,6 +9,8 @@ export default async function GraciasPage({
 }: {
   searchParams: Promise<{ key?: string }>;
 }) {
+  const user = await getSessionUser();
+  if (!user || user.role === "CLIENTE") redirect("/login");
   const { key } = await searchParams;
   return (
     <div className="flex min-h-screen items-center justify-center p-6">
@@ -17,16 +21,16 @@ export default async function GraciasPage({
         <h1 className="text-lg font-semibold">¡Solicitud recibida!</h1>
         <p className="mt-1 text-sm text-[#6b7280]">
           Tu folio es{" "}
-          <span className="font-semibold text-[#111827]">{key}</span>. Te
-          enviamos un correo de confirmación y te avisaremos cada cambio de
-          estado.
+          <span className="font-semibold text-[#111827]">{key}</span>. El
+          solicitante recibió un correo de confirmación y se le avisará cada
+          cambio de estado.
         </p>
         <div className="mt-5 flex justify-center gap-2">
           <Link
-            href="/portal"
+            href={key ? `/solicitudes/${key}` : "/solicitudes"}
             className="rounded-lg bg-[#0bdbcf] px-4 py-2 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]"
           >
-            Ver mis solicitudes
+            Ver solicitud
           </Link>
           <Link
             href="/solicitar"

@@ -146,8 +146,9 @@ function refreshLists(key?: string) {
 export async function login(formData: FormData) {
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "");
-  const target = String(formData.get("target") || "login"); // "login" | "portal"
-  const failPath = target === "portal" ? "/portal" : "/login";
+  // Un solo login para equipo y clientes: la cuenta decide a dónde entra
+  // (redirectForRole), no la pantalla desde la que se ingresó.
+  const failPath = "/login";
   if (!email || !password) redirect(`${failPath}?error=credenciales`);
 
   const ip = await clientIp();
@@ -160,7 +161,7 @@ export async function login(formData: FormData) {
     include: { roles: { select: { role: { select: { code: true } } } } },
   });
   if (!user || !user.isActive || !user.passwordHash) {
-    await logAudit({ type: "login_failed", actorEmail: email, ip, detail: `target=${target}, motivo=usuario` });
+    await logAudit({ type: "login_failed", actorEmail: email, ip, detail: "motivo=usuario" });
     redirect(`${failPath}?error=credenciales`);
   }
 
@@ -171,23 +172,12 @@ export async function login(formData: FormData) {
     valid = false;
   }
   if (!valid) {
-    await logAudit({ type: "login_failed", actorId: user.id, actorEmail: email, ip, detail: `target=${target}, motivo=password` });
-    redirect(`${failPath}?error=credenciales`);
-  }
-
-  // El portal solo es para usuarios-cliente; el login de equipo, al revés.
-  const isClientUser = user.role === "CLIENTE";
-  if (target === "portal" && !isClientUser) {
-    await logAudit({ type: "login_failed", actorId: user.id, actorEmail: email, ip, detail: "target=portal, motivo=rol_no_cliente" });
-    redirect(`${failPath}?error=credenciales`);
-  }
-  if (target === "login" && isClientUser) {
-    await logAudit({ type: "login_failed", actorId: user.id, actorEmail: email, ip, detail: "target=login, motivo=rol_cliente" });
+    await logAudit({ type: "login_failed", actorId: user.id, actorEmail: email, ip, detail: "motivo=password" });
     redirect(`${failPath}?error=credenciales`);
   }
 
   await createSession(user.id);
-  await logAudit({ type: "login_success", actorId: user.id, actorEmail: user.email, ip, detail: `target=${target}` });
+  await logAudit({ type: "login_success", actorId: user.id, actorEmail: user.email, ip });
   const roleCodes = user.roles.map((r) => r.role.code);
   redirect(user.mustChangePassword ? "/cambiar-clave" : redirectForRole({ ...user, roleCodes }));
 }
@@ -242,11 +232,7 @@ export async function changePassword(formData: FormData) {
 
 export async function requestPasswordReset(formData: FormData) {
   const email = String(formData.get("email") || "").trim().toLowerCase();
-  const target = String(formData.get("target") || "login");
-  const okPath =
-    target === "portal"
-      ? "/portal?reset=enviado"
-      : "/login?reset=enviado";
+  const okPath = "/login?reset=enviado";
   if (!email) redirect(okPath);
 
   const ip = await clientIp();
@@ -317,8 +303,7 @@ export async function resetPassword(formData: FormData) {
     actorId: record.userId,
     actorEmail: record.user.email,
   });
-  const dest = record.user.role === "CLIENTE" ? "/portal" : "/login";
-  redirect(`${dest}?reset=ok`);
+  redirect("/login?reset=ok");
 }
 
 // Rec. #90 — estos 4 controles (components/controls.tsx) son <select>/
@@ -1532,11 +1517,10 @@ export async function markTeamAlertsRead() {
 }
 
 export async function submitRequest(formData: FormData) {
-  // Honeypot: campo oculto que un humano nunca completa. Si viene lleno,
-  // es un bot — se responde como si hubiera funcionado, sin crear nada,
-  // para no revelar que fue detectado.
-  const honeypot = String(formData.get("website") || "").trim();
-  if (honeypot) redirect("/solicitar/gracias");
+  // Solo equipo interno con sesión: el cliente ingresa las suyas desde su
+  // portal (submitClientRequest).
+  const sessionUser = await getSessionUser();
+  if (!sessionUser || sessionUser.role === "CLIENTE") redirect("/login");
 
   const ip = await clientIp();
   if (!rateLimit(`solicitar:${ip}`, 5, 10 * 60 * 1000)) {
@@ -1565,14 +1549,12 @@ export async function submitRequest(formData: FormData) {
       })
     : null;
 
-  // Responsable opcional: solo cuenta si quien envía es del equipo interno
-  // con permiso de asignar (mismo permiso que assignRequest) y el perfil
-  // está asociado a ESE cliente (encargado de cuenta o miembro). En el
-  // formulario público anónimo el campo no existe y aquí se ignora igual.
+  // Responsable opcional: solo cuenta con permiso de asignar (mismo permiso
+  // que assignRequest) y si el perfil está asociado a ESE cliente
+  // (encargado de cuenta o miembro).
   const rawAssignee = String(formData.get("assigneeId") || "");
-  const sessionUser = rawAssignee ? await getSessionUser() : null;
   const assignee =
-    sessionUser && hasAccess(sessionUser.capabilities, "requests.assign")
+    rawAssignee && hasAccess(sessionUser.capabilities, "requests.assign")
       ? await prisma.user.findFirst({
           where: {
             id: rawAssignee,
@@ -1608,8 +1590,8 @@ export async function submitRequest(formData: FormData) {
     data: {
       requestId: req.id,
       type: "created",
-      message: "Creó la solicitud desde el formulario",
-      actorName: requesterEmail,
+      message: `Creó la solicitud para ${requesterEmail}`,
+      actorName: sessionUser.name,
     },
   });
   if (assignee) {
@@ -1618,7 +1600,7 @@ export async function submitRequest(formData: FormData) {
         requestId: req.id,
         type: "assigned",
         message: `Asignó a ${assignee.name}`,
-        actorName: sessionUser!.name,
+        actorName: sessionUser.name,
       },
     });
   }
@@ -1634,7 +1616,7 @@ export async function submitRequest(formData: FormData) {
 
 // ── Portal del cliente ──────────────────────────────────────────
 // El login del portal usa la misma acción `login` (arriba) con
-// target="portal"; logout usa la misma `logout`.
+// sin distinción de pantalla (un solo /login); logout usa la misma `logout`.
 
 // Selector "ver como cliente": solo acepta clientes a los que el usuario
 // tiene acceso (getPortalContext ignora cualquier otro valor).

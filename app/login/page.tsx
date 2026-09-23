@@ -1,7 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { login } from "@/app/actions";
+import { redirect } from "next/navigation";
 import { SubmitButton } from "@/components/SubmitButton";
+import { getSessionUser, redirectForRole } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +16,9 @@ export default async function LoginPage({
   searchParams: Promise<{ error?: string; reset?: string }>;
 }) {
   const { error, reset } = await searchParams;
+  // Login único (equipo y clientes): con sesión, directo a su espacio.
+  const user = await getSessionUser();
+  if (user) redirect(redirectForRole(user));
 
   return (
     <div className="flex min-h-screen">
@@ -85,7 +90,6 @@ export default async function LoginPage({
           )}
 
           <form action={login} className="space-y-3">
-            <input type="hidden" name="target" value="login" />
             <div>
               <label className="mb-1 block text-sm font-semibold">
                 Correo
@@ -94,7 +98,7 @@ export default async function LoginPage({
                 name="email"
                 type="email"
                 required
-                placeholder="nombre@revo.cl"
+                placeholder="nombre@empresa.cl"
                 className={inputCls}
               />
             </div>
@@ -119,7 +123,7 @@ export default async function LoginPage({
           </form>
           <div className="mt-4 text-center text-xs text-[#7f7f7f]">
             <Link
-              href="/recuperar-contrasena?target=login"
+              href="/recuperar-contrasena"
               className="hover:text-[#08a89f] hover:underline"
             >
               ¿Olvidaste tu contraseña?

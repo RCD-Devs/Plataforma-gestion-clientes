@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { submitRequest } from "@/app/actions";
 import { ClientProjectFields } from "@/components/ClientProjectFields";
@@ -19,16 +20,17 @@ export default async function SolicitarPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
-  // Público anónimo: todas las empresas activas. Equipo interno: solo sus
-  // clientes (mismo alcance que el resto de la app) y, con permiso de
-  // asignar, el responsable entre los perfiles asociados a cada cliente
-  // (encargado de cuenta + miembros).
+  // Solo equipo interno: sin sesión, al login; un cliente, a su portal.
   const user = await getSessionUser();
-  const internal = !!user && user.role !== "CLIENTE";
-  const canAssign = internal && hasAccess(user.capabilities, "requests.assign");
+  if (!user) redirect("/login");
+  if (user.role === "CLIENTE") redirect("/portal/nueva");
+  // Solo sus clientes (encargado/miembro o lo que su rol le deja ver) y, con
+  // permiso de asignar, el responsable entre los perfiles asociados a cada
+  // cliente (encargado de cuenta + miembros).
+  const canAssign = hasAccess(user.capabilities, "requests.assign");
   const activeInternal = { role: { not: "CLIENTE" }, isActive: true };
   const clients = await prisma.client.findMany({
-    where: { isActive: true, ...(internal ? workClientsWhere(user) : {}) },
+    where: { isActive: true, ...workClientsWhere(user) },
     orderBy: { name: "asc" },
     include: {
       projects: {
@@ -61,7 +63,7 @@ export default async function SolicitarPage({
           <div>
             <div className="text-lg font-semibold">Nueva solicitud</div>
             <div className="text-sm text-[#6b7280]">
-              Grupo Revo · Cuéntanos qué necesitas
+              Grupo Revo · Ingreso interno
             </div>
           </div>
         </div>
@@ -86,14 +88,6 @@ export default async function SolicitarPage({
               Ese correo no parece válido — revísalo e intenta de nuevo.
             </div>
           )}
-          <input
-            type="text"
-            name="website"
-            tabIndex={-1}
-            autoComplete="off"
-            aria-hidden="true"
-            className="absolute left-[-9999px] h-0 w-0 opacity-0"
-          />
           <ClientProjectFields
             inputCls={inputCls}
             clients={clients.map((c) => ({
@@ -105,8 +99,8 @@ export default async function SolicitarPage({
           />
 
           <Field
-            label="Tu correo"
-            hint="Te avisaremos aquí cada cambio de estado"
+            label="Correo del solicitante"
+            hint="Recibirá el aviso de cada cambio de estado"
           >
             <input
               name="requesterEmail"

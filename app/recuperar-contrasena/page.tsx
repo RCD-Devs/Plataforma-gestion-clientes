@@ -8,14 +8,8 @@ export const dynamic = "force-dynamic";
 const inputCls =
   "w-full rounded-lg border border-[#e4e8ec] px-3 py-2 text-sm outline-none focus:border-[#0bdbcf]";
 
-export default async function RecuperarContrasenaPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ target?: string }>;
-}) {
-  const { target } = await searchParams;
-  const isPortal = target === "portal";
-  const backHref = isPortal ? "/portal" : "/login";
+export default async function RecuperarContrasenaPage() {
+  const backHref = "/login";
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#f4f6f8] p-6">
@@ -33,7 +27,6 @@ export default async function RecuperarContrasenaPage({
         </p>
 
         <form action={requestPasswordReset} className="space-y-3">
-          <input type="hidden" name="target" value={isPortal ? "portal" : "login"} />
           <div>
             <label className="mb-1 block text-sm font-semibold">
               Correo
