@@ -167,7 +167,7 @@ export function ClientForm({
           defaultChecked={client?.isActive ?? true}
           className="h-4 w-4 accent-[#0bdbcf]"
         />
-        Cliente activo (visible en el formulario público de solicitudes)
+        Cliente activo · desmarcar lo archiva: finaliza y archiva sus tareas, cierra sus proyectos y desactiva sus usuarios de portal
       </label>
       <div className="flex gap-2 pt-2">
         <SubmitButton className="rounded-md bg-[#0bdbcf] px-4 py-2 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]">

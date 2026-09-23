@@ -41,7 +41,20 @@ vi.mock("@/lib/session", () => ({
 const { prisma } = await import("@/lib/db");
 const { buildCapabilities } = await import("@/lib/permissions");
 const { seedRoles } = await import("../scripts/seed-roles");
-const { changeStatus, assignRequest, setUserActive, createUser, setProjectActive, submitRequest } = await import(
+const { workClientsWhere } = await import("@/lib/authz");
+// TestUser tipa capabilities como string[] sueltos; en runtime es lo mismo.
+const asAuthz = (u: TestUser) => u as unknown as Parameters<typeof workClientsWhere>[0];
+const {
+  changeStatus,
+  assignRequest,
+  setUserActive,
+  createUser,
+  setProjectActive,
+  submitRequest,
+  setClientActive,
+  logHours,
+  unarchiveRequest,
+} = await import(
   "@/app/actions"
 );
 
@@ -253,6 +266,98 @@ describe.skipIf(!process.env.RUN_DB_TESTS)(
       expect(anon.assigneeId).toBeNull();
 
       await prisma.request.deleteMany({ where: { id: { in: [withAssignee.id, foreign.id, anon.id] } } });
+    });
+
+    it("archivar cliente: histórico de solo lectura; reactivarlo restaura en pausa solo ese lote", async () => {
+      await prisma.status.upsert({
+        where: { code: "EN_PAUSA" },
+        update: {},
+        create: { code: "EN_PAUSA", label: "En pausa", color: "#999999", isFinal: false, isOptional: true },
+      });
+      const c = await prisma.client.create({ data: { name: `Cliente Archivable ${suffix}` } });
+      const project = await prisma.project.create({ data: { name: `Proy Arch ${suffix}`, clientId: c.id } });
+      const mk = (k: string, data: object = {}) =>
+        prisma.request.create({
+          data: { key: `ARC${k}-${suffix}`, title: k, clientId: c.id, status: "POR_HACER", ...data },
+        });
+      const pending = await mk("P", { projectId: project.id });
+      const done = await mk("D", { status: "FINALIZADA", finalizedAt: new Date(Date.now() - 86400000) });
+      const oldArchived = await mk("O", { archivedAt: new Date(Date.now() - 86400000) });
+      const portalUser = await prisma.user.create({
+        data: { name: "Portal", email: `portal-${suffix}@test.local`, role: "CLIENTE", clientId: c.id },
+      });
+      const get = (id: string) => prisma.request.findUniqueOrThrow({ where: { id } });
+
+      currentUser = admin;
+      await setClientActive(c.id, false);
+      const [p1, d1] = [await get(pending.id), await get(done.id)];
+      expect(p1.status).toBe("FINALIZADA");
+      expect(p1.archivedAt).not.toBeNull();
+      expect(d1.archivedAt).toEqual(p1.archivedAt);
+      expect((await prisma.project.findUniqueOrThrow({ where: { id: project.id } })).archivedAt).not.toBeNull();
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: portalUser.id } })).isActive).toBe(false);
+
+      // Solo lectura: ni estado, ni horas, ni restaurar suelta (ni siendo Admin).
+      expect((await changeStatus(pending.id, "POR_HACER")).ok).toBe(false);
+      const fd = new FormData();
+      fd.set("requestId", pending.id);
+      fd.set("hours", "1");
+      await logHours(fd);
+      expect(await prisma.timeEntry.count({ where: { requestId: pending.id } })).toBe(0);
+      await unarchiveRequest(pending.id);
+      expect((await get(pending.id)).archivedAt).not.toBeNull();
+
+      // No recibe solicitudes nuevas.
+      const form = new FormData();
+      form.set("clientId", c.id);
+      form.set("requesterEmail", "x@test.local");
+      form.set("title", `Nueva ${suffix}`);
+      await expect(submitRequest(form)).rejects.toThrow("error=datos");
+      expect(await prisma.request.count({ where: { clientId: c.id } })).toBe(3);
+
+      await setClientActive(c.id, true);
+      const [p2, d2, o2] = [await get(pending.id), await get(done.id), await get(oldArchived.id)];
+      expect(p2.status).toBe("EN_PAUSA");
+      expect(p2.archivedAt).toBeNull();
+      expect(p2.finalizedAt).toBeNull();
+      expect(d2.status).toBe("FINALIZADA");
+      expect(d2.archivedAt).toBeNull();
+      expect(o2.archivedAt).not.toBeNull(); // archivada a mano antes: no es del lote
+      expect((await prisma.project.findUniqueOrThrow({ where: { id: project.id } })).archivedAt).toBeNull();
+
+      // Restaurar suelta: solo Admin.
+      currentUser = coordA;
+      await unarchiveRequest(oldArchived.id);
+      expect((await get(oldArchived.id)).archivedAt).not.toBeNull();
+      currentUser = admin;
+      await unarchiveRequest(oldArchived.id);
+      expect((await get(oldArchived.id)).archivedAt).toBeNull();
+
+      await prisma.request.deleteMany({ where: { clientId: c.id } });
+      await prisma.project.delete({ where: { id: project.id } });
+      await prisma.user.delete({ where: { id: portalUser.id } });
+      await prisma.client.delete({ where: { id: c.id } });
+    });
+
+    it("workClientsWhere: rol sin clients.view ve los clientes donde es miembro; Admin ve todos", async () => {
+      const uxRole = await prisma.role.findUniqueOrThrow({ where: { code: "DISENADOR_UXUI" } });
+      const row = await prisma.user.create({
+        data: {
+          name: "UX Test",
+          email: `ux-${suffix}@test.local`,
+          role: "DISENADOR_UXUI",
+          roles: { create: { roleId: uxRole.id } },
+          clientMemberships: { create: { clientId: clientB.id } },
+        },
+      });
+      const ux = await asSessionUser(row);
+      const uxIds = (await prisma.client.findMany({ where: workClientsWhere(asAuthz(ux)), select: { id: true } })).map((c) => c.id);
+      expect(uxIds).toContain(clientB.id);
+      expect(uxIds).not.toContain(clientA.id);
+
+      const all = await prisma.client.count();
+      expect(await prisma.client.count({ where: workClientsWhere(asAuthz(admin)) })).toBe(all);
+      await prisma.user.delete({ where: { id: row.id } });
     });
   },
 );

@@ -325,6 +325,19 @@ export async function resetPassword(formData: FormData) {
 // botones no controlados: si la acción falla en silencio, el elemento ya
 // muestra visualmente el valor nuevo aunque la base no haya cambiado. El
 // { ok } de retorno le permite a controls.tsx revertir el valor y avisar.
+// Archivada = histórico de solo lectura: ninguna acción la modifica (solo
+// Admin la restaura, ver unarchiveRequest). También da true si no existe,
+// para que el llamador corte igual en ambos casos.
+// Cliente archivado (isActive=false): no recibe solicitudes ni proyectos.
+async function clientIsActive(clientId: string): Promise<boolean> {
+  return (await prisma.client.count({ where: { id: clientId, isActive: true } })) > 0;
+}
+
+async function requestLocked(requestId: string): Promise<boolean> {
+  const r = await prisma.request.findUnique({ where: { id: requestId }, select: { archivedAt: true } });
+  return !r || !!r.archivedAt;
+}
+
 export async function changeStatus(
   requestId: string,
   status: string,
@@ -332,6 +345,7 @@ export async function changeStatus(
   const user = await getSessionUser();
   const statusMap = await getStatusMap();
   if (!user || !statusMap[status]) return { ok: false };
+  if (await requestLocked(requestId)) return { ok: false };
   const req = await prisma.request.findUnique({
     where: { id: requestId },
     include: { client: true, collaborators: true },
@@ -377,6 +391,7 @@ export async function assignRequest(
 ): Promise<{ ok: boolean }> {
   const user = await getSessionUser();
   if (!user || !hasAccess(user.capabilities, "requests.assign")) return { ok: false };
+  if (await requestLocked(requestId)) return { ok: false };
   const assignee = assigneeId
     ? await prisma.user.findUnique({ where: { id: assigneeId } })
     : null;
@@ -407,6 +422,7 @@ export async function updatePriority(
   if (!user || !hasAccess(user.capabilities, "requests.set_priority") || !PRIORITY_MAP[priority]) {
     return { ok: false };
   }
+  if (await requestLocked(requestId)) return { ok: false };
   const req = await prisma.request.update({
     where: { id: requestId },
     data: { priority },
@@ -417,6 +433,7 @@ export async function updatePriority(
 
 export async function updateRequestDetails(requestId: string, formData: FormData) {
   const user = await getSessionUser();
+  if (await requestLocked(requestId)) return;
   if (!user) return;
   const existing = await prisma.request.findUnique({
     where: { id: requestId },
@@ -495,7 +512,9 @@ export async function unarchiveRequest(requestId: string) {
     where: { id: requestId },
     include: { client: true, collaborators: true },
   });
-  if (!existing || !canActOnRequest(user, existing)) return;
+  // Restaurar un histórico es decisión de Admin; y con el cliente archivado
+  // no se restaura suelta (se reactiva el cliente, ver setClientActive).
+  if (!existing || !user.roleCodes.includes("ADMIN") || !existing.client.isActive) return;
 
   const req = await prisma.request.update({
     where: { id: requestId },
@@ -516,6 +535,7 @@ export async function unarchiveRequest(requestId: string) {
 
 export async function createSubtask(parentId: string, formData: FormData) {
   const user = await getSessionUser();
+  if (await requestLocked(parentId)) return;
   if (!user) return;
   const parent = await prisma.request.findUnique({
     where: { id: parentId },
@@ -555,6 +575,7 @@ export async function createSubtask(parentId: string, formData: FormData) {
 
 export async function addCollaborator(requestId: string, userId: string) {
   const user = await getSessionUser();
+  if (await requestLocked(requestId)) return;
   if (!user || !userId) return;
   const req = await prisma.request.findUnique({
     where: { id: requestId },
@@ -579,6 +600,7 @@ export async function addCollaborator(requestId: string, userId: string) {
 
 export async function removeCollaborator(requestId: string, userId: string) {
   const user = await getSessionUser();
+  if (await requestLocked(requestId)) return;
   if (!user) return;
   const req = await prisma.request.findUnique({
     where: { id: requestId },
@@ -592,6 +614,7 @@ export async function removeCollaborator(requestId: string, userId: string) {
 
 export async function saveCustomFieldValues(requestId: string, formData: FormData) {
   const user = await getSessionUser();
+  if (await requestLocked(requestId)) return;
   if (!user) return;
   const req = await prisma.request.findUnique({
     where: { id: requestId },
@@ -663,6 +686,7 @@ async function canProjectAction(
 export async function createProject(clientId: string, formData: FormData) {
   const user = await getSessionUser();
   if (!user || !(await canProjectAction(user, "projects.manage", clientId))) return;
+  if (!(await clientIsActive(clientId))) return;
   const name = String(formData.get("name") || "").trim();
   if (!name) return;
   const slug = await uniqueSlug(name, (s) => projectSlugTaken(s, clientId));
@@ -687,6 +711,7 @@ export async function createNewProject(formData: FormData) {
   if (!clientId) redirect(back("cliente"));
   if (!name) redirect(back("nombre"));
   if (!(await canProjectAction(user, "projects.manage", clientId))) redirect("/proyectos");
+  if (!(await clientIsActive(clientId))) redirect(back("cliente"));
 
   const withBudget = await canProjectAction(user, "projects.budget", clientId);
   const startDate = withBudget ? optDate(formData.get("startDate")) : null;
@@ -725,6 +750,7 @@ export async function setProjectActive(projectId: string, isActive: boolean) {
   const user = await getSessionUser();
   const current = await prisma.project.findUnique({ where: { id: projectId }, select: { clientId: true } });
   if (!user || !current || !(await canProjectAction(user, "projects.manage", current.clientId))) return;
+  if (isActive && !(await clientIsActive(current.clientId))) return;
   const now = new Date();
   const project = await prisma.project.update({
     where: { id: projectId },
@@ -940,6 +966,7 @@ export async function deleteStage(projectId: string, stageId: string) {
 // Asignar una tarea a una etapa desde la ficha del proyecto.
 export async function setRequestStage(requestId: string, formData: FormData) {
   const user = await getSessionUser();
+  if (await requestLocked(requestId)) return;
   if (!user) return;
   const req = await prisma.request.findUnique({ where: { id: requestId }, select: { projectId: true } });
   if (!req?.projectId || !(await projectForAction(user, req.projectId, "projects.manage"))) return;
@@ -1164,6 +1191,7 @@ export async function logHours(formData: FormData) {
   const note = String(formData.get("note") || "");
   const dateStr = String(formData.get("date") || "");
   if (!requestId || !hours || hours <= 0) return;
+  if (await requestLocked(requestId)) return;
   await prisma.timeEntry.create({
     data: {
       requestId,
@@ -1210,7 +1238,7 @@ export async function updateTimeEntry(entryId: string, formData: FormData) {
   const user = await getSessionUser();
   if (!user) return;
   const entry = await timeEntryForAction(user, entryId);
-  if (!entry) return;
+  if (!entry || entry.request.archivedAt) return;
   const hours = parseFloat(String(formData.get("hours") || "0"));
   if (!hours || hours <= 0) return;
   const note = String(formData.get("note") || "").trim();
@@ -1237,7 +1265,7 @@ export async function deleteTimeEntry(entryId: string) {
   const user = await getSessionUser();
   if (!user) return;
   const entry = await timeEntryForAction(user, entryId);
-  if (!entry) return;
+  if (!entry || entry.request.archivedAt) return;
 
   // Si nació de un bloque del calendario, se desvincula (el bloque queda
   // "sin confirmar" otra vez) en vez de quedar apuntando a nada.
@@ -1264,6 +1292,7 @@ export async function addComment(formData: FormData) {
   const body = String(formData.get("body") || "").trim();
   const isClient = String(formData.get("isClient") || "") === "1";
   if (!requestId || !body) return;
+  if (await requestLocked(requestId)) return;
   const req = await prisma.request.findUnique({
     where: { id: requestId },
     include: { assignee: true, client: true },
@@ -1334,9 +1363,9 @@ export async function editComment(commentId: string, body: string) {
   if (!trimmed) return;
   const comment = await prisma.comment.findUnique({
     where: { id: commentId },
-    include: { request: { select: { key: true } } },
+    include: { request: { select: { key: true, archivedAt: true } } },
   });
-  if (!comment || !comment.authorId || comment.authorId !== user.id) return;
+  if (!comment || comment.request.archivedAt || !comment.authorId || comment.authorId !== user.id) return;
 
   await prisma.comment.update({ where: { id: commentId }, data: { body: trimmed } });
   revalidatePath(`/solicitudes/${comment.request.key}`);
@@ -1347,9 +1376,9 @@ export async function deleteComment(commentId: string) {
   if (!user) return;
   const comment = await prisma.comment.findUnique({
     where: { id: commentId },
-    include: { request: { select: { key: true } } },
+    include: { request: { select: { key: true, archivedAt: true } } },
   });
-  if (!comment || !comment.authorId || comment.authorId !== user.id) return;
+  if (!comment || comment.request.archivedAt || !comment.authorId || comment.authorId !== user.id) return;
 
   await prisma.comment.delete({ where: { id: commentId } });
   revalidatePath(`/solicitudes/${comment.request.key}`);
@@ -1361,6 +1390,7 @@ export async function addUrlAttachment(formData: FormData) {
   const name = String(formData.get("name") || "Enlace").trim();
   const url = String(formData.get("url") || "").trim();
   if (!requestId || !url) return;
+  if (await requestLocked(requestId)) return;
   const req = await prisma.request.findUnique({
     where: { id: requestId },
     include: { client: true, collaborators: true },
@@ -1382,7 +1412,7 @@ export async function deleteAttachment(attachmentId: string) {
     where: { id: attachmentId },
     include: { request: { include: { client: true, collaborators: true } } },
   });
-  if (!attachment || !canActOnRequest(user, attachment.request)) return;
+  if (!attachment || attachment.request.archivedAt || !canActOnRequest(user, attachment.request)) return;
 
   await prisma.attachment.delete({ where: { id: attachmentId } });
   if (attachment.kind !== "url") {
@@ -1399,6 +1429,7 @@ export async function setClientPriority(
   const user = await getSessionUser();
   const v = Math.round(value);
   if (!user || v < 1 || v > 5) return { ok: false };
+  if (await requestLocked(requestId)) return { ok: false };
   const existing = await prisma.request.findUnique({
     where: { id: requestId },
     select: { clientId: true },
@@ -1435,6 +1466,7 @@ export async function handoffRequest(formData: FormData) {
   const note = String(formData.get("note") || "").trim();
   const newStatus = String(formData.get("newStatus") || "KEEP");
   if (!requestId || !toUserId) return;
+  if (await requestLocked(requestId)) return;
 
   const [to, req] = await Promise.all([
     prisma.user.findUnique({ where: { id: toUserId } }),
@@ -1520,6 +1552,9 @@ export async function submitRequest(formData: FormData) {
   const priority = PRIORITY_MAP[rawPriority] ? rawPriority : "MEDIA";
   const dueStr = String(formData.get("dueDate") || "");
   if (!clientId || !title) redirect("/solicitar?error=datos");
+  // Cliente archivado: no recibe solicitudes por ninguna vía (el select ya
+  // no lo muestra; esto cubre un POST armado a mano).
+  if (!(await clientIsActive(clientId))) redirect("/solicitar?error=datos");
   if (!isValidEmail(requesterEmail)) redirect("/solicitar?error=correo");
   // Sitio/proyecto opcional: solo si pertenece a la empresa elegida.
   const rawProject = String(formData.get("projectId") || "");
@@ -1618,6 +1653,7 @@ export async function submitClientRequest(formData: FormData) {
   if (!ctx) redirect("/portal");
   const email = ctx.user.email;
   const client = ctx.client;
+  if (!client.isActive) redirect("/portal");
 
   const type = String(formData.get("type") || "Otro");
   // Sitio/proyecto opcional: solo si pertenece a este cliente.
@@ -1772,9 +1808,11 @@ export async function updateClient(id: string, formData: FormData) {
       })(),
       color: String(formData.get("color") || "").trim() || null,
       accountManagerId: String(formData.get("accountManagerId") || "") || null,
-      isActive: formData.get("isActive") === "on",
     },
   });
+  // Activo/archivado no se escribe directo: archivar tiene efectos (ver
+  // setClientActive), que no hace nada si el valor no cambió.
+  await setClientActive(id, formData.get("isActive") === "on");
   await logAudit({
     type: "admin_client_updated",
     actorId: user.id,
@@ -1785,17 +1823,104 @@ export async function updateClient(id: string, formData: FormData) {
   redirect("/admin/clientes");
 }
 
+// Archivar un cliente (isActive=false) lo deja como histórico de solo
+// lectura, en un solo lote con la MISMA marca de tiempo T:
+//  - sus tareas pendientes pasan a Finalizada y TODAS las no archivadas
+//    quedan archivadas (archivedAt=T); sus proyectos abiertos se cierran (T);
+//  - sus usuarios de portal (CLIENTE) se desactivan — pierden la sesión.
+// Nada de esto avisa por correo (sería uno por tarea).
+// Reactivarlo deshace exactamente ese lote (archivedAt == T, el máximo de
+// sus tareas: con el cliente archivado nada más puede archivarse ni
+// restaurarse): las que finalizó el archivado (finalizedAt == T) vuelven
+// en pausa, sin correos; las que ya estaban finalizadas siguen así. Lo
+// archivado a mano antes, y los usuarios de portal, quedan como están.
 export async function setClientActive(id: string, isActive: boolean) {
   const user = await getSessionUser();
   if (!user || !user.roleCodes.includes("ADMIN")) return;
-  await prisma.client.update({ where: { id }, data: { isActive } });
+  const client = await prisma.client.findUnique({ where: { id }, select: { isActive: true } });
+  if (!client || client.isActive === isActive) return;
+  const counts = isActive ? await reactivateClientBatch(id) : await archiveClientBatch(id, user.name);
   await logAudit({
     type: isActive ? "admin_client_reactivated" : "admin_client_deactivated",
     actorId: user.id,
     actorEmail: user.email,
-    detail: `clientId=${id}`,
+    detail: `clientId=${id} ${Object.entries(counts).map(([k, v]) => `${k}=${v}`).join(" ")}`,
   });
   revalidateAdmin();
+  refreshLists();
+}
+
+async function archiveClientBatch(clientId: string, actorName: string) {
+  const now = new Date();
+  const finalCodes = (await getStatuses()).filter((s) => s.isFinal).map((s) => s.code);
+  const status = finalCodes[0];
+  const open = status
+    ? await prisma.request.findMany({
+        where: { clientId, archivedAt: null, status: { notIn: finalCodes } },
+        select: { id: true },
+      })
+    : [];
+  const ids = open.map((r) => r.id);
+  const [, , , , archived, projects, users] = await prisma.$transaction([
+    prisma.client.update({ where: { id: clientId }, data: { isActive: false } }),
+    prisma.request.updateMany({ where: { id: { in: ids } }, data: { status, finalizedAt: now } }),
+    prisma.statusChange.createMany({ data: ids.map((requestId) => ({ requestId, status, at: now, actorName })) }),
+    prisma.activity.createMany({
+      data: ids.map((requestId) => ({
+        requestId,
+        type: "status_change",
+        message: "Finalizada y archivada al archivar el cliente",
+        actorName,
+      })),
+    }),
+    prisma.request.updateMany({ where: { clientId, archivedAt: null }, data: { archivedAt: now } }),
+    prisma.project.updateMany({ where: { clientId, archivedAt: null }, data: { archivedAt: now } }),
+    prisma.user.updateMany({ where: { clientId, role: "CLIENTE", isActive: true }, data: { isActive: false } }),
+  ]);
+  return { finalizadas: ids.length, archivadas: archived.count, proyectos: projects.count, usuarios_portal: users.count };
+}
+
+async function reactivateClientBatch(clientId: string) {
+  const [lastReq, lastProject] = await Promise.all([
+    prisma.request.aggregate({ where: { clientId }, _max: { archivedAt: true } }),
+    prisma.project.aggregate({ where: { clientId }, _max: { archivedAt: true } }),
+  ]);
+  const batch = lastReq._max.archivedAt ?? lastProject._max.archivedAt;
+  // "En pausa" no escala SLA ni avisa a nadie; si Admin lo quitó, el primer
+  // estado opcional abierto, y si tampoco hay, el primero abierto.
+  const statuses = await getStatuses();
+  const pause =
+    statuses.find((s) => s.code === "EN_PAUSA" && !s.isFinal) ??
+    statuses.find((s) => s.isOptional && !s.isFinal) ??
+    statuses.find((s) => !s.isFinal);
+  const ids =
+    batch && pause
+      ? (
+          await prisma.request.findMany({
+            where: { clientId, archivedAt: batch, finalizedAt: batch },
+            select: { id: true },
+          })
+        ).map((r) => r.id)
+      : [];
+  const now = new Date();
+  const [, , , , restored, projects] = await prisma.$transaction([
+    prisma.client.update({ where: { id: clientId }, data: { isActive: true } }),
+    prisma.request.updateMany({ where: { id: { in: ids } }, data: { status: pause?.code, finalizedAt: null } }),
+    prisma.statusChange.createMany({
+      data: ids.map((requestId) => ({ requestId, status: pause!.code, at: now, actorName: "Sistema" })),
+    }),
+    prisma.activity.createMany({
+      data: ids.map((requestId) => ({
+        requestId,
+        type: "status_change",
+        message: `Restaurada en "${pause!.label}" al reactivar el cliente`,
+        actorName: "Sistema",
+      })),
+    }),
+    prisma.request.updateMany({ where: { clientId, archivedAt: batch ?? new Date(0) }, data: { archivedAt: null } }),
+    prisma.project.updateMany({ where: { clientId, archivedAt: batch ?? new Date(0) }, data: { archivedAt: null } }),
+  ]);
+  return { restauradas: restored.count, en_pausa: ids.length, proyectos: projects.count };
 }
 
 export async function createHoursAdjustment(clientId: string, formData: FormData) {
@@ -2187,6 +2312,7 @@ export async function createScheduleBlock(formData: FormData): Promise<ScheduleR
     const clientId = String(formData.get("clientId") || "");
     const title = String(formData.get("title") || "").trim();
     if (!clientId || !title) return { ok: false };
+    if (!(await clientIsActive(clientId))) return { ok: false };
     const rawProject = String(formData.get("projectId") || "");
     const project = rawProject
       ? await prisma.project.findFirst({ where: { id: rawProject, clientId, archivedAt: null }, select: { id: true } })
@@ -2216,8 +2342,7 @@ export async function createScheduleBlock(formData: FormData): Promise<ScheduleR
     requestId = req.id;
   } else {
     if (!requestId) return { ok: false };
-    const exists = await prisma.request.findUnique({ where: { id: requestId }, select: { id: true } });
-    if (!exists) return { ok: false };
+    if (await requestLocked(requestId)) return { ok: false };
   }
 
   const block = await prisma.scheduleBlock.create({
@@ -2261,6 +2386,7 @@ export async function confirmScheduleBlockHours(blockId: string, formData: FormD
   if (!user) return { ok: false };
   const block = await ownedBlock(user.id, blockId);
   if (!block || block.timeEntryId) return { ok: false };
+  if (await requestLocked(block.requestId)) return { ok: false };
   const hours = parseFloat(String(formData.get("hours") || "0"));
   if (!hours || hours <= 0) return { ok: false };
   const note = String(formData.get("note") || "").trim();

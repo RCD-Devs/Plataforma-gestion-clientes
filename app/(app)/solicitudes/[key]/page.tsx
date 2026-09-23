@@ -128,10 +128,24 @@ export default async function RequestDetail({
         </div>
         <div className="mt-1 flex items-center justify-between gap-3">
           <h1 className="text-xl font-semibold">{req.title}</h1>
-          <ArchiveButton requestId={req.id} archived={!!req.archivedAt} />
+          {/* Archivada = histórico: restaurar es solo de Admin, y con el cliente
+              archivado ni eso (se reactiva el cliente). */}
+          {(!req.archivedAt || (user.roleCodes.includes("ADMIN") && req.client.isActive)) && (
+            <ArchiveButton requestId={req.id} archived={!!req.archivedAt} />
+          )}
         </div>
       </header>
 
+      {req.archivedAt && (
+        <div className="border-b border-[#e6e8eb] bg-[#f3f4f6] px-6 py-2 text-xs text-[#5d6b77]">
+          {req.client.isActive
+            ? "Solicitud archivada: histórico de solo lectura."
+            : `Solicitud archivada junto con el cliente ${req.client.name}: histórico de solo lectura.`}
+        </div>
+      )}
+      {/* fieldset disabled apaga de una vez todo input/select/botón de la
+          ficha; el servidor igual rechaza cambios (requestLocked). */}
+      <fieldset disabled={!!req.archivedAt} className="contents">
       <div className="border-b border-[#e6e8eb] bg-white px-6 py-2">
         <RequestEditPanel
           requestId={req.id}
@@ -522,6 +536,7 @@ export default async function RequestDetail({
           </div>
         </aside>
       </div>
+      </fieldset>
     </div>
   );
 }

@@ -31,9 +31,8 @@ export const getStatusMap = cache(async (): Promise<Record<string, StatusInfo>> 
 });
 
 // Tareas finalizadas hace más de OLD_FINAL_DAYS: tablero y listado las
-// ocultan por defecto (con opción de verlas). Solo es un filtro de vista —
-// archivarlas las sacaría también de las horas consumidas del proyecto
-// (lib/projectInsights.ts filtra archivedAt).
+// ocultan por defecto (con opción de verlas). Solo es un filtro de vista:
+// archivar es otra cosa (histórico de solo lectura, ver requestLocked).
 export const OLD_FINAL_DAYS = 30;
 export async function hideOldFinalWhere(): Promise<Prisma.RequestWhereInput> {
   const finals = (await getStatuses()).filter((s) => s.isFinal).map((s) => s.code);

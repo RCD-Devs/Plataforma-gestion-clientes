@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     where: { id: requestId },
     include: { client: true, collaborators: true },
   });
-  if (!user || !target || !canActOnRequest(user, target)) {
+  if (!user || !target || target.archivedAt || !canActOnRequest(user, target)) {
     return new NextResponse("No autorizado", { status: 403 });
   }
   if (!rateLimit(`upload:${user.id}`, 30, 10 * 60 * 1000)) {

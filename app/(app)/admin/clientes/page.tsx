@@ -49,7 +49,12 @@ export default async function AdminClientesPage() {
                   {c.accountManager?.name || "—"}
                 </td>
                 <td className="px-4 py-3">
-                  <ActiveToggle id={c.id} isActive={c.isActive} action={setClientActive} />
+                  <ActiveToggle
+                    id={c.id}
+                    isActive={c.isActive}
+                    action={setClientActive}
+                    confirmDeactivate={`Archivar "${c.name}": sus tareas pendientes quedarán Finalizadas, todas sus tareas y proyectos pasan a histórico de solo lectura y sus usuarios de portal se desactivan. No recibirá más solicitudes. Reactivarlo restaura las tareas en pausa. ¿Continuar?`}
+                  />
                 </td>
                 <td className="px-4 py-3 text-right">
                   <Link
