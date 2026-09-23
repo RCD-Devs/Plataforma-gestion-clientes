@@ -5,6 +5,7 @@ import {
   requestScopeWhere,
   canOnRequest,
   clientScopeWhere,
+  ownClientWhere,
 } from "./permissions";
 
 // Nuevo #3 (16 sep 2026) — reemplaza los roles hardcodeados por permisos
@@ -58,4 +59,16 @@ export function requestVisibilityWhere(user: AuthzUser): Prisma.RequestWhereInpu
 // Filtro para prisma.client.findMany.
 export function clientVisibilityWhere(user: AuthzUser): Prisma.ClientWhereInput {
   return clientScopeWhere(user.capabilities, "clients.view", user.id);
+}
+
+// Clientes con los que la persona trabaja, para selectores (formulario de
+// solicitud, filtros): los que su rol le deja ver MÁS aquellos donde es
+// encargado o miembro, aunque su rol no tenga clients.view (ej. Diseñador
+// UX/UI, SEO). No abre /clientes ni la bolsa: eso sigue en clientVisibilityWhere.
+export function workClientsWhere(user: AuthzUser): Prisma.ClientWhereInput {
+  const visible = clientVisibilityWhere(user);
+  // {} = alcance total. Dentro de un OR, Prisma ignora un {} en vez de
+  // tratarlo como "todos", así que se devuelve tal cual.
+  if (Object.keys(visible).length === 0) return visible;
+  return { OR: [visible, ownClientWhere(user.id)] };
 }

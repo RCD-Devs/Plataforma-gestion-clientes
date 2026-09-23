@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { clientVisibilityWhere, type AuthzUser } from "@/lib/authz";
+import { workClientsWhere, type AuthzUser } from "@/lib/authz";
 import { getStatuses, hideOldFinalWhere } from "@/lib/statuses";
 import { slugify } from "@/lib/slug";
 
@@ -72,14 +72,14 @@ export async function requestFilterWhere(sp: SP): Promise<Prisma.RequestWhereInp
 }
 
 // Opciones de los selects de <Filters>, con `id` = valor legible para la
-// URL. Solo clientes que el usuario ve.
+// URL. Solo los clientes con los que el usuario trabaja.
 export async function filterOptions(user: AuthzUser) {
   const [clients, users, teams, projects, statuses] = await Promise.all([
-    prisma.client.findMany({ where: clientVisibilityWhere(user), orderBy: { name: "asc" } }),
+    prisma.client.findMany({ where: workClientsWhere(user), orderBy: { name: "asc" } }),
     prisma.user.findMany({ where: { role: { not: "CLIENTE" } }, orderBy: { name: "asc" } }),
     prisma.team.findMany({ orderBy: { name: "asc" } }),
     prisma.project.findMany({
-      where: { archivedAt: null, client: clientVisibilityWhere(user) },
+      where: { archivedAt: null, client: workClientsWhere(user) },
       include: { client: true },
       orderBy: { name: "asc" },
     }),

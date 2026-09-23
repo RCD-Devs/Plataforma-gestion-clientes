@@ -6,7 +6,7 @@ import { ClientProjectFields } from "@/components/ClientProjectFields";
 import { REQUEST_TYPES, PRIORITIES } from "@/lib/constants";
 import { getSessionUser } from "@/lib/session";
 import { hasAccess } from "@/lib/permissions";
-import { clientVisibilityWhere } from "@/lib/authz";
+import { workClientsWhere } from "@/lib/authz";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +28,7 @@ export default async function SolicitarPage({
   const canAssign = internal && hasAccess(user.capabilities, "requests.assign");
   const activeInternal = { role: { not: "CLIENTE" }, isActive: true };
   const clients = await prisma.client.findMany({
-    where: { isActive: true, ...(internal ? clientVisibilityWhere(user) : {}) },
+    where: { isActive: true, ...(internal ? workClientsWhere(user) : {}) },
     orderBy: { name: "asc" },
     include: {
       projects: {

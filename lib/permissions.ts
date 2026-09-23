@@ -140,7 +140,7 @@ export function hasAccess(caps: Capabilities, action: ActionId): boolean {
 // Para vistas tipo "Solicitudes/Clientes de X" — arma el where de Prisma
 // uniendo cada alcance otorgado. "all" gana siempre (sin filtro).
 // "Mis clientes": donde soy coordinador de cuenta o estoy asignado.
-function ownClientWhere(userId: string): Prisma.ClientWhereInput {
+export function ownClientWhere(userId: string): Prisma.ClientWhereInput {
   return { OR: [{ accountManagerId: userId }, { members: { some: { userId } } }] };
 }
 
