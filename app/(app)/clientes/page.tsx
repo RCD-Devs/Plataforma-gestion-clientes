@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { clientParam } from "@/lib/requestFilters";
 import { getSessionUser } from "@/lib/session";
 import { isManager, clientVisibilityWhere } from "@/lib/authz";
 import { withSlug } from "@/lib/slug";
@@ -63,12 +64,20 @@ export default async function ClientesPage() {
                   <span>
                     {c.requests.length} solicitudes · {open} abiertas
                   </span>
-                  <Link
-                    href={`/clientes/${c.slug ?? withSlug(c.id, c.name)}/reporte`}
-                    className="font-semibold text-[#08a89f] hover:underline"
-                  >
-                    Ver reporte →
-                  </Link>
+                  <span className="flex gap-3">
+                    <Link
+                      href={`/tablero?cliente=${clientParam(c)}`}
+                      className="font-semibold text-[#08a89f] hover:underline"
+                    >
+                      Ver tareas →
+                    </Link>
+                    <Link
+                      href={`/clientes/${c.slug ?? withSlug(c.id, c.name)}/reporte`}
+                      className="font-semibold text-[#08a89f] hover:underline"
+                    >
+                      Ver reporte →
+                    </Link>
+                  </span>
                 </div>
                 {c.contractedHours > 0 ? (
                   <div className="mt-3">

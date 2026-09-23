@@ -1,4 +1,5 @@
 import { cache } from "react";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 
 // Estados de tablero editables por Admin (Rec. #36, entrega 2, 2026-09-01)
@@ -28,6 +29,17 @@ export const getStatusMap = cache(async (): Promise<Record<string, StatusInfo>> 
   const list = await getStatuses();
   return Object.fromEntries(list.map((s) => [s.code, s]));
 });
+
+// Tareas finalizadas hace más de OLD_FINAL_DAYS: tablero y listado las
+// ocultan por defecto (con opción de verlas). Solo es un filtro de vista —
+// archivarlas las sacaría también de las horas consumidas del proyecto
+// (lib/projectInsights.ts filtra archivedAt).
+export const OLD_FINAL_DAYS = 30;
+export async function hideOldFinalWhere(): Promise<Prisma.RequestWhereInput> {
+  const finals = (await getStatuses()).filter((s) => s.isFinal).map((s) => s.code);
+  const cutoff = new Date(Date.now() - OLD_FINAL_DAYS * 24 * 60 * 60 * 1000);
+  return { NOT: { status: { in: finals }, finalizedAt: { lt: cutoff } } };
+}
 
 // Fondo suave derivado del color principal — evita guardar un segundo
 // campo "soft" en la base, se calcula al vuelo con color-mix.

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { slugify } from "@/lib/slug";
 import { getSessionUser } from "@/lib/session";
 import { hasAccess } from "@/lib/permissions";
 import { ROLE_MAP } from "@/lib/constants";
@@ -27,12 +28,14 @@ export default async function EquipoPage({
     ? new Date(`${sp.desde}T00:00:00`)
     : new Date(now.getFullYear(), now.getMonth(), 1);
   const hasta = sp.hasta ? new Date(`${sp.hasta}T23:59:59`) : endOfToday();
-  const equipo = sp.equipo ?? user.teamId ?? "all";
-
   const teams = await prisma.team.findMany({
     include: { members: true },
     orderBy: { name: "asc" },
   });
+  // ?equipo=diseno (slug del nombre) o, en links viejos, el id.
+  const equipo =
+    teams.find((t) => sp.equipo && (t.id === sp.equipo || slugify(t.name) === sp.equipo))?.id ??
+    (sp.equipo ? "all" : (user.teamId ?? "all"));
   const memberIds =
     equipo === "all"
       ? undefined
@@ -102,6 +105,10 @@ export default async function EquipoPage({
   const maxU = Math.max(1, ...perUser.map((u) => u.hours));
   const maxC = Math.max(1, ...perClient.map((c) => c.hours));
 
+  const shownTeams = equipo === "all" ? teams : teams.filter((t) => t.id === equipo);
+  const openByUser = new Map<string, number>();
+  for (const t of open) if (t.assigneeId) openByUser.set(t.assigneeId, (openByUser.get(t.assigneeId) ?? 0) + 1);
+
   const fmt = toDateInput;
   const inputCls =
     "h-8 rounded-md border border-[#e4e8ec] bg-white px-2 text-sm outline-none focus:border-[#0bdbcf]";
@@ -117,10 +124,14 @@ export default async function EquipoPage({
             </p>
           </div>
           <form method="get" className="flex flex-wrap items-center gap-2">
-            <select name="equipo" defaultValue={equipo} className={inputCls}>
+            <select
+              name="equipo"
+              defaultValue={shownTeams.length === 1 && equipo !== "all" ? slugify(shownTeams[0].name) : "all"}
+              className={inputCls}
+            >
               <option value="all">Todos los equipos</option>
               {teams.map((t) => (
-                <option key={t.id} value={t.id}>
+                <option key={t.id} value={slugify(t.name)}>
                   {t.name}
                 </option>
               ))}
@@ -151,6 +162,35 @@ export default async function EquipoPage({
       </header>
 
       <div className="flex-1 space-y-6 overflow-y-auto p-6">
+        {shownTeams.map((team) => (
+          <section key={team.id} className="rounded-xl border border-[#e4e8ec] bg-white p-5">
+            <h2 className="mb-3 text-sm font-semibold">
+              {team.name}{" "}
+              <span className="font-normal text-[#7f7f7f]">· {team.members.length} integrantes</span>
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {team.members.map((m) => (
+                <Link
+                  key={m.id}
+                  href={`/tablero?responsable=${slugify(m.name)}`}
+                  className="flex items-center gap-2 rounded-lg border border-[#f1f3f4] px-3 py-2 text-sm hover:border-[#0bdbcf]"
+                >
+                  <Avatar name={m.name} color={m.color} size={24} />
+                  <span>
+                    <span className="block font-medium">{m.name}</span>
+                    <span className="block text-xs text-[#7f7f7f]">
+                      {ROLE_MAP[m.role]?.label ?? m.role} · {openByUser.get(m.id) ?? 0} abiertas
+                    </span>
+                  </span>
+                </Link>
+              ))}
+              {team.members.length === 0 && (
+                <div className="text-sm text-[#7f7f7f]">Sin integrantes.</div>
+              )}
+            </div>
+          </section>
+        ))}
+
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label="Tareas abiertas" value={open.length} hint={`${tasks.length} en total`} />
           <StatCard

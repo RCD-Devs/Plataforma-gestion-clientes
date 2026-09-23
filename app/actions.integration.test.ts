@@ -17,6 +17,8 @@ class RedirectSignal extends Error {
 }
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+// submitRequest lee la IP con headers() de Next (no existe en Vitest).
+vi.mock("@/lib/rateLimit", () => ({ rateLimit: () => true, clientIp: async () => "test" }));
 vi.mock("next/navigation", () => ({
   redirect: (url: string) => {
     throw new RedirectSignal(url);
@@ -39,7 +41,7 @@ vi.mock("@/lib/session", () => ({
 const { prisma } = await import("@/lib/db");
 const { buildCapabilities } = await import("@/lib/permissions");
 const { seedRoles } = await import("../scripts/seed-roles");
-const { changeStatus, assignRequest, setUserActive, createUser } = await import(
+const { changeStatus, assignRequest, setUserActive, createUser, setProjectActive, submitRequest } = await import(
   "@/app/actions"
 );
 
@@ -206,6 +208,46 @@ describe.skipIf(!process.env.RUN_DB_TESTS)(
       const found = await prisma.user.findUniqueOrThrow({ where: { email } });
       expect(found.role).toBe("DESARROLLADOR");
       await prisma.user.delete({ where: { email } });
+    });
+
+    it("setProjectActive: cerrar un proyecto finaliza sus tareas pendientes", async () => {
+      currentUser = admin;
+      const project = await prisma.project.create({ data: { name: `Proyecto ${suffix}`, clientId: clientA.id } });
+      const open = await prisma.request.create({
+        data: { key: `TSTP-${suffix}`, title: "Pendiente", clientId: clientA.id, projectId: project.id, status: "POR_HACER" },
+      });
+      await setProjectActive(project.id, false);
+      const fresh = await prisma.request.findUniqueOrThrow({ where: { id: open.id }, include: { statusChanges: true } });
+      expect(fresh.status).toBe("FINALIZADA");
+      expect(fresh.finalizedAt).not.toBeNull();
+      expect(fresh.statusChanges.map((s) => s.status)).toEqual(["FINALIZADA"]);
+      await prisma.request.delete({ where: { id: open.id } });
+      await prisma.project.delete({ where: { id: project.id } });
+    });
+
+    it("submitRequest: un interno con requests.assign deja el responsable; anónimo no", async () => {
+      const form = (title: string) => {
+        const fd = new FormData();
+        fd.set("clientId", clientA.id);
+        fd.set("requesterEmail", "pide@test.local");
+        fd.set("title", title);
+        fd.set("assigneeId", coordA.id);
+        return fd;
+      };
+      const created = async (title: string) =>
+        prisma.request.findFirstOrThrow({ where: { clientId: clientA.id, title } });
+
+      currentUser = admin;
+      await expect(submitRequest(form(`Con responsable ${suffix}`))).rejects.toThrow(RedirectSignal);
+      const withAssignee = await created(`Con responsable ${suffix}`);
+      expect(withAssignee.assigneeId).toBe(coordA.id);
+
+      currentUser = null;
+      await expect(submitRequest(form(`Anonima ${suffix}`))).rejects.toThrow(RedirectSignal);
+      const anon = await created(`Anonima ${suffix}`);
+      expect(anon.assigneeId).toBeNull();
+
+      await prisma.request.deleteMany({ where: { id: { in: [withAssignee.id, anon.id] } } });
     });
   },
 );

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { projectParam } from "@/lib/requestFilters";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/session";
 import { canOnClient } from "@/lib/permissions";
@@ -75,7 +76,12 @@ export default async function ProyectoPage({
           ← Proyectos
         </Link>
         <h1 className="mt-1 font-brand text-base font-semibold">{project.name}</h1>
-        <p className="text-xs text-[#5d6b77]">{project.client.name}</p>
+        <p className="text-xs text-[#5d6b77]">
+          {project.client.name} ·{" "}
+          <Link href={`/tablero?proyecto=${projectParam(project, project.client)}`} className="font-semibold text-[#08a89f] hover:underline">
+            Ver tareas del proyecto →
+          </Link>
+        </p>
       </header>
 
       <div className="flex-1 space-y-6 overflow-y-auto p-6">

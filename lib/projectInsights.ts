@@ -46,7 +46,7 @@ export async function loadProjectInsights(projectId: string) {
     prisma.project.findUnique({
       where: { id: projectId },
       include: {
-        client: { select: { id: true, name: true, accountManagerId: true } },
+        client: { select: { id: true, name: true, slug: true, accountManagerId: true } },
         stages: { orderBy: { sortOrder: "asc" } },
         requests: {
           where: { archivedAt: null },

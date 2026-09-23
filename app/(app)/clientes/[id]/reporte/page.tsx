@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { clientParam } from "@/lib/requestFilters";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/session";
 import { isManager } from "@/lib/authz";
@@ -92,7 +93,10 @@ export default async function ClientReportPage({
             </h1>
             <p className="text-xs text-[#5d6b77]">
               {shortDate(desde)} — {shortDate(hasta)} · SLA = fecha de
-              finalización − fecha de ingreso
+              finalización − fecha de ingreso ·{" "}
+              <Link href={`/tablero?cliente=${clientParam(client)}`} className="font-semibold text-[#08a89f] hover:underline">
+                Ver tareas del cliente →
+              </Link>
             </p>
           </div>
           <form method="get" className="flex flex-wrap items-center gap-2">

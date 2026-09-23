@@ -8,7 +8,7 @@ import { Filters } from "@/components/Filters";
 import { Avatar, StatusBadge, PriorityTag, ClientTag } from "@/components/ui";
 import { hoursLabel, relative } from "@/lib/format";
 import { getUnreadRequestIds } from "@/lib/commentReads";
-import { getStatuses } from "@/lib/statuses";
+import { requestFilterWhere, filterOptions } from "@/lib/requestFilters";
 
 export const dynamic = "force-dynamic";
 
@@ -22,41 +22,11 @@ export default async function SolicitudesPage({
 
   const sp = await searchParams;
 
-  const where: Prisma.RequestWhereInput = { ...requestVisibilityWhere(user) };
-  where.archivedAt = sp.archivadas === "1" ? { not: null } : null;
-  if (sp.cliente) where.clientId = sp.cliente;
-  if (sp.proyecto) where.projectId = sp.proyecto;
-  if (sp.responsable) where.assigneeId = sp.responsable;
-  if (sp.equipo) where.teamId = sp.equipo;
-  if (sp.estado) where.status = sp.estado;
-  if (sp.prioridad) where.priority = sp.prioridad;
-  if (sp.rol) where.assignee = { role: sp.rol };
-  // Rec. #79/#80 — insensible a mayúsculas (mode: "insensitive", Postgres
-  // ILIKE) y extendido a cliente y comentarios, no solo título/folio/
-  // descripción. Insensible a acentos queda pendiente aparte: requiere la
-  // extensión unaccent de Postgres + SQL crudo, que no compone con el
-  // resto de este `where` armado por partes — ver Pendientes técnicos.
-  if (sp.q)
-    where.OR = [
-      { title: { contains: sp.q, mode: "insensitive" } },
-      { key: { contains: sp.q, mode: "insensitive" } },
-      { description: { contains: sp.q, mode: "insensitive" } },
-      { client: { name: { contains: sp.q, mode: "insensitive" } } },
-      { client: { code: { contains: sp.q, mode: "insensitive" } } },
-      { comments: { some: { body: { contains: sp.q, mode: "insensitive" } } } },
-    ];
-  if (sp.desde || sp.hasta) {
-    const range: Prisma.DateTimeFilter = {};
-    if (sp.desde) range.gte = new Date(sp.desde);
-    if (sp.hasta) {
-      const d = new Date(sp.hasta);
-      d.setHours(23, 59, 59, 999);
-      range.lte = d;
-    }
-    where.createdAt = range;
-  }
+  const where: Prisma.RequestWhereInput = {
+    AND: [requestVisibilityWhere(user), await requestFilterWhere(sp)],
+  };
 
-  const [requests, clients, users, teams, projects, statuses] = await Promise.all([
+  const [requests, { clients, users, teams, projects, statuses }] = await Promise.all([
     prisma.request.findMany({
       where,
       include: {
@@ -66,14 +36,7 @@ export default async function SolicitudesPage({
       },
       orderBy: { updatedAt: "desc" },
     }),
-    prisma.client.findMany({ orderBy: { name: "asc" } }),
-    prisma.user.findMany({
-      where: { role: { not: "CLIENTE" } },
-      orderBy: { name: "asc" },
-    }),
-    prisma.team.findMany({ orderBy: { name: "asc" } }),
-    prisma.project.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" } }),
-    getStatuses(),
+    filterOptions(user),
   ]);
 
   const unreadIds =

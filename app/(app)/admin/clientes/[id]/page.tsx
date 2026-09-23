@@ -154,7 +154,12 @@ export default async function EditarClientePage({
                 <Link href={projectHref(p, client)} className="hover:text-[#08a89f] hover:underline">
                   {p.name}
                 </Link>
-                <ActiveToggle id={p.id} isActive={!p.archivedAt} action={setProjectActive} />
+                <ActiveToggle
+                  id={p.id}
+                  isActive={!p.archivedAt}
+                  action={setProjectActive}
+                  confirmDeactivate={`Al cerrar "${p.name}", todas sus tareas pendientes quedarán Finalizadas (reactivarlo no las reabre). ¿Continuar?`}
+                />
               </div>
             ))}
           </div>

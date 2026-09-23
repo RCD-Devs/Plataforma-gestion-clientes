@@ -7,7 +7,9 @@ import type { NextConfig } from "next";
 // que más importa: cargar scripts/recursos desde un origen externo.
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  // 'unsafe-eval' solo en `next dev`: su runtime (React Refresh) usa eval y
+  // sin esto la página nunca hidrata en local. El build de producción no lo usa.
+  `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
   "font-src 'self'",

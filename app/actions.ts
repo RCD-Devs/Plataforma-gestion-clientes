@@ -23,7 +23,7 @@ import { deleteFromStorage } from "@/lib/storage";
 import crypto from "crypto";
 import { notifyClient, notifyTeam } from "@/lib/email";
 import { PRIORITY_MAP } from "@/lib/constants";
-import { getStatusMap } from "@/lib/statuses";
+import { getStatusMap, getStatuses } from "@/lib/statuses";
 import { isValidEmail } from "@/lib/validate";
 import { getPortalContext, canActAsClient, PORTAL_CLIENT_COOKIE } from "@/lib/portal";
 import { stageDateIssue } from "@/lib/projectBudget";
@@ -725,17 +725,53 @@ export async function setProjectActive(projectId: string, isActive: boolean) {
   const user = await getSessionUser();
   const current = await prisma.project.findUnique({ where: { id: projectId }, select: { clientId: true } });
   if (!user || !current || !(await canProjectAction(user, "projects.manage", current.clientId))) return;
+  const now = new Date();
   const project = await prisma.project.update({
     where: { id: projectId },
-    data: { archivedAt: isActive ? null : new Date() },
+    data: { archivedAt: isActive ? null : now },
   });
+  // Cerrar un proyecto da por finalizadas sus tareas pendientes (subtareas
+  // incluidas), sin avisar al cliente por cada una como haría changeStatus
+  // (sería un correo por tarea). Reactivarlo no las reabre.
+  let finalized = 0;
+  if (!isActive) {
+    const statuses = await getStatuses();
+    const finalCodes = statuses.filter((s) => s.isFinal).map((s) => s.code);
+    const open = await prisma.request.findMany({
+      where: { projectId, archivedAt: null, status: { notIn: finalCodes } },
+      select: { id: true },
+    });
+    const ids = open.map((r) => r.id);
+    if (finalCodes.length && ids.length) {
+      const status = finalCodes[0];
+      await prisma.$transaction([
+        prisma.request.updateMany({ where: { id: { in: ids } }, data: { status, finalizedAt: now } }),
+        prisma.statusChange.createMany({
+          data: ids.map((requestId) => ({ requestId, status, at: now, actorName: user.name })),
+        }),
+        prisma.activity.createMany({
+          data: ids.map((requestId) => ({
+            requestId,
+            type: "status_change",
+            message: "Finalizada al cerrar el proyecto",
+            actorName: user.name,
+          })),
+        }),
+      ]);
+      finalized = ids.length;
+    }
+  }
   await logAudit({
     type: isActive ? "admin_project_reactivated" : "admin_project_archived",
     actorId: user.id,
     actorEmail: user.email,
-    detail: `projectId=${projectId}`,
+    detail: `projectId=${projectId}${finalized ? ` finalizadas=${finalized}` : ""}`,
   });
   revalidatePath(`/admin/clientes/${project.clientId}`);
+  if (finalized) {
+    revalidatePath("/tablero");
+    revalidatePath("/solicitudes");
+  }
 }
 
 // ── Proyecto como mini-ecosistema (etapa 1) ───────────────────
@@ -1494,6 +1530,19 @@ export async function submitRequest(formData: FormData) {
       })
     : null;
 
+  // Responsable opcional: solo cuenta si quien envía es del equipo interno
+  // con permiso de asignar (mismo permiso que assignRequest). En el
+  // formulario público anónimo el campo no existe y aquí se ignora igual.
+  const rawAssignee = String(formData.get("assigneeId") || "");
+  const sessionUser = rawAssignee ? await getSessionUser() : null;
+  const assignee =
+    sessionUser && hasAccess(sessionUser.capabilities, "requests.assign")
+      ? await prisma.user.findFirst({
+          where: { id: rawAssignee, role: { not: "CLIENTE" }, isActive: true },
+          select: { id: true, name: true, teamId: true },
+        })
+      : null;
+
   const clientCode = await clientFolioCode(clientId);
   const req = await withKeyRetry(clientCode, (key) =>
     prisma.request.create({
@@ -1506,6 +1555,8 @@ export async function submitRequest(formData: FormData) {
         requesterEmail,
         clientId,
         projectId: project?.id ?? null,
+        assigneeId: assignee?.id ?? null,
+        teamId: assignee?.teamId ?? null,
         status: "SIN_TRIAGE",
         dueDate: dueStr ? parseLocalDate(dueStr) : null,
       },
@@ -1520,6 +1571,16 @@ export async function submitRequest(formData: FormData) {
       actorName: requesterEmail,
     },
   });
+  if (assignee) {
+    await prisma.activity.create({
+      data: {
+        requestId: req.id,
+        type: "assigned",
+        message: `Asignó a ${assignee.name}`,
+        actorName: sessionUser!.name,
+      },
+    });
+  }
   await notifyClient({
     to: requesterEmail,
     requestId: req.id,

@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
-import { getStatuses } from "@/lib/statuses";
+import { requestFilterWhere, filterOptions } from "@/lib/requestFilters";
+import { Filters } from "@/components/Filters";
 import { StatusSelect } from "@/components/controls";
 import { PriorityTag, ClientTag } from "@/components/ui";
 import { HandoffPanel } from "@/components/Handoff";
@@ -25,23 +26,33 @@ const toneCls = {
 export default async function MiEspacioPage({
   searchParams,
 }: {
-  searchParams: Promise<{ vista?: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
-  const { vista } = await searchParams;
+  // Responsable/equipo/rol no aplican (son siempre mis tareas); archivadas
+  // tampoco: esta vista es de trabajo vivo.
+  const { vista, ...sp } = await searchParams;
+  for (const k of ["responsable", "equipo", "rol", "archivadas"]) delete sp[k];
   const asList = vista === "lista";
+  const filterQs = new URLSearchParams(sp as Record<string, string>).toString();
+  const viewHref = (v?: string) => {
+    const qs = [v && `vista=${v}`, filterQs].filter(Boolean).join("&");
+    return qs ? `/mi-espacio?${qs}` : "/mi-espacio";
+  };
 
   // Antes del Promise.all (no en paralelo): si la solicitud vencida es de
   // este mismo usuario, así la notificación recién creada ya aparece en
   // "alerts" más abajo, sin esperar a la siguiente carga de página.
   await escalateSlaAlerts().catch(() => {});
 
-  const [tasks, teammates, alerts, unread, statuses, nudgeItems] = await Promise.all([
+  const [tasks, teammates, alerts, unread, opts, nudgeItems] = await Promise.all([
     prisma.request.findMany({
       where: {
-        archivedAt: null,
-        OR: [{ assigneeId: user.id }, { collaborators: { some: { userId: user.id } } }],
+        AND: [
+          { OR: [{ assigneeId: user.id }, { collaborators: { some: { userId: user.id } } }] },
+          await requestFilterWhere(sp),
+        ],
       },
       include: {
         client: true,
@@ -63,9 +74,10 @@ export default async function MiEspacioPage({
     prisma.notification.count({
       where: { recipientEmail: user.email, channel: "team", read: false },
     }),
-    getStatuses(),
+    filterOptions(user),
     getPendingNudge(user.id),
   ]);
+  const { statuses } = opts;
   const finalCodes = new Set(statuses.filter((s) => s.isFinal).map((s) => s.code));
 
   const unreadIds = await getUnreadRequestIds(user.id, tasks.map((t) => t.id));
@@ -110,7 +122,7 @@ export default async function MiEspacioPage({
         />
         <div className="flex items-center gap-1 rounded-lg border border-[#e4e8ec] p-1">
           <Link
-            href="/mi-espacio"
+            href={viewHref()}
             className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
               !asList ? "bg-[#081826] text-white" : "text-[#5d6b77]"
             }`}
@@ -118,7 +130,7 @@ export default async function MiEspacioPage({
             ▦ Tablero
           </Link>
           <Link
-            href="/mi-espacio?vista=lista"
+            href={viewHref("lista")}
             className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
               asList ? "bg-[#081826] text-white" : "text-[#5d6b77]"
             }`}
@@ -126,6 +138,9 @@ export default async function MiEspacioPage({
             ☰ Lista
           </Link>
         </div>
+        </div>
+        <div className="w-full">
+          <Filters {...opts} hide={["responsable", "equipo", "rol", "archivadas"]} />
         </div>
       </header>
 
@@ -222,7 +237,7 @@ export default async function MiEspacioPage({
                         colSpan={6}
                         className="px-4 py-10 text-center text-[#7f7f7f]"
                       >
-                        No tienes tareas asignadas.
+                        {filterQs ? "No hay tareas con esos filtros." : "No tienes tareas asignadas."}
                       </td>
                     </tr>
                   )}
