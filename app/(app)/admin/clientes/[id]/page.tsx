@@ -96,7 +96,7 @@ export default async function EditarClientePage({
         >
           <div>
             <label className="mb-1 block text-xs font-semibold text-[#5d6b77]">
-              Horas (negativo para restar)
+              Horas
             </label>
             <input name="hours" type="number" step="0.5" required className={`${inputCls} w-32`} />
           </div>
@@ -107,6 +107,11 @@ export default async function EditarClientePage({
           <SubmitButton className="h-9 rounded-md bg-[#0bdbcf] px-3 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]">
             Agregar ajuste
           </SubmitButton>
+          <p className="w-full text-[11px] text-[#6b7280]">
+            Positivo (ej. 10) suma horas a la bolsa y no vencen — un paquete extra o una cortesía.
+            Negativo (ej. -5) resta horas del saldo — para corregir un ajuste mal ingresado o
+            descontar horas acordadas con el cliente.
+          </p>
         </form>
 
         {adjustments.length > 0 && (

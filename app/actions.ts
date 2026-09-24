@@ -15,7 +15,7 @@ import {
 import { hashResetToken, tokenRecordProblem } from "@/lib/reset-token";
 import { sendPasswordReset, sendWelcomeEmail } from "@/lib/email";
 import { isTeamRole, canActOnRequest } from "@/lib/authz";
-import { hasAccess, canOnClient, ACTIONS, type ActionId, type Capabilities } from "@/lib/permissions";
+import { hasAccess, canOnClient, canManageClients, ACTIONS, type ActionId, type Capabilities } from "@/lib/permissions";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { logAudit } from "@/lib/audit";
 import { storeUploadedFile } from "@/lib/attachments";
@@ -1723,7 +1723,7 @@ async function validMemberIds(formData: FormData) {
 
 export async function createClient(formData: FormData) {
   const user = await getSessionUser();
-  if (!user || !user.roleCodes.includes("ADMIN")) redirect("/mi-espacio");
+  if (!user || !canManageClients(user)) redirect("/mi-espacio");
 
   const name = String(formData.get("name") || "").trim();
   if (!name) redirect("/admin/clientes/nuevo?error=nombre");
@@ -1763,7 +1763,7 @@ export async function createClient(formData: FormData) {
 
 export async function updateClient(id: string, formData: FormData) {
   const user = await getSessionUser();
-  if (!user || !user.roleCodes.includes("ADMIN")) redirect("/mi-espacio");
+  if (!user || !canManageClients(user)) redirect("/mi-espacio");
 
   const name = String(formData.get("name") || "").trim();
   if (!name) redirect(`/admin/clientes/${id}?error=nombre`);
@@ -1820,7 +1820,7 @@ export async function updateClient(id: string, formData: FormData) {
 // archivado a mano antes, y los usuarios de portal, quedan como están.
 export async function setClientActive(id: string, isActive: boolean) {
   const user = await getSessionUser();
-  if (!user || !user.roleCodes.includes("ADMIN")) return;
+  if (!user || !canManageClients(user)) return;
   const client = await prisma.client.findUnique({ where: { id }, select: { isActive: true } });
   if (!client || client.isActive === isActive) return;
   const counts = isActive ? await reactivateClientBatch(id) : await archiveClientBatch(id, user.name);
@@ -1909,7 +1909,7 @@ async function reactivateClientBatch(clientId: string) {
 
 export async function createHoursAdjustment(clientId: string, formData: FormData) {
   const user = await getSessionUser();
-  if (!user || !user.roleCodes.includes("ADMIN")) redirect("/mi-espacio");
+  if (!user || !canManageClients(user)) redirect("/mi-espacio");
 
   const hours = Number(formData.get("hours") || 0);
   if (!hours) redirect(`/admin/clientes/${clientId}?error=ajuste_invalido`);

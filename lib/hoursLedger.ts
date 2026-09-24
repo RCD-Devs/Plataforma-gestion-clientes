@@ -8,7 +8,8 @@ import { prisma } from "./db";
 // vuelo a partir de contractedHours/cycleMonths/cycleStartDate. Así el
 // saldo es siempre exacto sin depender de que un cron se haya ejecutado.
 // Lo único que sí es un dato real son los ajustes manuales
-// (HoursAdjustment), que no vencen.
+// (HoursAdjustment): los positivos suman horas que no vencen; los
+// negativos descuentan del saldo como si fueran horas consumidas.
 //
 // Arrastre: lo que SOBRA de un ciclo se puede usar durante los
 // carryoverMonths meses siguientes. Por eso cada hora se descuenta
@@ -76,7 +77,7 @@ export function computeLedger(opts: {
   timeEntries: { hours: number; date: Date }[];
   asOf: Date;
 }): LedgerResult {
-  const manual: Grant[] = opts.adjustments.map((a) => ({
+  const manual: Grant[] = opts.adjustments.filter((a) => a.hours > 0).map((a) => ({
     hours: a.hours,
     grantedAt: a.createdAt,
     periodEnd: null,
@@ -88,7 +89,10 @@ export function computeLedger(opts: {
   );
   const remaining = grants.map((g) => g.hours);
 
-  const entries = [...opts.timeEntries].sort((a, b) => a.date.getTime() - b.date.getTime());
+  const deductions = opts.adjustments
+    .filter((a) => a.hours < 0)
+    .map((a) => ({ hours: -a.hours, date: a.createdAt }));
+  const entries = [...opts.timeEntries, ...deductions].sort((a, b) => a.date.getTime() - b.date.getTime());
   let extraHours = 0;
 
   for (const entry of entries) {

@@ -6,7 +6,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { logout } from "@/app/actions";
 import { Avatar } from "./ui";
-import { hasAccess, type Capabilities } from "@/lib/permissions";
+import { hasAccess, canManageClients, type Capabilities } from "@/lib/permissions";
 
 const items = [
   { href: "/mi-espacio", label: "Mi espacio", icon: "▣" },
@@ -85,7 +85,7 @@ export function Sidebar({
         <nav className="flex-1 overflow-y-auto px-3 py-2">
           {items.map((it) => {
             if (it.cap && !hasAccess(user.capabilities, it.cap)) return null;
-            if (it.admin && !user.roleCodes.includes("ADMIN")) return null;
+            if (it.admin && !canManageClients(user)) return null;
             const active =
               pathname === it.href || pathname.startsWith(it.href + "/");
             return (

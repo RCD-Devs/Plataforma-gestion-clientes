@@ -13,8 +13,9 @@ const tabs = [
   { href: "/admin/auditoria", label: "Auditoría" },
 ];
 
-export function AdminTabs() {
+export function AdminTabs({ isAdmin }: { isAdmin: boolean }) {
   const pathname = usePathname();
+  if (!isAdmin) return null;
   return (
     <nav className="mt-3 flex gap-1">
       {tabs.map((t) => {

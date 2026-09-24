@@ -44,3 +44,19 @@ describe("arrastre de horas sobrantes", () => {
     expect(l.available).toBeCloseTo(160); // 180 de junio - 20 de exceso de julio
   });
 });
+
+describe("ajustes manuales", () => {
+  it("positivo suma y negativo resta del saldo", () => {
+    const asOf = d("2026-09-24");
+    const l = computeLedger({
+      grants: cycleGrants(client(0), asOf),
+      adjustments: [
+        { hours: 10, createdAt: d("2026-09-02") },
+        { hours: -5, createdAt: d("2026-09-03") },
+      ],
+      timeEntries,
+      asOf,
+    });
+    expect(l.available).toBeCloseTo(256 + 10 - 5);
+  });
+});

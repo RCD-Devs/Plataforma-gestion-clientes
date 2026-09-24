@@ -66,7 +66,7 @@ export const ACTIONS: { key: ActionId; label: string; scopes: Scope[] }[] = [
   },
   {
     key: "clients.manage",
-    label: "Administrar clientes (alta, edición, desactivación)",
+    label: "Administrar clientes (alta, edición, archivado y ajustes de bolsa de horas)",
     scopes: ["all", "none"],
   },
   {
@@ -135,6 +135,12 @@ function grantedScopes(caps: Capabilities, action: ActionId): Scope[] {
 
 export function hasAccess(caps: Capabilities, action: ActionId): boolean {
   return grantedScopes(caps, action).some((s) => s !== "none");
+}
+
+// Editor de clientes (/admin/clientes): Admin siempre, más quien tenga
+// clients.manage en la matriz de roles (ej. Director).
+export function canManageClients(user: { roleCodes: readonly string[]; capabilities: Capabilities }): boolean {
+  return user.roleCodes.includes("ADMIN") || hasAccess(user.capabilities, "clients.manage");
 }
 
 // Para vistas tipo "Solicitudes/Clientes de X" — arma el where de Prisma

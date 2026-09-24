@@ -53,7 +53,9 @@ export default async function ClientesPage() {
                 className="rounded-xl border border-[#e6e8eb] bg-white p-4"
               >
                 <div className="flex items-center justify-between">
-                  <div className="font-semibold">{c.name}</div>
+                  <Link href={`/clientes/${c.slug ?? withSlug(c.id, c.name)}`} className="font-semibold hover:text-[#08a89f] hover:underline">
+                    {c.name}
+                  </Link>
                   {c.code && (
                     <span className="rounded bg-[#f3f4f6] px-1.5 py-0.5 text-xs text-[#6b7280]">
                       {c.code}
