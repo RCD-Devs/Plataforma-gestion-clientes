@@ -1740,6 +1740,7 @@ export async function createClient(formData: FormData) {
       contactEmail: String(formData.get("contactEmail") || "").trim() || null,
       contractedHours: Number(formData.get("contractedHours") || 0) || 0,
       cycleMonths: Math.max(1, Number(formData.get("cycleMonths") || 1) || 1),
+      carryoverMonths: Math.max(0, Math.floor(Number(formData.get("carryoverMonths") ?? 0)) || 0),
       cycleStartDate: (() => {
         const s = String(formData.get("cycleStartDate") || "");
         return s ? parseLocalDate(s) : null;
@@ -1784,6 +1785,7 @@ export async function updateClient(id: string, formData: FormData) {
       contactEmail: String(formData.get("contactEmail") || "").trim() || null,
       contractedHours: Number(formData.get("contractedHours") || 0) || 0,
       cycleMonths: Math.max(1, Number(formData.get("cycleMonths") || 1) || 1),
+      carryoverMonths: Math.max(0, Math.floor(Number(formData.get("carryoverMonths") ?? 0)) || 0),
       cycleStartDate: (() => {
         const s = String(formData.get("cycleStartDate") || "");
         return s ? parseLocalDate(s) : null;

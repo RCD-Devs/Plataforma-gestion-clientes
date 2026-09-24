@@ -225,7 +225,7 @@ export default async function ClientReportPage({
           <StatCard
             label="Saldo disponible hoy"
             value={hoursLabel(ledger.available)}
-            hint={ledger.extraHours > 0 ? `+${hoursLabel(ledger.extraHours)} extra` : "con arrastre de 3 meses"}
+            hint={ledger.extraHours > 0 ? `+${hoursLabel(ledger.extraHours)} extra` : client.carryoverMonths > 0 ? `con arrastre de ${client.carryoverMonths} ${client.carryoverMonths === 1 ? "mes" : "meses"}` : "sin arrastre"}
           />
         </div>
 

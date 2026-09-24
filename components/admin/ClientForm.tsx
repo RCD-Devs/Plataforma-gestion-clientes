@@ -26,6 +26,7 @@ export function ClientForm({
     contactEmail: string | null;
     contractedHours: number;
     cycleMonths: number;
+    carryoverMonths: number;
     cycleStartDate: Date | null;
     createdAt: Date;
     color: string | null;
@@ -100,6 +101,20 @@ export function ClientForm({
             ))}
           </select>
         </div>
+      </div>
+      <div>
+        <label className={labelCls}>Arrastre de horas sobrantes</label>
+        <input
+          name="carryoverMonths"
+          type="number"
+          min="0"
+          step="1"
+          defaultValue={client?.carryoverMonths ?? 0}
+          className={`${inputCls} w-32`}
+        />
+        <p className="mt-1 text-[11px] text-[#6b7280]">
+          Meses siguientes en que se pueden usar las horas que sobren de cada ciclo. 0 = sin arrastre.
+        </p>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>

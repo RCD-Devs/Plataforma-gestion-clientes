@@ -46,7 +46,7 @@ export default async function BolsaPage() {
       <header className="border-b border-[#e6e8eb] bg-white px-6 py-3">
         <h1 className="font-brand text-base font-semibold">Bolsa de horas</h1>
         <p className="text-xs text-[#6b7280]">
-          Saldo por cliente (con arrastre de hasta 3 meses) y registro de horas
+          Saldo por cliente (incluye arrastre de horas sobrantes) y registro de horas
         </p>
       </header>
       <div className="flex-1 space-y-6 overflow-y-auto p-6">

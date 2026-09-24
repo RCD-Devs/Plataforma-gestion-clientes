@@ -9,8 +9,12 @@ import { prisma } from "./db";
 // saldo es siempre exacto sin depender de que un cron se haya ejecutado.
 // Lo único que sí es un dato real son los ajustes manuales
 // (HoursAdjustment), que no vencen.
+//
+// Arrastre: lo que SOBRA de un ciclo se puede usar durante los
+// carryoverMonths meses siguientes. Por eso cada hora se descuenta
+// primero de la bolsa de SU ciclo y solo el exceso toma del arrastre
+// (el más antiguo primero) — si no, el arrastre pasaría la bolsa entera.
 
-const CARRYOVER_MONTHS = 3;
 const EPS = 1e-6;
 
 function addMonths(date: Date, months: number) {
@@ -23,6 +27,7 @@ type ClientCycleFields = {
   id: string;
   contractedHours: number;
   cycleMonths: number;
+  carryoverMonths: number;
   cycleStartDate: Date | null;
   createdAt: Date;
 };
@@ -30,6 +35,7 @@ type ClientCycleFields = {
 type Grant = {
   hours: number;
   grantedAt: Date;
+  periodEnd: Date | null; // fin del ciclo propio; null = ajuste manual
   expiresAt: Date | null; // null = ajuste manual, nunca vence
   label: string;
 };
@@ -38,6 +44,7 @@ export function cycleGrants(client: ClientCycleFields, uptoDate: Date): Grant[] 
   const perCycle = client.contractedHours;
   if (perCycle <= 0) return [];
   const months = Math.max(1, Math.floor(client.cycleMonths) || 1);
+  const carryover = Math.max(0, Math.floor(client.carryoverMonths) || 0);
   const anchor = client.cycleStartDate ?? client.createdAt;
 
   const grants: Grant[] = [];
@@ -47,7 +54,8 @@ export function cycleGrants(client: ClientCycleFields, uptoDate: Date): Grant[] 
     grants.push({
       hours: perCycle,
       grantedAt: new Date(cursor),
-      expiresAt: addMonths(cursor, CARRYOVER_MONTHS),
+      periodEnd: addMonths(cursor, months),
+      expiresAt: addMonths(cursor, months + carryover),
       label: `Ciclo desde ${cursor.toISOString().slice(0, 10)}`,
     });
     cursor = addMonths(cursor, months);
@@ -71,6 +79,7 @@ export function computeLedger(opts: {
   const manual: Grant[] = opts.adjustments.map((a) => ({
     hours: a.hours,
     grantedAt: a.createdAt,
+    periodEnd: null,
     expiresAt: null,
     label: "Ajuste manual",
   }));
@@ -84,7 +93,12 @@ export function computeLedger(opts: {
 
   for (const entry of entries) {
     let need = entry.hours;
-    for (let i = 0; i < grants.length && need > EPS; i++) {
+    const own = grants.findIndex(
+      (g) => g.periodEnd && g.grantedAt <= entry.date && entry.date < g.periodEnd,
+    );
+    const order = own < 0 ? grants.keys() : [own, ...[...grants.keys()].filter((i) => i !== own)];
+    for (const i of order) {
+      if (need <= EPS) break;
       if (remaining[i] <= EPS) continue;
       const g = grants[i];
       if (g.grantedAt > entry.date) continue;

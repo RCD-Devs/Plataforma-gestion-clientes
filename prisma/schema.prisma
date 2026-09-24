@@ -41,6 +41,8 @@ model Client {
   // fijo de por vida, se renueva solo cada cycleMonths meses.
   contractedHours Float     @default(0)
   cycleMonths     Int       @default(1)
+  // Meses que se puede usar lo que SOBRA de un ciclo (0 = sin arrastre).
+  carryoverMonths Int       @default(0)
   // Ancla del ciclo (cuándo partió el contrato). Null = usa createdAt
   // (cubre clientes ya sembrados antes de Rec. #36).
   cycleStartDate  DateTime?
