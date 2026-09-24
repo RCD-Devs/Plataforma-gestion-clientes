@@ -74,12 +74,10 @@ export default async function EditarClientePage({
               Próxima renovación automática: {shortDate(ledger.nextRenewalAt)}
             </div>
           )}
-          {ledger.expiring.length > 0 && (
+          {ledger.cycles.length > 1 && (
             <div className="col-span-2 text-xs text-[#5d6b77]">
-              Por vencer:{" "}
-              {ledger.expiring
-                .map((e) => `${hoursLabel(e.hours)} el ${shortDate(e.expiresAt)}`)
-                .join(" · ")}
+              Ciclo actual: {hoursLabel(ledger.cycles.at(-1)!.logged)} consumidas · arrastre de ciclos anteriores:{" "}
+              {hoursLabel(ledger.cycles.slice(0, -1).filter((c) => !c.expired).reduce((a, c) => a + c.remaining, 0))}
             </div>
           )}
         </div>

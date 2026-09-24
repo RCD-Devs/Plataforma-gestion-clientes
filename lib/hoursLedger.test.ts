@@ -60,3 +60,15 @@ describe("ajustes manuales", () => {
     expect(l.available).toBeCloseTo(256 + 10 - 5);
   });
 });
+
+describe("historial por ciclo", () => {
+  it("separa lo registrado en cada mes del sobrante que sigue vivo", () => {
+    const { cycles } = ledger(3);
+    const sep = cycles.at(-1)!;
+    expect(sep.logged).toBeCloseTo(24);
+    expect(sep.remaining).toBeCloseTo(256);
+    const jun = cycles.find((c) => c.start.getMonth() === 5)!;
+    expect(jun.logged).toBeCloseTo(52.8);
+    expect(jun.expired).toBe(false);
+  });
+});

@@ -65,10 +65,21 @@ export function cycleGrants(client: ClientCycleFields, uptoDate: Date): Grant[] 
   return grants;
 }
 
+export type CycleSummary = {
+  start: Date;
+  end: Date;
+  granted: number;
+  logged: number; // horas registradas dentro del período (lo que "se consumió" ese mes)
+  remaining: number; // lo que queda hoy de la bolsa de ese ciclo
+  expiresAt: Date;
+  expired: boolean;
+};
+
 export type LedgerResult = {
   available: number;
   extraHours: number;
   expiring: { hours: number; expiresAt: Date }[];
+  cycles: CycleSummary[]; // del más antiguo al vigente
 };
 
 export function computeLedger(opts: {
@@ -124,7 +135,24 @@ export function computeLedger(opts: {
   });
   expiring.sort((a, b) => a.expiresAt.getTime() - b.expiresAt.getTime());
 
-  return { available, extraHours, expiring };
+  const cycles: CycleSummary[] = [];
+  grants.forEach((g, i) => {
+    if (!g.periodEnd || !g.expiresAt) return;
+    const logged = opts.timeEntries
+      .filter((e) => g.grantedAt <= e.date && e.date < g.periodEnd!)
+      .reduce((a, e) => a + e.hours, 0);
+    cycles.push({
+      start: g.grantedAt,
+      end: g.periodEnd,
+      granted: g.hours,
+      logged,
+      remaining: Math.max(0, remaining[i]),
+      expiresAt: g.expiresAt,
+      expired: g.expiresAt < opts.asOf,
+    });
+  });
+
+  return { available, extraHours, expiring, cycles };
 }
 
 function groupBy<T, K extends string>(items: T[], key: (item: T) => K): Record<K, T[]> {
