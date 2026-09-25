@@ -105,7 +105,11 @@ export default async function EquipoPage({
   const maxU = Math.max(1, ...perUser.map((u) => u.hours));
   const maxC = Math.max(1, ...perClient.map((c) => c.hours));
 
-  const shownTeams = equipo === "all" ? teams : teams.filter((t) => t.id === equipo);
+  // Solo integrantes activos en las tarjetas; memberIds de arriba sigue
+  // incluyendo inactivos para no esconder sus tareas abiertas ni sus horas.
+  const shownTeams = (equipo === "all" ? teams : teams.filter((t) => t.id === equipo)).map(
+    (t) => ({ ...t, members: t.members.filter((m) => m.isActive) }),
+  );
   const openByUser = new Map<string, number>();
   for (const t of open) if (t.assigneeId) openByUser.set(t.assigneeId, (openByUser.get(t.assigneeId) ?? 0) + 1);
 
