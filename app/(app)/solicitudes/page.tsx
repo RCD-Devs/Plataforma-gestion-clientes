@@ -76,6 +76,7 @@ export default async function SolicitudesPage({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#e6e8eb] text-left text-xs text-[#6b7280]">
+                <th className="w-10 py-2.5 pl-4 pr-0 text-right font-medium">#</th>
                 <th className="px-4 py-2.5 font-medium">Solicitud</th>
                 <th className="px-4 py-2.5 font-medium">Responsable</th>
                 <th className="px-4 py-2.5 font-medium">Estado</th>
@@ -85,13 +86,14 @@ export default async function SolicitudesPage({
               </tr>
             </thead>
             <tbody>
-              {requests.map((r) => {
+              {requests.map((r, i) => {
                 const hrs = r.timeEntries.reduce((a, t) => a + t.hours, 0);
                 return (
                   <tr
                     key={r.id}
                     className="border-b border-[#f3f4f6] last:border-0 hover:bg-[#f9fafb]"
                   >
+                    <td className="py-3 pl-4 pr-0 text-right align-top text-xs tabular-nums text-[#9ca3af]">{i + 1}</td>
                     <td className="px-4 py-3">
                       <Link href={`/solicitudes/${r.key}`} className="block">
                         <div className="flex items-center gap-1.5">
@@ -139,7 +141,7 @@ export default async function SolicitudesPage({
               {requests.length === 0 && (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="px-4 py-10 text-center text-[#6b7280]"
                   >
                     No hay solicitudes con esos filtros.
