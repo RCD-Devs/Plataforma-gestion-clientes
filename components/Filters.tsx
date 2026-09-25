@@ -1,5 +1,6 @@
 "use client";
 
+import { useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PRIORITIES, ROLES } from "@/lib/constants";
 import type { StatusInfo } from "@/lib/statuses";
@@ -26,12 +27,16 @@ export function Filters({
   const pathname = usePathname();
   const sp = useSearchParams();
 
+  // Mientras carga, los selects muestran el valor anterior (son controlados
+  // por la URL): el atenuado deja claro que el filtro sí se está aplicando.
+  const [pending, startTransition] = useTransition();
+
   function setParam(key: string, value: string, extra?: (params: URLSearchParams) => void) {
     const params = new URLSearchParams(sp.toString());
     if (value) params.set(key, value);
     else params.delete(key);
     extra?.(params);
-    router.push(`${pathname}?${params.toString()}`);
+    startTransition(() => router.push(`${pathname}?${params.toString()}`));
   }
 
   // Proyectos del cliente elegido: su valor es "cliente--proyecto" (ver
@@ -48,7 +53,7 @@ export function Filters({
   const show = (k: string) => !hide.includes(k);
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className={`flex flex-wrap items-center gap-2 ${pending ? "opacity-60" : ""}`} aria-busy={pending}>
       <input
         defaultValue={sp.get("q") ?? ""}
         placeholder="Buscar folio, cliente, comentario…"

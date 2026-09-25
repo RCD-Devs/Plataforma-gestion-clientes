@@ -30,8 +30,10 @@ async function idsByName(model: "user" | "team", v: string): Promise<string[]> {
 export async function requestFilterWhere(sp: SP): Promise<Prisma.RequestWhereInput> {
   const where: Prisma.RequestWhereInput = {};
   where.archivedAt = sp.archivadas === "1" ? { not: null } : null;
-  // Buscar o filtrar por estado muestra todo: ocultar ahí sería confuso.
-  if (sp.antiguas !== "1" && !sp.q && !sp.estado) Object.assign(where, await hideOldFinalWhere());
+  // Buscar muestra todo: ocultar ahí sería confuso. Filtrar por estado NO:
+  // con el histórico de JIRA, "Finalizada" traería ~1700 filas de una vez;
+  // las antiguas quedan tras el check "Ver finalizadas hace más de 30 días".
+  if (sp.antiguas !== "1" && !sp.q) Object.assign(where, await hideOldFinalWhere());
   if (sp.cliente) where.client = { OR: [{ slug: sp.cliente }, { id: sp.cliente }] };
   if (sp.proyecto) {
     const [c, p = c] = sp.proyecto.split("--");
