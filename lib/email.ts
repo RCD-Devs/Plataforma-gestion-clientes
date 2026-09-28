@@ -100,6 +100,35 @@ export async function notifyTeam(opts: {
   });
 }
 
+// Mención (@Nombre) en un comentario: campana + correo con link a la
+// tarea. A diferencia de notifyTeam, sí manda correo — una mención es un
+// pedido directo, no un aviso de fondo.
+export async function notifyMention(opts: {
+  to: string;
+  requestId: string;
+  requestKey: string;
+  authorName: string;
+  body: string;
+}) {
+  const title = `${opts.authorName} te mencionó en ${opts.requestKey}`;
+  await notifyTeam({ to: opts.to, requestId: opts.requestId, title, body: opts.body.slice(0, 280) });
+  const url = `${appBaseUrl()}/solicitudes/${opts.requestKey}`;
+  await sendEmail({
+    to: opts.to,
+    subject: title,
+    html: emailLayout({
+      title,
+      bodyHtml: `<p style="margin:0;white-space:pre-wrap;">${escapeHtml(opts.body)}</p>`,
+      ctaLabel: "Ver la tarea",
+      ctaUrl: url,
+    }),
+  });
+}
+
+function escapeHtml(s: string) {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+}
+
 export async function notifyClient(opts: {
   to: string;
   requestId?: string;

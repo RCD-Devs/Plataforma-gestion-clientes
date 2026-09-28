@@ -14,7 +14,6 @@ import {
 } from "@/components/controls";
 import { Avatar, ClientTag } from "@/components/ui";
 import {
-  addComment,
   addUrlAttachment,
   logHours,
   createSubtask,
@@ -25,6 +24,7 @@ import { hoursLabel, longDate, shortDate, relative } from "@/lib/format";
 import { RequestEditPanel } from "@/components/RequestEditPanel";
 import { ArchiveButton, DeleteRequestButton } from "@/components/ArchiveButton";
 import { CommentActions } from "@/components/CommentActions";
+import { CommentForm, CommentBody } from "@/components/CommentForm";
 import { AttachmentDeleteButton } from "@/components/AttachmentDeleteButton";
 import { CollaboratorsPanel } from "@/components/CollaboratorsPanel";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -71,9 +71,12 @@ export default async function RequestDetail({
     canOnClient(user.capabilities, "requests.change_client", user.id, req.client, user.ownClientIds);
 
   const [users, projects, stages, customFields, statuses, statusMap, clients] = await Promise.all([
+    // select explícito: esto viaja a componentes de cliente, y la fila
+    // completa incluía passwordHash.
     prisma.user.findMany({
       where: { role: { not: "CLIENTE" } },
       orderBy: { name: "asc" },
+      select: { id: true, name: true, color: true, isActive: true },
     }),
     prisma.project.findMany({
       where: { clientId: req.clientId, archivedAt: null },
@@ -103,6 +106,7 @@ export default async function RequestDetail({
         })
       : [],
   ]);
+  const mentionNames = users.map((u) => u.name);
   const totalHours = req.timeEntries.reduce((a, t) => a + t.hours, 0);
   const customFieldValueMap = new Map(
     req.customFieldValues.map((v) => [v.fieldId, v.value]),
@@ -396,7 +400,9 @@ export default async function RequestDetail({
                       )}
                       <span>· {relative(c.createdAt)}</span>
                     </div>
-                    <div className="whitespace-pre-wrap text-sm">{c.body}</div>
+                    <div className="whitespace-pre-wrap text-sm">
+                      <CommentBody body={c.body} names={mentionNames} />
+                    </div>
                     {c.authorId === user.id && (
                       <CommentActions commentId={c.id} body={c.body} />
                     )}
@@ -409,18 +415,10 @@ export default async function RequestDetail({
                 </div>
               )}
             </div>
-            <form action={addComment} className="mt-3 flex gap-2">
-              <input type="hidden" name="requestId" value={req.id} />
-              <input
-                name="body"
-                placeholder="Escribe un comentario para el cliente…"
-                className={inputCls}
-                required
-              />
-              <button className="shrink-0 rounded-lg bg-[#0bdbcf] px-4 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]">
-                Comentar
-              </button>
-            </form>
+            <CommentForm
+              requestId={req.id}
+              users={users.filter((u) => u.isActive && u.id !== user.id).map((u) => ({ id: u.id, name: u.name }))}
+            />
           </section>
         </div>
 

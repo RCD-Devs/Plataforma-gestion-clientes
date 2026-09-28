@@ -70,7 +70,13 @@ export async function getSessionUser() {
   } catch {
     return null;
   }
+  return loadAuthzUser(userId);
+}
 
+// Usuario activo con sus capacidades resueltas — lo mismo que la sesión,
+// pero para cualquier persona (ej. saber si alguien mencionado en un
+// comentario puede abrir la tarea).
+export async function loadAuthzUser(userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: {

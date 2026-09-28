@@ -6,7 +6,7 @@ import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { getSessionUser, createSession, destroySession, redirectForRole } from "@/lib/session";
+import { getSessionUser, createSession, destroySession, redirectForRole, loadAuthzUser } from "@/lib/session";
 import {
   assertNewPasswordAllowed,
   rotateUserPassword,
@@ -14,14 +14,14 @@ import {
 } from "@/lib/password";
 import { hashResetToken, tokenRecordProblem } from "@/lib/reset-token";
 import { sendPasswordReset, sendWelcomeEmail } from "@/lib/email";
-import { isTeamRole, canActOnRequest } from "@/lib/authz";
+import { isTeamRole, canActOnRequest, canViewRequest } from "@/lib/authz";
 import { hasAccess, canOnClient, canManageClients, ACTIONS, type ActionId, type Capabilities } from "@/lib/permissions";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { logAudit } from "@/lib/audit";
 import { storeUploadedFile } from "@/lib/attachments";
 import { deleteFromStorage } from "@/lib/storage";
 import crypto from "crypto";
-import { notifyClient, notifyTeam } from "@/lib/email";
+import { notifyClient, notifyTeam, notifyMention } from "@/lib/email";
 import { PRIORITY_MAP } from "@/lib/constants";
 import { getStatusMap, getStatuses } from "@/lib/statuses";
 import { isValidEmail } from "@/lib/validate";
@@ -1404,6 +1404,41 @@ export async function deleteTimeEntry(entryId: string) {
   revalidatePath("/dashboard");
 }
 
+// Menciones (@Nombre) de un comentario del equipo. Los ids vienen del
+// autocompletado; solo cuentan los que siguen escritos en el texto (si
+// borró la mención antes de enviar, no avisa). Si la persona no puede
+// abrir la tarea (ej. rol con alcance "solo asignadas"), se la suma como
+// colaboradora — si no, el link del aviso le daría 404.
+async function notifyMentions(
+  req: { id: string; key: string },
+  author: { id: string; name: string },
+  body: string,
+  ids: string[],
+) {
+  const candidates = [...new Set(ids)].filter((id) => id && id !== author.id).slice(0, 20);
+  for (const id of candidates) {
+    const u = await loadAuthzUser(id);
+    if (!u || u.role === "CLIENTE" || !body.includes(`@${u.name}`)) continue;
+    const full = await prisma.request.findUnique({
+      where: { id: req.id },
+      include: { client: true, collaborators: true },
+    });
+    if (!full) return;
+    if (!canViewRequest(u, full)) {
+      await prisma.requestCollaborator.create({ data: { requestId: req.id, userId: u.id } });
+      await prisma.activity.create({
+        data: {
+          requestId: req.id,
+          type: "collaborator_added",
+          message: `Sumó a ${u.name} como colaborador al mencionarlo`,
+          actorName: author.name,
+        },
+      });
+    }
+    await notifyMention({ to: u.email, requestId: req.id, requestKey: req.key, authorName: author.name, body });
+  }
+}
+
 export async function addComment(formData: FormData) {
   const user = await getSessionUser();
   const requestId = String(formData.get("requestId") || "");
@@ -1446,6 +1481,7 @@ export async function addComment(formData: FormData) {
       actorName: authorName,
     },
   });
+  if (!isClient) await notifyMentions(req, user!, body, formData.getAll("mentions").map(String));
   if (!isClient && req?.requesterEmail) {
     await notifyClient({
       to: req.requesterEmail,

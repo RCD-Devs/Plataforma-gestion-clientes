@@ -81,6 +81,15 @@ export default async function MiEspacioPage({
   const finalCodes = new Set(statuses.filter((s) => s.isFinal).map((s) => s.code));
 
   const unreadIds = await getUnreadRequestIds(user.id, tasks.map((t) => t.id));
+  // Link de cada notificación a su tarea (las de la papelera no vuelven: sin link).
+  const alertKeys = new Map(
+    (
+      await prisma.request.findMany({
+        where: { id: { in: alerts.flatMap((n) => (n.requestId ? [n.requestId] : [])) } },
+        select: { id: true, key: true },
+      })
+    ).map((r) => [r.id, r.key]),
+  );
 
   const reminders = tasks
     .map((t) => ({ t, due: dueInfo(t.dueDate, finalCodes.has(t.status)) }))
@@ -118,6 +127,7 @@ export default async function MiEspacioPage({
             body: n.body,
             read: n.read,
             when: relative(n.createdAt),
+            href: n.requestId && alertKeys.has(n.requestId) ? `/solicitudes/${alertKeys.get(n.requestId)}` : undefined,
           }))}
         />
         <div className="flex items-center gap-1 rounded-lg border border-[#e4e8ec] p-1">
