@@ -239,16 +239,21 @@ export default async function RequestDetail({
                 action="/api/upload"
                 method="post"
                 encType="multipart/form-data"
-                className="flex items-center gap-2"
+                className="flex items-center gap-2 rounded-lg border border-dashed border-[#cfd5db] bg-[#f9fafb] p-2"
               >
                 <input type="hidden" name="requestId" value={req.id} />
-                <input
-                  type="file"
-                  name="file"
-                  accept=".pdf,.png,.jpg,.jpeg,.gif"
-                  className="text-sm"
-                />
-                <button className="shrink-0 rounded-lg border border-[#e6e8eb] px-3 py-2 text-sm hover:bg-[#f3f4f6]">
+                <label className="min-w-0 flex-1">
+                  <span className="sr-only">Archivo a adjuntar</span>
+                  <input
+                    type="file"
+                    name="file"
+                    accept=".pdf,.png,.jpg,.jpeg,.gif"
+                    required
+                    className="block w-full cursor-pointer text-xs text-[#6b7280] file:mr-2 file:cursor-pointer file:rounded-md file:border-0 file:bg-[#e0fbf9] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[#08a89f] hover:file:bg-[#c9f5f1]"
+                  />
+                  <span className="mt-1 block text-[10px] text-[#9ca3af]">PDF, PNG, JPG o GIF</span>
+                </label>
+                <button className="shrink-0 rounded-lg bg-[#0bdbcf] px-3 py-2 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]">
                   Subir
                 </button>
               </form>
