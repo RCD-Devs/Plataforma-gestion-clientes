@@ -388,11 +388,20 @@ export default async function RequestDetail({
                     color={c.isClient ? "#0ea5e9" : c.author?.color}
                     size={28}
                   />
-                  <div className="min-w-0 flex-1 rounded-lg border border-[#e6e8eb] bg-white p-3">
+                  <div
+                    className={`min-w-0 flex-1 rounded-lg border p-3 ${
+                      c.isInternal ? "border-[#f5c78a] bg-[#fffaf2]" : "border-[#e6e8eb] bg-white"
+                    }`}
+                  >
                     <div className="mb-1 flex items-center gap-2 text-xs text-[#6b7280]">
                       <span className="font-medium text-[#374151]">
                         {c.authorName || c.author?.name}
                       </span>
+                      {c.isInternal && (
+                        <span className="rounded bg-[#fdebd0] px-1.5 py-0.5 text-[10px] text-[#9a5a25]">
+                          Interno
+                        </span>
+                      )}
                       {c.isClient && (
                         <span className="rounded bg-[#e0f2fe] px-1.5 py-0.5 text-[10px] text-[#0369a1]">
                           Cliente

@@ -18,6 +18,9 @@ export function CommentForm({ requestId, users }: { requestId: string; users: Me
   const [mentioned, setMentioned] = useState<MentionUser[]>([]);
   const [menu, setMenu] = useState<{ query: string; start: number } | null>(null);
   const [active, setActive] = useState(0);
+  // Interno = solo equipo: no se envía al cliente ni sale en el portal.
+  // Mencionar a alguien lo activa solo (se puede desmarcar).
+  const [internal, setInternal] = useState(false);
 
   const matches = menu
     ? users
@@ -38,6 +41,7 @@ export function CommentForm({ requestId, users }: { requestId: string; users: Me
     const next = text.slice(0, menu.start) + insert + text.slice(caret);
     setText(next);
     setMentioned((prev) => (prev.some((p) => p.id === u.id) ? prev : [...prev, u]));
+    setInternal(true);
     setMenu(null);
     const pos = menu.start + insert.length;
     requestAnimationFrame(() => {
@@ -52,15 +56,18 @@ export function CommentForm({ requestId, users }: { requestId: string; users: Me
         await addComment(fd);
         setText("");
         setMentioned([]);
+        setInternal(false);
       }}
-      className="mt-3 flex gap-2"
+      className="mt-3"
     >
       <input type="hidden" name="requestId" value={requestId} />
+      {internal && <input type="hidden" name="internal" value="1" />}
       {mentioned
         .filter((u) => text.includes(`@${u.name}`))
         .map((u) => (
           <input key={u.id} type="hidden" name="mentions" value={u.id} />
         ))}
+      <div className="flex gap-2">
       <div className="relative min-w-0 flex-1">
         <input
           ref={inputRef}
@@ -68,8 +75,8 @@ export function CommentForm({ requestId, users }: { requestId: string; users: Me
           value={text}
           required
           autoComplete="off"
-          placeholder="Comentario para el cliente… (@ para mencionar al equipo)"
-          className="w-full rounded-lg border border-[#e6e8eb] px-3 py-2 text-sm outline-none focus:border-[#0bdbcf]"
+          placeholder={internal ? "Nota interna para el equipo… (@ para mencionar)" : "Comentario para el cliente… (@ para mencionar al equipo)"}
+          className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-[#0bdbcf] ${internal ? "border-[#f5c78a] bg-[#fffaf2]" : "border-[#e6e8eb]"}`}
           role="combobox"
           aria-expanded={open}
           aria-controls="mention-list"
@@ -121,6 +128,16 @@ export function CommentForm({ requestId, users }: { requestId: string; users: Me
       <button className="shrink-0 rounded-lg bg-[#0bdbcf] px-4 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]">
         Comentar
       </button>
+      </div>
+      <label className="mt-1.5 inline-flex cursor-pointer items-center gap-1.5 text-xs text-[#6b7280]">
+        <input
+          type="checkbox"
+          checked={internal}
+          onChange={(e) => setInternal(e.target.checked)}
+          className="h-3.5 w-3.5 accent-[#e08a1e]"
+        />
+        Interno — solo lo ve el equipo, no se le envía al cliente
+      </label>
     </form>
   );
 }

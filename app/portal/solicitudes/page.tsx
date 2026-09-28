@@ -21,7 +21,7 @@ export default async function SolicitudesPage({
     where: { clientId: client.id },
     include: {
       attachments: { select: { id: true } },
-      comments: { select: { id: true } },
+      comments: { where: { isInternal: false }, select: { id: true } },
       project: { select: { name: true } },
     },
     orderBy: { createdAt: "desc" },

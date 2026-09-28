@@ -404,6 +404,9 @@ model Comment {
   id         String   @id @default(cuid())
   body       String
   isClient   Boolean  @default(false)
+  // Interno: solo para el equipo — no se envía por correo al cliente ni
+  // aparece en el portal (ej. coordinar con una @mención).
+  isInternal Boolean  @default(false)
   authorName String?
   createdAt  DateTime @default(now())
 

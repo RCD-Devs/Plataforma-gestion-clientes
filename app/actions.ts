@@ -1444,6 +1444,7 @@ export async function addComment(formData: FormData) {
   const requestId = String(formData.get("requestId") || "");
   const body = String(formData.get("body") || "").trim();
   const isClient = String(formData.get("isClient") || "") === "1";
+  const isInternal = !isClient && String(formData.get("internal") || "") === "1";
   if (!requestId || !body) return;
   if (await requestLocked(requestId)) return;
   const req = await prisma.request.findUnique({
@@ -1469,6 +1470,7 @@ export async function addComment(formData: FormData) {
       requestId,
       body,
       isClient,
+      isInternal,
       authorId: isClient ? null : user!.id,
       authorName,
     },
@@ -1477,12 +1479,12 @@ export async function addComment(formData: FormData) {
     data: {
       requestId,
       type: "comment",
-      message: "Agregó un comentario",
+      message: isInternal ? "Agregó un comentario interno" : "Agregó un comentario",
       actorName: authorName,
     },
   });
   if (!isClient) await notifyMentions(req, user!, body, formData.getAll("mentions").map(String));
-  if (!isClient && req?.requesterEmail) {
+  if (!isClient && !isInternal && req?.requesterEmail) {
     await notifyClient({
       to: req.requesterEmail,
       requestId,

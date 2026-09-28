@@ -24,7 +24,7 @@ export default async function PortalRequestDetail({
     where: { key },
     include: {
       attachments: { orderBy: { createdAt: "desc" } },
-      comments: { orderBy: { createdAt: "asc" } },
+      comments: { where: { isInternal: false }, orderBy: { createdAt: "asc" } },
     },
   });
   if (!req || req.clientId !== client.id) notFound();
