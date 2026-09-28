@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { PRIORITIES } from "@/lib/constants";
 import type { StatusInfo } from "@/lib/statuses";
 import {
@@ -8,6 +9,7 @@ import {
   assignRequest,
   updatePriority,
   setClientPriority,
+  changeRequestClient,
 } from "@/app/actions";
 
 const selectCls =
@@ -134,6 +136,51 @@ export function PrioritySelect({
         {PRIORITIES.map((p) => (
           <option key={p.key} value={p.key}>
             {p.label}
+          </option>
+        ))}
+      </select>
+      {s.failed && (
+        <span className="text-xs text-[#d21f3c]" title="No se pudo guardar el cambio">
+          ⚠
+        </span>
+      )}
+    </span>
+  );
+}
+
+// Cambiar de cliente cambia el folio (y la URL), así que pide confirmación
+// y al terminar navega a la ficha con el folio nuevo.
+export function ClientSelect({
+  requestId,
+  value,
+  clients,
+}: {
+  requestId: string;
+  value: string;
+  clients: { id: string; name: string }[];
+}) {
+  const router = useRouter();
+  const s = useRevertOnFailure(value);
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <select
+        className={`${selectCls} max-w-44 ${s.failed ? "border-[#d21f3c]" : ""}`}
+        value={s.value}
+        disabled={s.pending}
+        onChange={(e) => {
+          const v = e.target.value;
+          const name = clients.find((c) => c.id === v)?.name;
+          if (!confirm(`¿Mover la solicitud a ${name}? Tomará un folio nuevo de ese cliente, se quitará el proyecto y sus horas pasarán a su bolsa.`)) return;
+          s.run(v, async () => {
+            const res = await changeRequestClient(requestId, v);
+            if (res.ok && res.key) router.replace(`/solicitudes/${res.key}`);
+            return res;
+          });
+        }}
+      >
+        {clients.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
           </option>
         ))}
       </select>

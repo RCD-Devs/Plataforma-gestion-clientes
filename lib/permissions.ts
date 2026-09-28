@@ -17,6 +17,7 @@ export type ActionId =
   | "requests.access"
   | "requests.assign"
   | "requests.set_priority"
+  | "requests.change_client"
   | "clients.view"
   | "reports.export"
   | "team.view_load"
@@ -43,6 +44,11 @@ export const ACTIONS: { key: ActionId; label: string; scopes: Scope[] }[] = [
     key: "requests.set_priority",
     label: "Cambiar prioridad interna",
     scopes: ["all", "none"],
+  },
+  {
+    key: "requests.change_client",
+    label: "Cambiar el cliente de una solicitud (toma folio nuevo; sus horas pasan a la bolsa del cliente nuevo)",
+    scopes: ["all", "own_clients", "none"],
   },
   {
     key: "clients.view",

@@ -416,6 +416,60 @@ export async function updatePriority(
   return { ok: true };
 }
 
+// Corrige el cliente de una solicitud cargada por error (típico en las que
+// crea el equipo interno). El folio es por cliente, así que toma uno nuevo
+// del cliente destino (el viejo deja de existir). Proyecto/etapa son del
+// cliente anterior y se sueltan. Las horas cuelgan del Request, así que
+// pasan solas a la bolsa del cliente nuevo. Las subtareas siguen al padre
+// (también con folio nuevo); una subtarea no se mueve sola.
+export async function changeRequestClient(
+  requestId: string,
+  clientId: string,
+): Promise<{ ok: boolean; key?: string }> {
+  const user = await getSessionUser();
+  if (!user || (await requestLocked(requestId))) return { ok: false };
+  const [req, target] = await Promise.all([
+    prisma.request.findUnique({
+      where: { id: requestId },
+      include: { client: true, collaborators: true, subtasks: { select: { id: true } } },
+    }),
+    prisma.client.findUnique({ where: { id: clientId } }),
+  ]);
+  if (!req || !target || !target.isActive || req.parentId || req.clientId === target.id) return { ok: false };
+  const can = (c: { id: string; accountManagerId: string | null }) =>
+    canOnClient(user.capabilities, "requests.change_client", user.id, c, user.ownClientIds);
+  if (!canActOnRequest(user, req) || !can(req.client) || !can(target)) return { ok: false };
+
+  const code = await clientFolioCode(target.id);
+  const moved = await withKeyRetry(code, (key) =>
+    prisma.request.update({
+      where: { id: requestId },
+      data: { key, clientId: target.id, projectId: null, stageId: null },
+    }),
+  );
+  for (const s of req.subtasks) {
+    await withKeyRetry(code, (key) =>
+      prisma.request.update({
+        where: { id: s.id },
+        data: { key, clientId: target.id, projectId: null, stageId: null },
+      }),
+    );
+  }
+  await prisma.activity.create({
+    data: {
+      requestId,
+      type: "client_changed",
+      message: `Cambió el cliente de ${req.client.name} a ${target.name} (folio ${req.key} → ${moved.key})`,
+      actorName: user.name,
+    },
+  });
+  refreshLists(moved.key);
+  revalidatePath("/portal");
+  revalidatePath("/bolsa");
+  revalidatePath("/clientes");
+  return { ok: true, key: moved.key };
+}
+
 export async function updateRequestDetails(requestId: string, formData: FormData) {
   const user = await getSessionUser();
   if (await requestLocked(requestId)) return;

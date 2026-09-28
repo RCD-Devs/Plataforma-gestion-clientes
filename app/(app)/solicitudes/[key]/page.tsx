@@ -4,12 +4,13 @@ import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { canViewRequest } from "@/lib/authz";
-import { canOnClient } from "@/lib/permissions";
+import { canOnClient, clientScopeWhere } from "@/lib/permissions";
 import { TimeEntryActions } from "@/components/TimeEntryActions";
 import {
   StatusSelect,
   AssigneeSelect,
   PrioritySelect,
+  ClientSelect,
 } from "@/components/controls";
 import { Avatar, ClientTag } from "@/components/ui";
 import {
@@ -64,8 +65,12 @@ export default async function RequestDetail({
   if (!req) notFound();
   if (!canViewRequest(user, req)) notFound();
   const canManageHours = canOnClient(user.capabilities, "hours.manage", user.id, req.client, user.ownClientIds);
+  // Las subtareas siguen al padre: solo la solicitud principal cambia de cliente.
+  const canChangeClient =
+    !req.parentId &&
+    canOnClient(user.capabilities, "requests.change_client", user.id, req.client, user.ownClientIds);
 
-  const [users, projects, stages, customFields, statuses, statusMap] = await Promise.all([
+  const [users, projects, stages, customFields, statuses, statusMap, clients] = await Promise.all([
     prisma.user.findMany({
       where: { role: { not: "CLIENTE" } },
       orderBy: { name: "asc" },
@@ -85,6 +90,18 @@ export default async function RequestDetail({
     }),
     getStatuses(),
     getStatusMap(),
+    canChangeClient
+      ? prisma.client.findMany({
+          where: {
+            OR: [
+              { id: req.clientId },
+              { isActive: true, ...clientScopeWhere(user.capabilities, "requests.change_client", user.id) },
+            ],
+          },
+          orderBy: { name: "asc" },
+          select: { id: true, name: true },
+        })
+      : [],
   ]);
   const totalHours = req.timeEntries.reduce((a, t) => a + t.hours, 0);
   const customFieldValueMap = new Map(
@@ -419,7 +436,11 @@ export default async function RequestDetail({
                 <span>{req.type}</span>
               </Row>
               <Row label="Cliente">
-                <span>{req.client.name}</span>
+                {canChangeClient ? (
+                  <ClientSelect requestId={req.id} value={req.clientId} clients={clients} />
+                ) : (
+                  <span>{req.client.name}</span>
+                )}
               </Row>
               <Row label="Proyecto">
                 <span>
