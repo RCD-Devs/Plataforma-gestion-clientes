@@ -45,8 +45,8 @@ export default async function EditarClientePage({
     <div>
       <ClientForm
         client={client}
-        managers={managers}
-        teamUsers={users.filter((u) => u.role !== "CLIENTE" && u.isActive)}
+        managers={managers.map(pickIdName)}
+        teamUsers={users.filter((u) => u.role !== "CLIENTE" && u.isActive).map(pickIdName)}
         memberIds={members.map((m) => m.userId)}
         error={error}
         action={updateClient.bind(null, id)}
@@ -185,4 +185,10 @@ export default async function EditarClientePage({
       </div>
     </div>
   );
+}
+
+// ClientForm es de cliente: pasarle la fila completa mandaba passwordHash
+// al navegador.
+function pickIdName(u: { id: string; name: string }) {
+  return { id: u.id, name: u.name };
 }

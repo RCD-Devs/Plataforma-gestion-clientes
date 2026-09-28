@@ -21,11 +21,17 @@ export default async function NuevoClientePage({
 
   return (
     <ClientForm
-      managers={managers}
-      teamUsers={users.filter((u) => u.role !== "CLIENTE" && u.isActive)}
+      managers={managers.map(pickIdName)}
+      teamUsers={users.filter((u) => u.role !== "CLIENTE" && u.isActive).map(pickIdName)}
       error={error}
       action={createClient}
       submitLabel="Crear cliente"
     />
   );
+}
+
+// ClientForm es de cliente: pasarle la fila completa mandaba passwordHash
+// al navegador.
+function pickIdName(u: { id: string; name: string }) {
+  return { id: u.id, name: u.name };
 }

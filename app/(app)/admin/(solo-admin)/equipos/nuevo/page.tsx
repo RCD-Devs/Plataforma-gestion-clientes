@@ -10,7 +10,7 @@ export default async function NuevoEquipoPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
-  const users = await prisma.user.findMany({ orderBy: { name: "asc" } });
+  const users = await prisma.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, role: true, teamId: true } }) // TeamForm es de cliente: sin passwordHash;
 
   return (
     <TeamForm
