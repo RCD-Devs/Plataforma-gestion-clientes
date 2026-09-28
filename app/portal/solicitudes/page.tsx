@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { StatusBadge, PriorityTag } from "@/components/ui";
+import { PriorityTag } from "@/components/ui";
+import { StatusBadge } from "@/components/StatusBadge";
 import { PortalShell, shellProps } from "@/components/portal/PortalShell";
 import { requirePortalUser } from "@/lib/portal";
 import { shortDate } from "@/lib/format";

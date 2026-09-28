@@ -4,7 +4,8 @@ import { prisma } from "@/lib/db";
 import { requirePortalUser } from "@/lib/portal";
 import { PortalShell, shellProps } from "@/components/portal/PortalShell";
 import { addComment } from "@/app/actions";
-import { StatusBadge, PriorityTag } from "@/components/ui";
+import { PriorityTag } from "@/components/ui";
+import { StatusBadge } from "@/components/StatusBadge";
 import { ClientPriorityStars } from "@/components/controls";
 import { longDate, relative } from "@/lib/format";
 

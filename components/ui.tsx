@@ -1,7 +1,10 @@
 import type { ReactNode } from "react";
 import { PRIORITY_MAP } from "@/lib/constants";
 import { initials } from "@/lib/format";
-import { getStatusMap, softBg } from "@/lib/statuses";
+
+// Ojo: este archivo lo importan componentes de cliente (Board, Nav…), así
+// que no puede importar nada que toque la BD (lib/db) — eso metía Prisma
+// en el bundle del navegador. StatusBadge vive aparte por eso.
 
 export function Avatar({
   name,
@@ -24,21 +27,6 @@ export function Avatar({
       className="inline-flex shrink-0 items-center justify-center rounded-full font-medium text-white"
     >
       {initials(name)}
-    </span>
-  );
-}
-
-export async function StatusBadge({ status }: { status: string }) {
-  const map = await getStatusMap();
-  const s = map[status];
-  if (!s) return <span className="text-xs">{status}</span>;
-  return (
-    <span
-      style={{ background: softBg(s.color), color: s.color }}
-      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
-    >
-      <span style={{ background: s.color }} className="h-1.5 w-1.5 rounded-full" />
-      {s.label}
     </span>
   );
 }

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { markTeamAlertsRead } from "@/app/actions";
 import { Popover } from "./Popover";
-import { NUDGE_LABELS, type NudgeItem } from "@/lib/nudges";
+import { NUDGE_LABELS, type NudgeItem } from "@/lib/nudgeLabels";
 
 export type BellItem = {
   id: string;
@@ -12,6 +12,7 @@ export type BellItem = {
   body: string;
   read: boolean;
   when: string;
+  href?: string;
 };
 
 // Campanita: notificaciones y pendientes ("dale una pasada a esto") ocultos
@@ -105,7 +106,13 @@ export function NotificationBell({
           {items.map((n) => (
             <div key={n.id} className={`px-4 py-3 ${n.read ? "" : "bg-[#e0fbf9]/60"}`}>
               <div className="flex items-start justify-between gap-3">
-                <span className="text-sm font-semibold">{n.title}</span>
+                {n.href ? (
+                  <Link href={n.href} className="text-sm font-semibold hover:text-[#08a89f] hover:underline">
+                    {n.title}
+                  </Link>
+                ) : (
+                  <span className="text-sm font-semibold">{n.title}</span>
+                )}
                 <span className="shrink-0 text-[10px] text-[#7f7f7f]">{n.when}</span>
               </div>
               <p className="mt-0.5 line-clamp-3 text-xs text-[#5d6b77]">{n.body}</p>

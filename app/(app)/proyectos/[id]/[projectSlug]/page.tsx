@@ -8,7 +8,8 @@ import { loadProjectInsights, resolveProjectPath } from "@/lib/projectInsights";
 import { DelayComparison, ProjectGantt, StageComparison } from "@/components/ProjectTimeline";
 import { confirmProjectBudget, reopenProjectBudget, deleteStage, saveStage, setRequestStage, updateProjectBudget } from "@/app/actions";
 import { SubmitButton } from "@/components/SubmitButton";
-import { StatusBadge, Bar } from "@/components/ui";
+import { Bar } from "@/components/ui";
+import { StatusBadge } from "@/components/StatusBadge";
 import { hoursLabel, shortDate } from "@/lib/format";
 import { toDateInput } from "@/lib/dates";
 
