@@ -40,5 +40,6 @@ export function relative(d: Date | string) {
 }
 
 export function hoursLabel(h: number) {
-  return `${Math.round(h * 10) / 10} h`;
+  // 2 decimales: con 1, 45 min (0,75 h) se veía como 0,8 h.
+  return `${Math.round(h * 100) / 100} h`;
 }

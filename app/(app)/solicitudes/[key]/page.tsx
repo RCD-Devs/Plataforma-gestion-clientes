@@ -58,7 +58,7 @@ export default async function RequestDetail({
       customFieldValues: { include: { field: true } },
       attachments: { orderBy: { createdAt: "desc" } },
       comments: { orderBy: { createdAt: "asc" }, include: { author: true } },
-      timeEntries: { orderBy: { date: "desc" }, include: { user: true } },
+      timeEntries: { orderBy: { date: "desc" }, include: { user: true, scheduleBlock: true } },
       activities: { orderBy: { createdAt: "desc" } },
     },
   });
@@ -487,21 +487,28 @@ export default async function RequestDetail({
                 {hoursLabel(totalHours)}
               </span>
             </div>
-            <div className="space-y-1.5">
+            <div className="divide-y divide-[#f0f1f3]">
               {req.timeEntries.map((t) => (
-                <div key={t.id} className="text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
+                <div key={t.id} className="py-2.5 text-xs first:pt-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex min-w-0 items-center gap-1.5 font-medium text-[#374151]">
                       <Avatar name={t.user.name} color={t.user.color} size={18} />
-                      {t.user.name}
+                      <span className="truncate">{t.user.name}</span>
                     </span>
-                    <span className="text-[#6b7280]">
-                      {hoursLabel(t.hours)} · {shortDate(t.date)}
-                      {t.note ? ` · ${t.note}` : ""}
-                    </span>
+                    <span className="shrink-0 font-semibold">{hoursLabel(t.hours)}</span>
                   </div>
+                  <div className="mt-1 text-[#6b7280]">
+                    {shortDate(t.date)}
+                    {t.scheduleBlock &&
+                      ` · ${clockTime(t.scheduleBlock.start)}–${clockTime(t.scheduleBlock.end)}`}
+                  </div>
+                  {t.note && (
+                    <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed text-[#374151]">
+                      {t.note}
+                    </p>
+                  )}
                   {canManageHours && (
-                    <div className="mt-0.5 flex justify-end">
+                    <div className="mt-1 flex justify-end">
                       <TimeEntryActions entryId={t.id} hours={t.hours} date={t.date} note={t.note} />
                     </div>
                   )}
@@ -515,17 +522,13 @@ export default async function RequestDetail({
             </div>
             <form action={logHours} className="mt-3 space-y-2">
               <input type="hidden" name="requestId" value={req.id} />
-              <div className="flex gap-2">
-                <input
-                  name="hours"
-                  type="number"
-                  step="0.25"
-                  min="0"
-                  placeholder="Horas"
-                  className={inputCls}
-                  required
-                />
-                <input name="date" type="date" className={inputCls} />
+              {/* Las horas salen del rango y quedan como bloque en el
+                  calendario de quien las carga (/perfil). */}
+              <input name="date" type="date" className={inputCls} required aria-label="Fecha" />
+              <div className="flex items-center gap-2">
+                <input name="start" type="time" className={inputCls} required aria-label="Desde" />
+                <span className="text-xs text-[#6b7280]">a</span>
+                <input name="end" type="time" className={inputCls} required aria-label="Hasta" />
               </div>
               <input
                 name="note"
@@ -561,6 +564,14 @@ export default async function RequestDetail({
     </div>
   );
 }
+
+// Hora de Chile explícita: en Vercel el proceso corre en UTC.
+const clockFmt = new Intl.DateTimeFormat("es-CL", {
+  timeZone: "America/Santiago",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+const clockTime = (d: Date) => clockFmt.format(d);
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (

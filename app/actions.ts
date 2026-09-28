@@ -1222,14 +1222,20 @@ export async function setRoleActive(roleId: string, isActive: boolean) {
   revalidatePath("/admin/roles");
 }
 
+// Carga directa desde la ficha: exige el rango horario y deja el bloque en
+// el calendario de la persona ya confirmado (mismo resultado que confirmar
+// un bloque desde /perfil) — antes solo creaba el TimeEntry y esas horas
+// no aparecían en ningún horario del calendario.
 export async function logHours(formData: FormData) {
   const user = await getSessionUser();
   if (!user || !isTeamRole(user.role)) return;
   const requestId = String(formData.get("requestId") || "");
-  const hours = parseFloat(String(formData.get("hours") || "0"));
-  const note = String(formData.get("note") || "");
+  const note = String(formData.get("note") || "").trim();
   const dateStr = String(formData.get("date") || "");
-  if (!requestId || !hours || hours <= 0) return;
+  const start = parseDateTimeLocal(`${dateStr}T${formData.get("start") || ""}`);
+  const end = parseDateTimeLocal(`${dateStr}T${formData.get("end") || ""}`);
+  if (!requestId || !start || !end || end <= start) return;
+  const hours = Math.round(((end.getTime() - start.getTime()) / 3_600_000) * 100) / 100;
   if (await requestLocked(requestId)) return;
   await prisma.timeEntry.create({
     data: {
@@ -1237,7 +1243,8 @@ export async function logHours(formData: FormData) {
       userId: user.id,
       hours,
       note: note || null,
-      date: dateStr ? parseLocalDate(dateStr) : new Date(),
+      date: parseLocalDate(dateStr),
+      scheduleBlock: { create: { userId: user.id, requestId, start, end, note: note || null } },
     },
   });
   const req = await prisma.request.findUnique({ where: { id: requestId } });
@@ -1250,6 +1257,7 @@ export async function logHours(formData: FormData) {
     },
   });
   if (req) revalidatePath(`/solicitudes/${req.key}`);
+  revalidatePath("/perfil");
   revalidatePath("/bolsa");
   revalidatePath("/dashboard");
 }

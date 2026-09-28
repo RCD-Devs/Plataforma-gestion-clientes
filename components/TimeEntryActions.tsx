@@ -38,7 +38,7 @@ export function TimeEntryActions({
           });
         }}
       >
-        <input name="hours" type="number" step="0.25" min="0.25" defaultValue={hours} required className={`${inputCls} w-16`} />
+        <input name="hours" type="number" step="any" min="0.01" defaultValue={hours} required className={`${inputCls} w-16`} />
         <input name="date" type="date" defaultValue={toDateInput(date)} className={inputCls} />
         <input name="note" defaultValue={note ?? ""} placeholder="Detalle" className={`${inputCls} min-w-0 flex-1`} />
         <button type="submit" disabled={pending} className="text-xs font-semibold text-[#08a89f] hover:underline disabled:opacity-50">
