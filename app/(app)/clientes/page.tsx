@@ -20,7 +20,7 @@ export default async function ClientesPage() {
   const clients = await prisma.client.findMany({
     where: clientVisibilityWhere(user),
     include: {
-      requests: { select: { id: true, status: true } },
+      requests: { where: { deletedAt: null }, select: { id: true, status: true } },
     },
     orderBy: { name: "asc" },
   });

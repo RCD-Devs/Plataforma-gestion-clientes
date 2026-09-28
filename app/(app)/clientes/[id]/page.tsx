@@ -40,8 +40,8 @@ export default async function ClienteFichaPage({ params }: { params: Promise<{ i
     include: {
       accountManager: { select: { name: true, color: true } },
       members: { include: { user: { select: { name: true, color: true } } } },
-      projects: { where: { archivedAt: null }, orderBy: { createdAt: "desc" }, include: { _count: { select: { requests: true } } } },
-      requests: { select: { status: true } },
+      projects: { where: { archivedAt: null }, orderBy: { createdAt: "desc" }, include: { _count: { select: { requests: { where: { deletedAt: null } } } } } },
+      requests: { where: { deletedAt: null }, select: { status: true } },
     },
   });
   if (!client) notFound();

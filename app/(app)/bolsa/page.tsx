@@ -20,7 +20,7 @@ export default async function BolsaPage() {
   const [clients, entries] = await Promise.all([
     prisma.client.findMany({
       where: clientVisibilityWhere(user),
-      include: { requests: { include: { timeEntries: true } } },
+      include: { requests: { where: { deletedAt: null }, include: { timeEntries: true } } },
       orderBy: { name: "asc" },
     }),
     prisma.timeEntry.findMany({

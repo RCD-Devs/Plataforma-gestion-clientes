@@ -90,7 +90,7 @@ async function CalendarTab({
 
   const [blocks, myTasks, clients] = await Promise.all([
     prisma.scheduleBlock.findMany({
-      where: { userId, start: { gte: start, lte: end } },
+      where: { userId, start: { gte: start, lte: end }, request: { deletedAt: null } },
       include: { request: { select: { key: true, title: true, status: true } } },
       orderBy: { start: "asc" },
     }),

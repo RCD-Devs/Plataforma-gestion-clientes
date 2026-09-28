@@ -17,7 +17,7 @@ export default async function PortalProyectosPage() {
       where: { clientId: ctx.client.id, archivedAt: null },
       include: {
         requests: {
-          where: { archivedAt: null },
+          where: { archivedAt: null, deletedAt: null },
           select: { status: true, timeEntries: { select: { hours: true } } },
         },
       },

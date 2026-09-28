@@ -11,6 +11,7 @@ const tabs = [
   { href: "/admin/campos", label: "Campos personalizados" },
   { href: "/admin/estados", label: "Estados" },
   { href: "/admin/auditoria", label: "Auditoría" },
+  { href: "/admin/papelera", label: "Papelera" },
 ];
 
 export function AdminTabs({ isAdmin }: { isAdmin: boolean }) {

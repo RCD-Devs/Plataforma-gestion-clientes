@@ -74,7 +74,7 @@ function assignedToUserWhere(userId: string) {
   };
 }
 
-const NO_SUBTASKS = { subtasks: { none: {} } };
+const NO_SUBTASKS = { subtasks: { none: { deletedAt: null } } };
 const TASK_SELECT = { id: true, key: true, title: true } as const;
 
 function toItem(kind: NudgeKind, rows: NudgeTask[]): NudgeItem {

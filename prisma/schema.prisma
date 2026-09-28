@@ -283,6 +283,13 @@ model Request {
   // Archivar (Rec. #32) es soft delete: desaparece de tablero/solicitudes/
   // mi-espacio pero sigue contando en reportes e historial de bolsa.
   archivedAt     DateTime?
+  // Papelera: a diferencia de archivar, es para lo creado por error — deja
+  // de existir para toda la app, reportes incluidos (lib/db.ts filtra
+  // deletedAt: null en toda lectura de Request). Solo se permite si no
+  // tiene horas cargadas, así nunca saca horas de la bolsa. Admin restaura
+  // desde /admin/papelera.
+  deletedAt      DateTime?
+  deletedByName  String?
 
   clientId String
   client   Client @relation(fields: [clientId], references: [id])

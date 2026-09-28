@@ -34,7 +34,7 @@ export default async function ProyectosPage({
         client: { select: { id: true, name: true, slug: true, color: true } },
         _count: { select: { stages: true } },
         requests: {
-          where: { archivedAt: null },
+          where: { archivedAt: null, deletedAt: null },
           select: { status: true, timeEntries: { select: { hours: true } } },
         },
       },

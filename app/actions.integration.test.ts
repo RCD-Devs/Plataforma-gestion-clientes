@@ -9,6 +9,7 @@
 // —Prisma contra la BD real, canActOnRequest, la lógica de cada acción—
 // corre de verdad.
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import type { PrismaClient } from "@prisma/client";
 
 class RedirectSignal extends Error {
   constructor(public url: string) {
@@ -54,6 +55,8 @@ const {
   setClientActive,
   logHours,
   unarchiveRequest,
+  deleteRequest,
+  restoreRequest,
 } = await import(
   "@/app/actions"
 );
@@ -105,7 +108,8 @@ describe.skipIf(!process.env.RUN_DB_TESTS)(
         update: {},
         create: { code: "FINALIZADA", label: "Finalizada", color: "#0e7a58", isFinal: true },
       });
-      await seedRoles(prisma);
+      // lib/db exporta el cliente extendido (filtro de papelera); mismos modelos.
+      await seedRoles(prisma as unknown as PrismaClient);
       const [adminRole, coordRole, desarrolladorRole] = await Promise.all([
         prisma.role.findUniqueOrThrow({ where: { code: "ADMIN" } }),
         prisma.role.findUniqueOrThrow({ where: { code: "COORDINADOR_CUENTA" } }),
@@ -303,7 +307,9 @@ describe.skipIf(!process.env.RUN_DB_TESTS)(
       expect((await changeStatus(pending.id, "POR_HACER")).ok).toBe(false);
       const fd = new FormData();
       fd.set("requestId", pending.id);
-      fd.set("hours", "1");
+      fd.set("date", "2026-09-01");
+      fd.set("start", "10:00");
+      fd.set("end", "11:00");
       await logHours(fd);
       expect(await prisma.timeEntry.count({ where: { requestId: pending.id } })).toBe(0);
       await unarchiveRequest(pending.id);
@@ -338,6 +344,45 @@ describe.skipIf(!process.env.RUN_DB_TESTS)(
       await prisma.request.deleteMany({ where: { clientId: c.id } });
       await prisma.project.delete({ where: { id: project.id } });
       await prisma.user.delete({ where: { id: portalUser.id } });
+      await prisma.client.delete({ where: { id: c.id } });
+    });
+
+    it("papelera: sin horas se elimina con sus subtareas y desaparece de las lecturas; con horas no; Admin restaura", async () => {
+      const c = await prisma.client.create({ data: { name: `Cliente Papelera ${suffix}`, accountManagerId: coordA.id } });
+      const parent = await prisma.request.create({
+        data: { key: `PAP-${suffix}`, title: "Por error", clientId: c.id, status: "POR_HACER" },
+      });
+      const sub = await prisma.request.create({
+        data: { key: `PAPS-${suffix}`, title: "Sub", clientId: c.id, status: "POR_HACER", parentId: parent.id },
+      });
+
+      currentUser = coordA;
+      expect((await deleteRequest(parent.id)).ok).toBe(true);
+      // Lecturas normales ya no las ven (filtro global de lib/db.ts)…
+      expect(await prisma.request.findUnique({ where: { id: parent.id } })).toBeNull();
+      expect(await prisma.request.count({ where: { clientId: c.id } })).toBe(0);
+      // …y las acciones las tratan como bloqueadas.
+      expect((await changeStatus(parent.id, "FINALIZADA")).ok).toBe(false);
+      // Siguen en la BD, con sus subtareas marcadas igual.
+      expect(await prisma.request.count({ where: { clientId: c.id, deletedAt: { not: null } } })).toBe(2);
+
+      // Restaurar: solo Admin, y trae de vuelta la subtarea.
+      await restoreRequest(parent.id);
+      expect(await prisma.request.count({ where: { clientId: c.id } })).toBe(0);
+      currentUser = admin;
+      await restoreRequest(parent.id);
+      expect(await prisma.request.count({ where: { clientId: c.id } })).toBe(2);
+
+      // Con horas (aunque sea en la subtarea) no se elimina.
+      await prisma.timeEntry.create({ data: { requestId: sub.id, userId: admin.id, hours: 1 } });
+      const res = await deleteRequest(parent.id);
+      expect(res.ok).toBe(false);
+      expect(res.error).toBeTruthy();
+      expect(await prisma.request.count({ where: { clientId: c.id } })).toBe(2);
+
+      await prisma.activity.deleteMany({ where: { requestId: { in: [parent.id, sub.id] } } });
+      await prisma.timeEntry.deleteMany({ where: { requestId: sub.id } });
+      await prisma.request.deleteMany({ where: { id: { in: [sub.id, parent.id] } } });
       await prisma.client.delete({ where: { id: c.id } });
     });
 

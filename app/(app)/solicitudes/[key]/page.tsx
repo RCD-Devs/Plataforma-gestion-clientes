@@ -23,7 +23,7 @@ import {
 } from "@/app/actions";
 import { hoursLabel, longDate, shortDate, relative } from "@/lib/format";
 import { RequestEditPanel } from "@/components/RequestEditPanel";
-import { ArchiveButton } from "@/components/ArchiveButton";
+import { ArchiveButton, DeleteRequestButton } from "@/components/ArchiveButton";
 import { CommentActions } from "@/components/CommentActions";
 import { AttachmentDeleteButton } from "@/components/AttachmentDeleteButton";
 import { CollaboratorsPanel } from "@/components/CollaboratorsPanel";
@@ -53,7 +53,7 @@ export default async function RequestDetail({
       project: true,
       stage: true,
       parent: { select: { key: true, title: true } },
-      subtasks: { orderBy: { createdAt: "asc" }, include: { assignee: true } },
+      subtasks: { where: { deletedAt: null }, orderBy: { createdAt: "asc" }, include: { assignee: true } },
       collaborators: { include: { user: true } },
       customFieldValues: { include: { field: true } },
       attachments: { orderBy: { createdAt: "desc" } },
@@ -147,9 +147,12 @@ export default async function RequestDetail({
           <h1 className="text-xl font-semibold">{req.title}</h1>
           {/* Archivada = histórico: restaurar es solo de Admin, y con el cliente
               archivado ni eso (se reactiva el cliente). */}
-          {(!req.archivedAt || (user.roleCodes.includes("ADMIN") && req.client.isActive)) && (
-            <ArchiveButton requestId={req.id} archived={!!req.archivedAt} />
-          )}
+          <div className="flex items-center gap-4">
+            {(!req.archivedAt || (user.roleCodes.includes("ADMIN") && req.client.isActive)) && (
+              <ArchiveButton requestId={req.id} archived={!!req.archivedAt} />
+            )}
+            {!req.archivedAt && <DeleteRequestButton requestId={req.id} />}
+          </div>
         </div>
       </header>
 

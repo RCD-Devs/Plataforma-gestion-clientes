@@ -50,6 +50,7 @@ export async function loadProjectInsights(projectId: string) {
         stages: { orderBy: { sortOrder: "asc" } },
         // Archivadas incluidas: son histórico y sus horas siguen contando.
         requests: {
+          where: { deletedAt: null },
           orderBy: { createdAt: "asc" },
           include: {
             timeEntries: { select: { hours: true } },

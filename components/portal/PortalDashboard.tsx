@@ -56,7 +56,7 @@ export async function PortalDashboard({ client }: { client: Client }) {
     }),
     prisma.project.findMany({
       where: { clientId: client.id },
-      include: { requests: { where: { archivedAt: null }, select: { status: true } } },
+      include: { requests: { where: { archivedAt: null, deletedAt: null }, select: { status: true } } },
       orderBy: { createdAt: "asc" },
     }),
     prisma.request.groupBy({

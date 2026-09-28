@@ -570,6 +570,77 @@ export async function unarchiveRequest(requestId: string) {
   refreshLists(req.key);
 }
 
+// Papelera: para lo creado por error (archivar es para trabajo real ya
+// cerrado, que sigue contando en reportes). Mismo permiso que archivar.
+// Con horas cargadas no se permite — eliminarla las sacaría de la bolsa.
+// Las subtareas se van con el padre, marcadas con el mismo deletedAt para
+// que restaurar el padre traiga de vuelta solo esas (no las que ya se
+// habían eliminado antes por su cuenta).
+export async function deleteRequest(
+  requestId: string,
+): Promise<{ ok: boolean; error?: string; redirectTo?: string }> {
+  const user = await getSessionUser();
+  if (!user || (await requestLocked(requestId))) return { ok: false };
+  const existing = await prisma.request.findUnique({
+    where: { id: requestId },
+    include: {
+      client: true,
+      collaborators: true,
+      parent: { select: { key: true } },
+      subtasks: { where: { deletedAt: null }, select: { id: true } },
+    },
+  });
+  if (!existing || !canActOnRequest(user, existing)) return { ok: false };
+  const ids = [existing.id, ...existing.subtasks.map((s) => s.id)];
+  if ((await prisma.timeEntry.count({ where: { requestId: { in: ids } } })) > 0) {
+    return {
+      ok: false,
+      error: "Tiene horas cargadas (en ella o en sus subtareas). Quítalas primero o archívala.",
+    };
+  }
+
+  const deletedAt = new Date();
+  await prisma.request.updateMany({
+    where: { id: { in: ids } },
+    data: { deletedAt, deletedByName: user.name },
+  });
+  await prisma.activity.create({
+    data: { requestId, type: "deleted", message: "Envió la solicitud a la papelera", actorName: user.name },
+  });
+  refreshLists(existing.key);
+  if (existing.parent) revalidatePath(`/solicitudes/${existing.parent.key}`);
+  revalidatePath("/portal");
+  revalidatePath("/perfil");
+  revalidatePath("/admin/papelera");
+  return { ok: true, redirectTo: existing.parent ? `/solicitudes/${existing.parent.key}` : "/solicitudes" };
+}
+
+export async function restoreRequest(requestId: string) {
+  const user = await getSessionUser();
+  if (!user?.roleCodes.includes("ADMIN")) return;
+  const existing = await prisma.request.findFirst({
+    where: { id: requestId, deletedAt: { not: null } },
+    include: { client: true, parent: { select: { deletedAt: true } } },
+  });
+  // Una subtarea con el padre en la papelera se restaura restaurando el
+  // padre; con el cliente archivado, se reactiva el cliente primero.
+  if (!existing?.deletedAt || existing.parent?.deletedAt || !existing.client.isActive) return;
+
+  await prisma.request.updateMany({
+    where: {
+      OR: [{ id: existing.id }, { parentId: existing.id, deletedAt: existing.deletedAt }],
+    },
+    data: { deletedAt: null, deletedByName: null },
+  });
+  await prisma.activity.create({
+    data: { requestId, type: "restored", message: "Restauró la solicitud desde la papelera", actorName: user.name },
+  });
+  refreshLists(existing.key);
+  revalidatePath("/portal");
+  revalidatePath("/perfil");
+  revalidatePath("/admin/papelera");
+}
+
 // ---------- Motor de tareas: fusión con Codia Task, parte aditiva (2026-09-01) ----------
 
 export async function createSubtask(parentId: string, formData: FormData) {
@@ -2329,7 +2400,7 @@ async function ownedBlock(userId: string, blockId: string) {
 
 async function overlapWarnings(userId: string, start: Date, end: Date, excludeId?: string) {
   const blocks = await prisma.scheduleBlock.findMany({
-    where: { userId, id: excludeId ? { not: excludeId } : undefined },
+    where: { userId, id: excludeId ? { not: excludeId } : undefined, request: { deletedAt: null } },
     include: { request: { select: { key: true, title: true } } },
   });
   return overlapsOf(blocks, start, end).map((b) => ({
