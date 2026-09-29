@@ -76,7 +76,7 @@ export default async function AdminAuditoriaPage({
             {logs.map((l) => (
               <tr key={l.id} className="border-b border-[#f3f4f6] last:border-0">
                 <td className="whitespace-nowrap px-4 py-2.5 text-[#6b7280]">
-                  {l.createdAt.toLocaleString("es-CL")}
+                  {l.createdAt.toLocaleString("es-CL", { timeZone: "America/Santiago" })}
                 </td>
                 <td className="px-4 py-2.5 font-mono text-xs">{l.type}</td>
                 <td className="px-4 py-2.5 text-[#6b7280]">{l.actorEmail || "—"}</td>

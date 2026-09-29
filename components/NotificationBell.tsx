@@ -82,9 +82,9 @@ export function NotificationBell({
                         </Link>
                       ))}
                       {item.taskCount > item.tasks.length && (
-                        <span className="px-1 py-0.5 text-xs text-[#9a5a25]">
+                        <Link href="/mi-espacio/notificaciones" className="px-1 py-0.5 text-xs text-[#9a5a25] hover:underline">
                           +{item.taskCount - item.tasks.length} más
-                        </span>
+                        </Link>
                       )}
                     </div>
                   </div>
@@ -124,6 +124,12 @@ export function NotificationBell({
             </div>
           )}
         </div>
+        <Link
+          href="/mi-espacio/notificaciones"
+          className="block border-t border-[#e4e8ec] px-4 py-2.5 text-center text-xs font-semibold text-[#08a89f] hover:underline"
+        >
+          Ver todas las notificaciones
+        </Link>
       </div>
     </Popover>
   );

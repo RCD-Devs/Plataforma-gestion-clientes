@@ -57,8 +57,8 @@ function assignedToUserWhere(userId: string) {
 const NO_SUBTASKS = { subtasks: { none: { deletedAt: null } } };
 const TASK_SELECT = { id: true, key: true, title: true } as const;
 
-function toItem(kind: NudgeKind, rows: NudgeTask[]): NudgeItem {
-  return { kind, taskCount: rows.length, tasks: rows.slice(0, 5) };
+function toItem(kind: NudgeKind, rows: NudgeTask[], preview: number): NudgeItem {
+  return { kind, taskCount: rows.length, tasks: rows.slice(0, preview) };
 }
 
 // Tarea "en revisión"/"en pausa" (siempre cuentan) o final (solo si se
@@ -145,7 +145,7 @@ async function missingComments(userId: string): Promise<NudgeTask[]> {
 // 2+ tareas (evita avisar por una sola tarea recién creada). Exportada
 // (Nuevo #16) para que el stream SSE de /mi-espacio pueda recalcular sin
 // pasar por el throttle de una vez al día de getPendingNudge.
-export async function evaluateNudgeItems(userId: string): Promise<NudgeItem[]> {
+export async function evaluateNudgeItems(userId: string, preview = 5): Promise<NudgeItem[]> {
   const [missingTimesRows, dueDatesRows, staleStatusRows, missingCommentsRows] =
     await Promise.all([
       missingTimes(userId),
@@ -154,10 +154,10 @@ export async function evaluateNudgeItems(userId: string): Promise<NudgeItem[]> {
       missingComments(userId),
     ]);
   const items: NudgeItem[] = [];
-  if (missingTimesRows.length >= 1) items.push(toItem("MISSING_TIMES", missingTimesRows));
-  if (dueDatesRows.length >= 1) items.push(toItem("DUE_DATES", dueDatesRows));
-  if (staleStatusRows.length >= 1) items.push(toItem("STALE_STATUS", staleStatusRows));
-  if (missingCommentsRows.length >= 2) items.push(toItem("MISSING_COMMENTS", missingCommentsRows));
+  if (missingTimesRows.length >= 1) items.push(toItem("MISSING_TIMES", missingTimesRows, preview));
+  if (dueDatesRows.length >= 1) items.push(toItem("DUE_DATES", dueDatesRows, preview));
+  if (staleStatusRows.length >= 1) items.push(toItem("STALE_STATUS", staleStatusRows, preview));
+  if (missingCommentsRows.length >= 2) items.push(toItem("MISSING_COMMENTS", missingCommentsRows, preview));
   return items;
 }
 

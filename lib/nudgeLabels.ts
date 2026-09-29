@@ -22,5 +22,5 @@ export const NUDGE_LABELS: Partial<Record<NudgeKind, { icon: string; title: (n: 
 export type NudgeItem = {
   kind: NudgeKind;
   taskCount: number;
-  tasks: NudgeTask[]; // vista previa, hasta 5
+  tasks: NudgeTask[]; // vista previa (hasta 5; completa en /mi-espacio/notificaciones)
 };

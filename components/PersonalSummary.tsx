@@ -84,9 +84,9 @@ export function PersonalSummary({ data }: { data: PersonalDashboardData }) {
                         </Link>
                       ))}
                       {item.taskCount > item.tasks.length && (
-                        <span className="px-1 py-0.5 text-xs text-[#9a5a25]">
+                        <Link href="/mi-espacio/notificaciones" className="px-1 py-0.5 text-xs text-[#9a5a25] hover:underline">
                           +{item.taskCount - item.tasks.length} más
-                        </span>
+                        </Link>
                       )}
                     </div>
                   </div>

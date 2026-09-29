@@ -1687,6 +1687,21 @@ export async function markTeamAlertsRead() {
   revalidatePath("/mi-espacio");
 }
 
+// Borrar notificaciones propias: una (id) o todas las ya leídas (sin id).
+export async function deleteTeamAlerts(formData: FormData) {
+  const user = await getSessionUser();
+  if (!user || !isTeamRole(user.role)) return;
+  const id = formData.get("id");
+  await prisma.notification.deleteMany({
+    where: {
+      recipientEmail: user.email,
+      channel: "team",
+      ...(typeof id === "string" && id ? { id } : { read: true }),
+    },
+  });
+  revalidatePath("/mi-espacio");
+}
+
 export async function submitRequest(formData: FormData) {
   // Solo equipo interno con sesión: el cliente ingresa las suyas desde su
   // portal (submitClientRequest).
