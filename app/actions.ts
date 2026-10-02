@@ -2304,6 +2304,52 @@ export async function resendInvite(id: string): Promise<{ ok: true } | { ok: fal
   return { ok: true };
 }
 
+// Borrado DEFINITIVO de un cliente (solo ADMIN, y solo si ya está
+// archivado — el archivado es el paso reversible, éste no). Se lleva todo
+// lo suyo: solicitudes (y en cascada comentarios, horas, adjuntos,
+// actividad), proyectos, ajustes de bolsa y accesos. Sus usuarios de
+// portal quedan desactivados y sin cliente (clientId → null), no se borran.
+export async function deleteClient(id: string) {
+  const user = await getSessionUser();
+  if (!user || !user.roleCodes.includes("ADMIN")) return;
+  // Relación anidada a propósito: no pasa por el filtro de papelera de
+  // lib/db.ts, así también se cuentan las solicitudes eliminadas.
+  const client = await prisma.client.findUnique({
+    where: { id },
+    select: { name: true, isActive: true, requests: { select: { id: true } } },
+  });
+  if (!client || client.isActive) return;
+
+  const requestIds = client.requests.map((r) => r.id);
+  const files = await prisma.attachment.findMany({
+    where: { requestId: { in: requestIds }, kind: { not: "url" } },
+    select: { url: true },
+  });
+  const [, , , , requests] = await prisma.$transaction([
+    prisma.user.updateMany({ where: { clientId: id, role: "CLIENTE" }, data: { isActive: false } }),
+    prisma.notification.deleteMany({ where: { requestId: { in: requestIds } } }),
+    prisma.slaAlertLog.deleteMany({ where: { requestId: { in: requestIds } } }),
+    prisma.hoursAlertLog.deleteMany({ where: { clientId: id } }),
+    // Un solo deleteMany: padres y subtareas caen en la misma sentencia.
+    prisma.request.deleteMany({ where: { clientId: id } }),
+    prisma.project.deleteMany({ where: { clientId: id } }),
+    prisma.client.delete({ where: { id } }),
+  ]);
+  for (const f of files) {
+    const filename = f.url.split("/").pop();
+    if (filename) await deleteFromStorage(filename).catch(() => {});
+  }
+  await logAudit({
+    type: "admin_client_deleted",
+    actorId: user.id,
+    actorEmail: user.email,
+    detail: `clientId=${id} name=${client.name} solicitudes=${requests.count} archivos=${files.length}`,
+  });
+  revalidateAdmin();
+  refreshLists();
+  redirect("/admin/clientes");
+}
+
 export async function deleteUser(id: string) {
   const user = await getSessionUser();
   if (!user || !user.roleCodes.includes("ADMIN")) return;

@@ -7,6 +7,8 @@ import { hasAccess, attachCapabilities } from "@/lib/permissions";
 import { ClientForm } from "@/components/admin/ClientForm";
 import { SubmitButton } from "@/components/SubmitButton";
 import { ActiveToggle } from "@/components/admin/ActiveToggle";
+import { ClientDeleteButton } from "@/components/admin/ClientDeleteButton";
+import { getSessionUser } from "@/lib/session";
 import { getHoursSummaries } from "@/lib/hoursLedger";
 import { hoursLabel, shortDate } from "@/lib/format";
 
@@ -24,7 +26,8 @@ export default async function EditarClientePage({
 }) {
   const { id } = await params;
   const { error } = await searchParams;
-  const [client, users, adjustments, projects, members] = await Promise.all([
+  const [me, client, users, adjustments, projects, members] = await Promise.all([
+    getSessionUser(),
     prisma.client.findUnique({ where: { id } }),
     prisma.user.findMany({
       orderBy: { name: "asc" },
@@ -183,6 +186,18 @@ export default async function EditarClientePage({
           </SubmitButton>
         </form>
       </div>
+
+      {me?.roleCodes.includes("ADMIN") && (
+        <div className="max-w-xl space-y-2 border-t border-[#e6e8eb] p-6">
+          <h2 className="text-sm font-semibold text-[#d21f3c]">Eliminar cliente</h2>
+          <p className="text-xs text-[#6b7280]">
+            Borra el cliente y todo lo suyo (solicitudes, horas, comentarios, adjuntos, proyectos)
+            para siempre. Solo para clientes creados por error o que no deben quedar como
+            histórico — si solo terminó la relación, basta con desactivarlo.
+          </p>
+          <ClientDeleteButton id={client.id} name={client.name} disabled={client.isActive} />
+        </div>
+      )}
     </div>
   );
 }

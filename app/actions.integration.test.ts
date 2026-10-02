@@ -57,6 +57,7 @@ const {
   unarchiveRequest,
   deleteRequest,
   restoreRequest,
+  deleteClient,
 } = await import(
   "@/app/actions"
 );
@@ -384,6 +385,40 @@ describe.skipIf(!process.env.RUN_DB_TESTS)(
       await prisma.timeEntry.deleteMany({ where: { requestId: sub.id } });
       await prisma.request.deleteMany({ where: { id: { in: [sub.id, parent.id] } } });
       await prisma.client.delete({ where: { id: c.id } });
+    });
+
+    it("deleteClient: solo Admin y solo archivado; borra todo lo suyo (papelera incluida) y deja el portal desactivado", async () => {
+      const c = await prisma.client.create({ data: { name: `Cliente Borrable ${suffix}`, isActive: false } });
+      const project = await prisma.project.create({ data: { name: `Proy Borr ${suffix}`, clientId: c.id } });
+      const parent = await prisma.request.create({
+        data: { key: `BOR-${suffix}`, title: "P", clientId: c.id, status: "POR_HACER", projectId: project.id },
+      });
+      await prisma.request.create({
+        data: { key: `BORS-${suffix}`, title: "S", clientId: c.id, status: "POR_HACER", parentId: parent.id, deletedAt: new Date() },
+      });
+      await prisma.timeEntry.create({ data: { requestId: parent.id, userId: admin.id, hours: 2 } });
+      const portalUser = await prisma.user.create({
+        data: { name: "Portal", email: `portal-bor-${suffix}@test.local`, role: "CLIENTE", clientId: c.id },
+      });
+
+      currentUser = coordA;
+      await deleteClient(c.id);
+      expect(await prisma.client.count({ where: { id: c.id } })).toBe(1);
+
+      currentUser = admin;
+      await prisma.client.update({ where: { id: c.id }, data: { isActive: true } });
+      await deleteClient(c.id);
+      expect(await prisma.client.count({ where: { id: c.id } })).toBe(1);
+
+      await prisma.client.update({ where: { id: c.id }, data: { isActive: false } });
+      await expect(deleteClient(c.id)).rejects.toThrow("redirect:/admin/clientes");
+      expect(await prisma.client.count({ where: { id: c.id } })).toBe(0);
+      expect(await prisma.request.count({ where: { clientId: c.id, deletedAt: { not: null } } })).toBe(0);
+      expect(await prisma.timeEntry.count({ where: { requestId: parent.id } })).toBe(0);
+      const pu = await prisma.user.findUniqueOrThrow({ where: { id: portalUser.id } });
+      expect(pu.isActive).toBe(false);
+      expect(pu.clientId).toBeNull();
+      await prisma.user.delete({ where: { id: portalUser.id } });
     });
 
     it("workClientsWhere: rol sin clients.view ve los clientes donde es miembro; Admin ve todos", async () => {
