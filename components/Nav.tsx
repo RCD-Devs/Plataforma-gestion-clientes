@@ -16,7 +16,7 @@ const items = [
   { href: "/clientes", label: "Clientes", icon: "◎", cap: "clients.view" as const },
   { href: "/proyectos", label: "Proyectos", icon: "◫", cap: "projects.view" as const },
   { href: "/bolsa", label: "Bolsa de horas", icon: "◷", cap: "clients.view" as const },
-  { href: "/dashboard", label: "Dashboard", icon: "▤", cap: "clients.view" as const },
+  { href: "/dashboard", label: "Dashboard general", icon: "▤", cap: "clients.view" as const },
   { href: "/notificaciones", label: "Notificaciones", icon: "✷", cap: "clients.view" as const },
   { href: "/admin", label: "Administración", icon: "⚙", admin: true },
 ];
