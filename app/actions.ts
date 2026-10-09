@@ -2585,6 +2585,19 @@ export async function updateScheduleBlock(blockId: string, start: string, end: s
   return { ok: true, overlaps };
 }
 
+// Jornada laboral propia (horas netas por día, lun..dom) — solo afecta la
+// comparación "registradas / esperadas" del calendario.
+export async function updateWorkHours(formData: FormData): Promise<void> {
+  const user = await getSessionUser();
+  if (!user) return;
+  const workHours = Array.from({ length: 7 }, (_, i) => {
+    const h = Number(formData.get(`h${i}`));
+    return Number.isFinite(h) ? Math.min(Math.max(h, 0), 24) : 0;
+  });
+  await prisma.user.update({ where: { id: user.id }, data: { workHours } });
+  revalidatePath("/perfil");
+}
+
 export async function deleteScheduleBlock(blockId: string): Promise<{ ok: boolean }> {
   const user = await getSessionUser();
   if (!user) return { ok: false };

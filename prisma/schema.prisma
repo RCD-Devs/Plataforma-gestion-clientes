@@ -156,6 +156,11 @@ model User {
   color     String?
   createdAt DateTime @default(now())
 
+  // Jornada laboral: horas netas esperadas por día [lun..dom] para
+  // comparar con las horas registradas en el calendario. null = default
+  // (ver lib/workSchedule.ts).
+  workHours Json?
+
   isActive              Boolean   @default(true)
   passwordHash          String?
   previousPasswordHash  String?

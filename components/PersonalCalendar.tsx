@@ -11,6 +11,7 @@ import {
 } from "@/app/actions";
 import { SubmitButton } from "@/components/SubmitButton";
 import { REQUEST_TYPES, PRIORITIES } from "@/lib/constants";
+import { WEEKDAY_LABELS, expectedHours, extraHours, weekdayIndex } from "@/lib/workSchedule";
 
 export type CalendarBlock = {
   id: string;
@@ -21,14 +22,19 @@ export type CalendarBlock = {
   request: { key: string; title: string; status: string; color: string };
 };
 
-export type CalendarTask = { id: string; key: string; title: string; clientName: string };
+export type CalendarTask = {
+  id: string;
+  key: string;
+  title: string;
+  clientName: string;
+};
 
 const START_HOUR = 0;
 const END_HOUR = 24;
 const PX_PER_MIN = 0.8; // 48px por hora — día completo sin quedar excesivamente largo
-const DAY_LABELS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 const MIN_DURATION_MIN = 15;
 
+const fmtHours = (h: number) => h.toLocaleString("es-CL", { maximumFractionDigits: 2 });
 const fmtTime = (d: Date) => d.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" });
 const toLocalInput = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
@@ -42,52 +48,71 @@ function minutesFromTop(dayStart: Date, y: number, snap = 15): Date {
   return new Date(dayStart.getTime() + (START_HOUR * 60 + clamped) * 60000);
 }
 
-// Calendario semanal de bloques de horario — arrastrar en vacío crea, sobre
+// Calendario (vista día o semana) de bloques de horario — arrastrar en vacío crea, sobre
 // un bloque mueve, y del borde inferior redimensiona. Sin librería de drag:
 // son pocos px con pointer events nativos, el mismo criterio que el Kanban.
 export function PersonalCalendar({
-  weekStart,
+  days: dayKeys,
+  hoursByDay,
+  workHours,
   blocks,
   tasks,
   clients,
 }: {
-  weekStart: string; // "YYYY-MM-DD" del lunes
+  days: string[]; // "YYYY-MM-DD" de cada columna
+  hoursByDay: Record<string, number>; // horas registradas (TimeEntry) por día
+  workHours: number[]; // jornada esperada lun..dom
   blocks: CalendarBlock[];
   tasks: CalendarTask[];
-  clients: { id: string; name: string; projects: { id: string; name: string }[] }[];
+  clients: {
+    id: string;
+    name: string;
+    projects: { id: string; name: string }[];
+  }[];
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const gridRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const days = useMemo(() => {
-    const monday = new Date(`${weekStart}T00:00:00`);
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(monday);
-      d.setDate(d.getDate() + i);
-      return d;
-    });
-  }, [weekStart]);
+  const days = useMemo(() => dayKeys.map((k) => new Date(`${k}T00:00:00`)), [dayKeys]);
 
   const [items, setItems] = useState(() =>
-    blocks.map((b) => ({ ...b, startD: new Date(b.start), endD: new Date(b.end) })),
+    blocks.map((b) => ({
+      ...b,
+      startD: new Date(b.start),
+      endD: new Date(b.end),
+    })),
   );
   // Vuelve a sincronizar cuando el servidor trae datos nuevos (router.refresh()
   // tras crear/mover/eliminar un bloque), sin pisar un arrastre en curso.
   useEffect(() => {
-    setItems(blocks.map((b) => ({ ...b, startD: new Date(b.start), endD: new Date(b.end) })));
+    setItems(
+      blocks.map((b) => ({
+        ...b,
+        startD: new Date(b.start),
+        endD: new Date(b.end),
+      })),
+    );
   }, [blocks]);
 
-  const [draft, setDraft] = useState<{ day: number; start: Date; end: Date } | null>(null);
+  const [draft, setDraft] = useState<{
+    day: number;
+    start: Date;
+    end: Date;
+  } | null>(null);
   const [panel, setPanel] = useState<
-    | { kind: "create"; start: Date; end: Date }
-    | { kind: "confirm"; block: (typeof items)[number] }
-    | null
+    { kind: "create"; start: Date; end: Date } | { kind: "confirm"; block: (typeof items)[number] } | null
   >(null);
   const [warning, setWarning] = useState<string | null>(null);
   const dragState = useRef<
     | { kind: "create"; day: number; dayStart: Date; originY: number }
-    | { kind: "move"; id: string; originY: number; origStart: Date; durationMs: number }
+    | {
+        kind: "move";
+        id: string;
+        originY: number;
+        origStart: Date;
+        durationMs: number;
+      }
     | { kind: "resize"; id: string; day: number; dayStart: Date; origEnd: Date }
     | null
   >(null);
@@ -104,7 +129,11 @@ export function PersonalCalendar({
     const y = e.clientY - rect.top;
     dragState.current = { kind: "create", day: dayIndex, dayStart, originY: y };
     const t = minutesFromTop(dayStart, y);
-    setDraft({ day: dayIndex, start: t, end: new Date(t.getTime() + 30 * 60000) });
+    setDraft({
+      day: dayIndex,
+      start: t,
+      end: new Date(t.getTime() + 30 * 60000),
+    });
     (e.target as Element).setPointerCapture(e.pointerId);
   }
 
@@ -122,11 +151,17 @@ export function PersonalCalendar({
 
   function onResizePointerDown(block: (typeof items)[number], dayIndex: number, dayStart: Date, e: React.PointerEvent) {
     e.stopPropagation();
-    dragState.current = { kind: "resize", id: block.id, day: dayIndex, dayStart, origEnd: block.endD };
+    dragState.current = {
+      kind: "resize",
+      id: block.id,
+      day: dayIndex,
+      dayStart,
+      origEnd: block.endD,
+    };
     (e.target as Element).setPointerCapture(e.pointerId);
   }
 
-  // Rect del área de horas de un día (sin el encabezado de 40px) — la única
+  // Rect del área de horas de un día (sin el encabezado) — la única
   // referencia válida para convertir clientY en minutos desde las 07:00.
   function dayGridRect(day: number) {
     return gridRef.current?.querySelector(`[data-daygrid="${day}"]`)?.getBoundingClientRect() ?? null;
@@ -141,7 +176,11 @@ export function PersonalCalendar({
       const y = e.clientY - rect.top;
       const a = minutesFromTop(st.dayStart, Math.min(y, st.originY));
       const b = minutesFromTop(st.dayStart, Math.max(y, st.originY));
-      setDraft({ day: st.day, start: a, end: b.getTime() > a.getTime() ? b : new Date(a.getTime() + MIN_DURATION_MIN * 60000) });
+      setDraft({
+        day: st.day,
+        start: a,
+        end: b.getTime() > a.getTime() ? b : new Date(a.getTime() + MIN_DURATION_MIN * 60000),
+      });
     } else if (st.kind === "move") {
       const deltaMin = (e.clientY - st.originY) / PX_PER_MIN;
       const snapped = Math.round(deltaMin / 15) * 15;
@@ -211,7 +250,7 @@ export function PersonalCalendar({
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = Math.max(topOf(new Date()) - el.clientHeight / 2, 0);
-  }, [weekStart]);
+  }, [dayKeys[0]]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const overlapIds = useMemo(() => {
     const bad = new Set<string>();
@@ -237,18 +276,25 @@ export function PersonalCalendar({
         </div>
       )}
       <div ref={scrollRef} className="max-h-[75vh] overflow-auto rounded-xl border border-[#e4e8ec] bg-white">
-        <div className="flex min-w-[820px]">
+        <div className={`flex ${days.length > 1 ? "min-w-[820px]" : ""}`}>
           <div className="w-14 shrink-0 border-r border-[#f1f3f4]">
-            <div className="h-10 border-b border-[#f1f3f4]" />
+            <div className="h-16 border-b border-[#f1f3f4]" />
             {hours.map((h) => (
-              <div key={h} style={{ height: 60 * PX_PER_MIN }} className="border-b border-[#f6f7f8] pr-1.5 text-right text-[10px] text-[#9aa5ad]">
+              <div
+                key={h}
+                style={{ height: 60 * PX_PER_MIN }}
+                className="border-b border-[#f6f7f8] pr-1.5 text-right text-[10px] text-[#9aa5ad]"
+              >
                 {String(h).padStart(2, "0")}:00
               </div>
             ))}
           </div>
           <div
             ref={gridRef}
-            className="grid flex-1 grid-cols-7"
+            className="grid flex-1"
+            style={{
+              gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))`,
+            }}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerLeave={onPointerUp}
@@ -259,11 +305,18 @@ export function PersonalCalendar({
               dayEnd.setDate(dayEnd.getDate() + 1);
               const dayBlocks = items.filter((b) => b.startD >= dayStart && b.startD < dayEnd);
               const isToday = new Date().toDateString() === day.toDateString();
+              const registered = hoursByDay[dayKeys[i]] ?? 0;
+              const expected = expectedHours(workHours, dayKeys[i]);
+              const extra = extraHours(registered, expected);
               return (
                 <div key={i} data-col className="border-r border-[#f1f3f4] last:border-r-0">
-                  <div className={`flex h-10 flex-col items-center justify-center border-b border-[#f1f3f4] text-xs ${isToday ? "bg-[#e0fbf9] font-semibold text-[#065f5a]" : "text-[#5d6b77]"}`}>
-                    <span>{DAY_LABELS[i]}</span>
-                    <span className="text-[10px]">{day.getDate()}</span>
+                  <div
+                    className={`flex h-16 flex-col items-center justify-center border-b border-[#f1f3f4] text-xs ${isToday ? "bg-[#e0fbf9] font-semibold text-[#065f5a]" : "text-[#5d6b77]"}`}
+                  >
+                    <span>
+                      {WEEKDAY_LABELS[weekdayIndex(dayKeys[i])]} {day.getDate()}
+                    </span>
+                    <DayHours registered={registered} expected={expected} extra={extra} />
                   </div>
                   <div
                     data-daygrid={i}
@@ -272,17 +325,27 @@ export function PersonalCalendar({
                     onPointerDown={(e) => onGridPointerDown(i, dayStart, e)}
                   >
                     {hours.map((h) => (
-                      <div key={h} className="absolute inset-x-0 border-b border-[#f6f7f8]" style={{ top: (h - START_HOUR) * 60 * PX_PER_MIN }} />
+                      <div
+                        key={h}
+                        className="absolute inset-x-0 border-b border-[#f6f7f8]"
+                        style={{ top: (h - START_HOUR) * 60 * PX_PER_MIN }}
+                      />
                     ))}
                     {isToday && (
-                      <div className="absolute inset-x-0 z-10 border-t-2 border-[#fb693b]" style={{ top: topOf(new Date()) }}>
+                      <div
+                        className="absolute inset-x-0 z-10 border-t-2 border-[#fb693b]"
+                        style={{ top: topOf(new Date()) }}
+                      >
                         <span className="absolute -left-1 -top-[5px] h-2.5 w-2.5 rounded-full bg-[#fb693b]" />
                       </div>
                     )}
                     {draft && draft.day === i && (
                       <div
                         className="absolute inset-x-1 rounded-md border-2 border-dashed border-[#0bdbcf] bg-[#0bdbcf]/10"
-                        style={{ top: topOf(draft.start), height: heightOf(draft.start, draft.end) }}
+                        style={{
+                          top: topOf(draft.start),
+                          height: heightOf(draft.start, draft.end),
+                        }}
                       />
                     )}
                     {dayBlocks.map((b) => (
@@ -292,7 +355,12 @@ export function PersonalCalendar({
                         onPointerDown={(e) => onBlockPointerDown(b, e)}
                         onClick={() => !dragState.current && setPanel({ kind: "confirm", block: b })}
                         className={`group absolute inset-x-1 cursor-grab select-none overflow-hidden rounded-md border px-1.5 py-1 text-[11px] leading-tight text-white active:cursor-grabbing ${b.confirmed ? "opacity-70" : ""}`}
-                        style={{ top: topOf(b.startD), height: heightOf(b.startD, b.endD), background: b.request.color, borderColor: b.request.color }}
+                        style={{
+                          top: topOf(b.startD),
+                          height: heightOf(b.startD, b.endD),
+                          background: b.request.color,
+                          borderColor: b.request.color,
+                        }}
                         title={`${b.request.key} · ${b.request.title}\n${fmtTime(b.startD)}–${fmtTime(b.endD)}`}
                       >
                         <div className="flex items-center gap-1 font-semibold">
@@ -318,8 +386,8 @@ export function PersonalCalendar({
         </div>
       </div>
       <p className="mt-2 text-xs text-[#7f7f7f]">
-        Arrastra sobre una columna vacía para crear un bloque, arrastra un bloque para moverlo, y su borde inferior
-        para ajustar la duración. Los bloques pueden cruzarse: solo se avisa, no se bloquea.
+        Arrastra sobre una columna vacía para crear un bloque, arrastra un bloque para moverlo, y su borde inferior para
+        ajustar la duración. Los bloques pueden cruzarse: solo se avisa, no se bloquea.
       </p>
 
       {panel?.kind === "create" && (
@@ -336,6 +404,21 @@ export function PersonalCalendar({
         <ConfirmBlockModal block={panel.block} onClose={() => setPanel(null)} onDelete={onDelete} />
       )}
     </div>
+  );
+}
+
+// "9,5/8,5 h" + horas extra si se pasó de la jornada. Se usa también en la
+// vista mensual.
+export function DayHours({ registered, expected, extra }: { registered: number; expected: number; extra: number }) {
+  if (registered === 0 && expected === 0) return null;
+  const done = registered >= expected;
+  return (
+    <span className="text-[10px] leading-tight" title="Horas registradas / jornada del día">
+      <span className={done ? "font-semibold text-[#0a7a52]" : "text-[#7f7f7f]"}>
+        {fmtHours(registered)}/{fmtHours(expected)} h
+      </span>
+      {extra > 0 && <span className="block font-semibold text-[#9a5a25]">+{fmtHours(extra)} h extra</span>}
+    </span>
   );
 }
 
@@ -372,7 +455,11 @@ function BlockFormModal({
   start: Date;
   end: Date;
   tasks: CalendarTask[];
-  clients: { id: string; name: string; projects: { id: string; name: string }[] }[];
+  clients: {
+    id: string;
+    name: string;
+    projects: { id: string; name: string }[];
+  }[];
   onClose: () => void;
   onSubmit: (formData: FormData) => void | Promise<void>;
 }) {
@@ -386,14 +473,27 @@ function BlockFormModal({
         <input type="hidden" name="start" value={toLocalInput(start)} />
         <input type="hidden" name="end" value={toLocalInput(end)} />
         <div className="rounded-lg bg-[#f4f6f8] px-3 py-2 text-sm text-[#5d6b77]">
-          {start.toLocaleDateString("es-CL", { weekday: "long", day: "2-digit", month: "long" })} · {fmtTime(start)}–{fmtTime(end)}
+          {start.toLocaleDateString("es-CL", {
+            weekday: "long",
+            day: "2-digit",
+            month: "long",
+          })}{" "}
+          · {fmtTime(start)}–{fmtTime(end)}
         </div>
 
         <div role="tablist" className="inline-flex gap-1 rounded-lg border border-[#e4e8ec] p-1">
-          <button type="button" onClick={() => setMode("existing")} className={`rounded-md px-3 py-1 text-xs font-semibold ${mode === "existing" ? "bg-[#081826] text-white" : "text-[#5d6b77]"}`}>
+          <button
+            type="button"
+            onClick={() => setMode("existing")}
+            className={`rounded-md px-3 py-1 text-xs font-semibold ${mode === "existing" ? "bg-[#081826] text-white" : "text-[#5d6b77]"}`}
+          >
             Tarea existente
           </button>
-          <button type="button" onClick={() => setMode("new")} className={`rounded-md px-3 py-1 text-xs font-semibold ${mode === "new" ? "bg-[#081826] text-white" : "text-[#5d6b77]"}`}>
+          <button
+            type="button"
+            onClick={() => setMode("new")}
+            className={`rounded-md px-3 py-1 text-xs font-semibold ${mode === "new" ? "bg-[#081826] text-white" : "text-[#5d6b77]"}`}
+          >
             Nueva tarea
           </button>
         </div>
@@ -417,7 +517,13 @@ function BlockFormModal({
           <>
             <div>
               <label className={labelCls}>Cliente</label>
-              <select name="clientId" required className={inputCls} value={clientId} onChange={(e) => setClientId(e.target.value)}>
+              <select
+                name="clientId"
+                required
+                className={inputCls}
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+              >
                 <option value="" disabled>
                   Selecciona…
                 </option>
@@ -483,7 +589,11 @@ function BlockFormModal({
           <SubmitButton className="rounded-md bg-[#0bdbcf] px-4 py-2 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]">
             Crear bloque
           </SubmitButton>
-          <button type="button" onClick={onClose} className="rounded-md border border-[#e4e8ec] px-4 py-2 text-sm text-[#5d6b77]">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-[#e4e8ec] px-4 py-2 text-sm text-[#5d6b77]"
+          >
             Cancelar
           </button>
         </div>
@@ -497,7 +607,14 @@ function ConfirmBlockModal({
   onClose,
   onDelete,
 }: {
-  block: { id: string; startD: Date; endD: Date; note: string | null; confirmed: boolean; request: { key: string; title: string; status: string } };
+  block: {
+    id: string;
+    startD: Date;
+    endD: Date;
+    note: string | null;
+    confirmed: boolean;
+    request: { key: string; title: string; status: string };
+  };
   onClose: () => void;
   onDelete: (id: string) => void;
 }) {
@@ -514,12 +631,17 @@ function ConfirmBlockModal({
         {fmtTime(block.startD)} – {fmtTime(block.endD)} · {durationH} h
         {block.note && <div className="mt-1 italic">&ldquo;{block.note}&rdquo;</div>}
       </div>
-      <Link href={`/solicitudes/${block.request.key}`} className="mb-4 inline-block text-xs text-[#08a89f] hover:underline">
+      <Link
+        href={`/solicitudes/${block.request.key}`}
+        className="mb-4 inline-block text-xs text-[#08a89f] hover:underline"
+      >
         Ver tarea →
       </Link>
 
       {block.confirmed ? (
-        <p className="rounded-lg bg-[#e3f6ee] px-3 py-2 text-sm text-[#0a7a52]">Ya se registró como horas trabajadas.</p>
+        <p className="rounded-lg bg-[#e3f6ee] px-3 py-2 text-sm text-[#0a7a52]">
+          Ya se registró como horas trabajadas.
+        </p>
       ) : (
         <form
           action={(fd) =>
@@ -537,7 +659,15 @@ function ConfirmBlockModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Horas</label>
-              <input name="hours" type="number" step="0.25" min="0.25" defaultValue={durationH} required className={inputCls} />
+              <input
+                name="hours"
+                type="number"
+                step="0.25"
+                min="0.25"
+                defaultValue={durationH}
+                required
+                className={inputCls}
+              />
             </div>
             <div>
               <label className={labelCls}>Fecha</label>

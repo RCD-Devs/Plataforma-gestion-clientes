@@ -96,3 +96,10 @@ export function mondayOf(d: Date) {
   const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diff);
   return toDateInput(monday);
 }
+
+// "YYYY-MM-DD" del día en Chile para un instante — para agrupar horas por
+// día igual en local que en Vercel (UTC).
+const chileDayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santiago" });
+export function chileDateKey(d: Date) {
+  return chileDayFmt.format(d);
+}
