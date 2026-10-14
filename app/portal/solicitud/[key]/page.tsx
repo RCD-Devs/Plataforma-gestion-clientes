@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { requirePortalUser } from "@/lib/portal";
 import { PortalShell, shellProps } from "@/components/portal/PortalShell";
 import { addComment } from "@/app/actions";
+import { CommentQuote } from "@/components/CommentForm";
 import { PriorityTag } from "@/components/ui";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ClientPriorityStars } from "@/components/controls";
@@ -121,9 +122,14 @@ export default async function PortalRequestDetail({
           </p>
 
           <div className="space-y-3">
-            {req.comments.map((c) => (
+            {req.comments.map((c) => {
+              // Solo comentarios no internos están en req.comments: una cita
+              // a una nota interna simplemente no se muestra.
+              const quoted = req.comments.find((q) => q.id === c.replyToId);
+              return (
               <div
                 key={c.id}
+                id={`c-${c.id}`}
                 className={`flex ${c.isClient ? "justify-end" : "justify-start"}`}
               >
                 <div
@@ -140,6 +146,15 @@ export default async function PortalRequestDetail({
                   >
                     {c.isClient ? c.authorName || "Tú" : `${c.authorName} · REVO`}
                   </div>
+                  {quoted && (
+                    <div className="mb-1.5">
+                      <CommentQuote
+                        author={quoted.isClient ? quoted.authorName || "Tú" : `${quoted.authorName} · REVO`}
+                        body={quoted.body}
+                        href={`#c-${quoted.id}`}
+                      />
+                    </div>
+                  )}
                   <div className="whitespace-pre-wrap">{c.body}</div>
                   <div
                     className={`mt-1 text-[10px] ${
@@ -147,10 +162,12 @@ export default async function PortalRequestDetail({
                     }`}
                   >
                     {relative(c.createdAt)}
+                    {c.resolvedAt && <span className="ml-1.5 font-semibold text-[#15803d]">· ✓ Resuelto</span>}
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
             {req.comments.length === 0 && (
               <div className="rounded-xl border border-dashed border-[#e4e8ec] px-4 py-6 text-center text-sm text-[#7f7f7f]">
                 Aún no hay mensajes. Escribe el primero.

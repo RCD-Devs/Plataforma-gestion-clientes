@@ -1465,6 +1465,12 @@ export async function addComment(formData: FormData) {
     authorName = user.name;
   }
 
+  // Cita: solo vale un comentario de esta misma solicitud.
+  const replyToId = String(formData.get("replyToId") || "");
+  const replyTo = replyToId
+    ? await prisma.comment.findFirst({ where: { id: replyToId, requestId }, select: { id: true } })
+    : null;
+
   await prisma.comment.create({
     data: {
       requestId,
@@ -1473,6 +1479,7 @@ export async function addComment(formData: FormData) {
       isInternal,
       authorId: isClient ? null : user!.id,
       authorName,
+      replyToId: replyTo?.id,
     },
   });
   await prisma.activity.create({
@@ -1537,6 +1544,26 @@ export async function deleteComment(commentId: string) {
   if (!comment || comment.request.archivedAt || !comment.authorId || comment.authorId !== user.id) return;
 
   await prisma.comment.delete({ where: { id: commentId } });
+  revalidatePath(`/solicitudes/${comment.request.key}`);
+}
+
+// Marcar/desmarcar resuelto: cualquiera del equipo que pueda actuar
+// sobre la solicitud (no solo el autor — se resuelve el del cliente).
+export async function setCommentResolved(commentId: string, resolved: boolean) {
+  const user = await getSessionUser();
+  if (!user || !isTeamRole(user.role)) return;
+  const comment = await prisma.comment.findUnique({
+    where: { id: commentId },
+    include: { request: { include: { client: true, collaborators: true } } },
+  });
+  if (!comment || comment.request.archivedAt || !canActOnRequest(user, comment.request)) return;
+
+  await prisma.comment.update({
+    where: { id: commentId },
+    data: resolved
+      ? { resolvedAt: new Date(), resolvedByName: user.name }
+      : { resolvedAt: null, resolvedByName: null },
+  });
   revalidatePath(`/solicitudes/${comment.request.key}`);
 }
 

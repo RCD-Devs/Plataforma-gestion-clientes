@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { editComment, deleteComment } from "@/app/actions";
+import { editComment, deleteComment, setCommentResolved } from "@/app/actions";
 
 export function CommentActions({
   commentId,
@@ -54,7 +54,7 @@ export function CommentActions({
   }
 
   return (
-    <div className="mt-1 flex gap-3 text-[11px] text-[#6b7280]">
+    <div className="flex gap-3">
       <button
         type="button"
         onClick={() => setEditing(true)}
@@ -74,5 +74,19 @@ export function CommentActions({
         Eliminar
       </button>
     </div>
+  );
+}
+
+export function ResolveButton({ commentId, resolved }: { commentId: string; resolved: boolean }) {
+  const [pending, startTransition] = useTransition();
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      onClick={() => startTransition(() => setCommentResolved(commentId, !resolved))}
+      className={`hover:underline disabled:opacity-50 ${resolved ? "hover:text-[#374151]" : "text-[#15803d]"}`}
+    >
+      {resolved ? "↺ Reabrir" : "✓ Marcar resuelto"}
+    </button>
   );
 }

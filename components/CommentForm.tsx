@@ -1,6 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { addComment } from "@/app/actions";
 import { mentionQuery } from "@/lib/mentions";
 
@@ -12,7 +14,18 @@ const fold = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").t
 // equipo cuyo nombre (o apellido) empieza así, sin distinguir mayúsculas
 // ni tildes. Los elegidos viajan como ids en "mentions"; el servidor solo
 // avisa a los que siguen escritos como @Nombre en el texto.
-export function CommentForm({ requestId, users }: { requestId: string; users: MentionUser[] }) {
+export function CommentForm({
+  requestId,
+  users,
+  replyTo,
+}: {
+  requestId: string;
+  users: MentionUser[];
+  // Comentario citado (?responder=<id> en la URL del detalle).
+  replyTo?: { id: string; author: string; body: string };
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
   const [mentioned, setMentioned] = useState<MentionUser[]>([]);
@@ -57,10 +70,28 @@ export function CommentForm({ requestId, users }: { requestId: string; users: Me
         setText("");
         setMentioned([]);
         setInternal(false);
+        if (replyTo) router.replace(pathname, { scroll: false });
       }}
+      id="comentar"
       className="mt-3"
     >
       <input type="hidden" name="requestId" value={requestId} />
+      {replyTo && (
+        <div className="mb-2 flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <CommentQuote author={replyTo.author} body={replyTo.body} />
+          </div>
+          <input type="hidden" name="replyToId" value={replyTo.id} />
+          <Link
+            href={pathname}
+            scroll={false}
+            title="Quitar cita"
+            className="shrink-0 px-1 text-sm text-[#6b7280] hover:text-[#374151]"
+          >
+            ✕
+          </Link>
+        </div>
+      )}
       {internal && <input type="hidden" name="internal" value="1" />}
       {mentioned
         .filter((u) => text.includes(`@${u.name}`))
@@ -139,6 +170,24 @@ export function CommentForm({ requestId, users }: { requestId: string; users: Me
         Interno — solo lo ve el equipo, no se le envía al cliente
       </label>
     </form>
+  );
+}
+
+// Cita de otro comentario (al responder y dentro del comentario que responde).
+export function CommentQuote({ author, body, href }: { author: string; body: string; href?: string }) {
+  const inner = (
+    <>
+      <span className="font-semibold">{author}</span>
+      <span className="line-clamp-2 whitespace-pre-wrap">{body}</span>
+    </>
+  );
+  const cls = "block rounded-md border-l-4 border-[#0bdbcf] bg-[#f3f4f6] px-2.5 py-1.5 text-xs text-[#5d6b77]";
+  return href ? (
+    <a href={href} className={`${cls} hover:bg-[#e9ecef]`}>
+      {inner}
+    </a>
+  ) : (
+    <div className={cls}>{inner}</div>
   );
 }
 

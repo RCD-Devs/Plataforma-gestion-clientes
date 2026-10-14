@@ -420,6 +420,15 @@ model Comment {
 
   authorId String?
   author   User?   @relation(fields: [authorId], references: [id])
+
+  // Comentario al que responde (cita). Si se borra el citado, queda null.
+  replyToId String?
+  replyTo   Comment?  @relation("CommentReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   Comment[] @relation("CommentReplies")
+
+  // Resuelto: pasa a la pestaña "Resueltos" del detalle; se puede reabrir.
+  resolvedAt     DateTime?
+  resolvedByName String?
 }
 
 model TimeEntry {

@@ -23,8 +23,8 @@ import {
 import { hoursLabel, longDate, shortDate, relative } from "@/lib/format";
 import { RequestEditPanel } from "@/components/RequestEditPanel";
 import { ArchiveButton, DeleteRequestButton } from "@/components/ArchiveButton";
-import { CommentActions } from "@/components/CommentActions";
-import { CommentForm, CommentBody } from "@/components/CommentForm";
+import { CommentActions, ResolveButton } from "@/components/CommentActions";
+import { CommentForm, CommentBody, CommentQuote } from "@/components/CommentForm";
 import { AttachmentDeleteButton } from "@/components/AttachmentDeleteButton";
 import { CollaboratorsPanel } from "@/components/CollaboratorsPanel";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -37,10 +37,13 @@ const inputCls =
 
 export default async function RequestDetail({
   params,
+  searchParams,
 }: {
   params: Promise<{ key: string }>;
+  searchParams: Promise<{ responder?: string; comentarios?: string }>;
 }) {
   const { key } = await params;
+  const { responder, comentarios } = await searchParams;
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
@@ -107,6 +110,12 @@ export default async function RequestDetail({
       : [],
   ]);
   const mentionNames = users.map((u) => u.name);
+  const commentById = new Map(req.comments.map((c) => [c.id, c]));
+  const commentAuthor = (c: (typeof req.comments)[number]) => c.authorName || c.author?.name || "?";
+  const replyingTo = responder ? commentById.get(responder) : undefined;
+  const openComments = req.comments.filter((c) => !c.resolvedAt);
+  const shownComments =
+    comentarios === "resueltos" ? req.comments.filter((c) => c.resolvedAt) : openComments;
   const totalHours = req.timeEntries.reduce((a, t) => a + t.hours, 0);
   const customFieldValueMap = new Map(
     req.customFieldValues.map((v) => [v.fieldId, v.value]),
@@ -377,12 +386,31 @@ export default async function RequestDetail({
           )}
 
           <section>
-            <h2 className="mb-2 text-sm font-semibold text-[#6b7280]">
-              Comentarios
-            </h2>
+            <div className="mb-2 flex items-center gap-3 text-sm">
+              <h2 className="font-semibold text-[#6b7280]">Comentarios</h2>
+              {[
+                { tab: undefined, label: "Abiertos", n: openComments.length },
+                { tab: "resueltos", label: "Resueltos", n: req.comments.length - openComments.length },
+              ].map((t) => (
+                <Link
+                  key={t.label}
+                  href={`/solicitudes/${req.key}${t.tab ? `?comentarios=${t.tab}` : ""}`}
+                  scroll={false}
+                  className={`rounded-md px-2 py-0.5 text-xs font-semibold ${
+                    (comentarios === "resueltos") === Boolean(t.tab)
+                      ? "bg-[#081826] text-white"
+                      : "text-[#6b7280] hover:bg-[#f3f4f6]"
+                  }`}
+                >
+                  {t.label} ({t.n})
+                </Link>
+              ))}
+            </div>
             <div className="space-y-3">
-              {req.comments.map((c) => (
-                <div key={c.id} className="flex gap-2">
+              {shownComments.map((c) => {
+                const quoted = c.replyToId ? commentById.get(c.replyToId) : undefined;
+                return (
+                <div key={c.id} id={`c-${c.id}`} className="flex scroll-mt-4 gap-2">
                   <Avatar
                     name={c.authorName || c.author?.name || "?"}
                     color={c.isClient ? "#0ea5e9" : c.author?.color}
@@ -390,7 +418,11 @@ export default async function RequestDetail({
                   />
                   <div
                     className={`min-w-0 flex-1 rounded-lg border p-3 ${
-                      c.isInternal ? "border-[#f5c78a] bg-[#fffaf2]" : "border-[#e6e8eb] bg-white"
+                      c.resolvedAt
+                        ? "border-[#86efac] bg-[#f0fdf4]"
+                        : c.isInternal
+                          ? "border-[#f5c78a] bg-[#fffaf2]"
+                          : "border-[#e6e8eb] bg-white"
                     }`}
                   >
                     <div className="mb-1 flex items-center gap-2 text-xs text-[#6b7280]">
@@ -408,23 +440,52 @@ export default async function RequestDetail({
                         </span>
                       )}
                       <span>· {relative(c.createdAt)}</span>
+                      {c.resolvedAt && (
+                        <span className="rounded bg-[#dcfce7] px-1.5 py-0.5 text-[10px] text-[#15803d]">
+                          ✓ Resuelto{c.resolvedByName ? ` por ${c.resolvedByName}` : ""}
+                        </span>
+                      )}
                     </div>
+                    {quoted && (
+                      <div className="mb-1.5">
+                        <CommentQuote
+                          author={commentAuthor(quoted)}
+                          body={quoted.body}
+                          href={`/solicitudes/${req.key}${quoted.resolvedAt ? "?comentarios=resueltos" : ""}#c-${quoted.id}`}
+                        />
+                      </div>
+                    )}
                     <div className="whitespace-pre-wrap text-sm">
                       <CommentBody body={c.body} names={mentionNames} />
                     </div>
-                    {c.authorId === user.id && (
-                      <CommentActions commentId={c.id} body={c.body} />
-                    )}
+                    <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-[#6b7280]">
+                      <Link
+                        href={`/solicitudes/${req.key}?responder=${c.id}#comentar`}
+                        className="hover:text-[#374151] hover:underline"
+                      >
+                        ↩ Responder
+                      </Link>
+                      <ResolveButton commentId={c.id} resolved={Boolean(c.resolvedAt)} />
+                      {c.authorId === user.id && (
+                        <CommentActions commentId={c.id} body={c.body} />
+                      )}
+                    </div>
                   </div>
                 </div>
-              ))}
-              {req.comments.length === 0 && (
+                );
+              })}
+              {shownComments.length === 0 && (
                 <div className="text-sm text-[#6b7280]">
-                  Aún no hay comentarios.
+                  {comentarios === "resueltos" ? "No hay comentarios resueltos." : "No hay comentarios abiertos."}
                 </div>
               )}
             </div>
             <CommentForm
+              replyTo={
+                replyingTo
+                  ? { id: replyingTo.id, author: commentAuthor(replyingTo), body: replyingTo.body }
+                  : undefined
+              }
               requestId={req.id}
               users={users.filter((u) => u.isActive && u.id !== user.id).map((u) => ({ id: u.id, name: u.name }))}
             />
