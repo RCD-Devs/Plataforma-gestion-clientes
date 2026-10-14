@@ -61,6 +61,7 @@ export default async function DashboardPage() {
         createdAt: true,
         updatedAt: true,
         finalizedAt: true,
+        archivedAt: true,
         client: { select: { name: true } },
         assignee: { select: { name: true } },
       },
@@ -88,7 +89,9 @@ export default async function DashboardPage() {
   const teamOf = (id: string | null) => (id && teamName.get(id)) || NO_TEAM;
 
   // --- Solicitudes ---
-  const openReqs = requests.filter((r) => !finalCodes.has(r.status));
+  // Archivadas fuera de lo abierto (vencidas, carga): son histórico. Sí
+  // cuentan como cerradas si se finalizaron.
+  const openReqs = requests.filter((r) => !r.archivedAt && !finalCodes.has(r.status));
   const closedReqs = requests.filter((r) => finalCodes.has(r.status));
   const closedLast30 = closedReqs.filter((r) => (r.finalizedAt ?? r.updatedAt) >= last30);
   const createdLast30 = requests.filter((r) => r.createdAt >= last30).length;
@@ -101,7 +104,10 @@ export default async function DashboardPage() {
   const closedByTeam = topBy(closedLast30, (r) => teamOf(r.teamId));
 
   const counts: Record<string, number> = Object.fromEntries(
-    statuses.map((s) => [s.code, requests.filter((r) => r.status === s.code).length]),
+    statuses.map((s) => [
+      s.code,
+      requests.filter((r) => r.status === s.code && (s.isFinal || !r.archivedAt)).length,
+    ]),
   );
   const maxCount = Math.max(1, ...Object.values(counts));
 

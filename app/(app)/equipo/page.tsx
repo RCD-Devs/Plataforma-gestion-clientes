@@ -57,7 +57,8 @@ export default async function EquipoPage({
 
   const [tasks, entries, statuses] = await Promise.all([
     prisma.request.findMany({
-      where: taskWhere,
+      // Archivadas = histórico: no son carga ni atraso de nadie.
+      where: { ...taskWhere, archivedAt: null },
       include: { client: true, assignee: true },
       orderBy: [{ dueDate: "asc" }, { updatedAt: "desc" }],
     }),
