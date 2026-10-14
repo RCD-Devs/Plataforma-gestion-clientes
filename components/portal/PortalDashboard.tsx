@@ -4,7 +4,7 @@ import type { Client } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { cycleGrants, getHoursSummaries } from "@/lib/hoursLedger";
 import { getStatuses } from "@/lib/statuses";
-import { Avatar, Bar } from "@/components/ui";
+import { avatarSrc, Avatar, Bar } from "@/components/ui";
 import { hoursLabel, longDate } from "@/lib/format";
 import { BreakdownTabs, DonutChart, MonthBars } from "@/components/Charts";
 import { toSlices, OTHER_COLOR, type Slice } from "@/lib/chartSlices";
@@ -204,7 +204,7 @@ export async function PortalDashboard({ client }: { client: Client }) {
             <ul className="space-y-3">
               {people.map((u) => (
                 <li key={u.id} className="flex items-center gap-3">
-                  <Avatar name={u.name} color={u.color} size={36} />
+                  <Avatar name={u.name} photo={avatarSrc(u)} color={u.color} size={36} />
                   <div className="min-w-0">
                     <div className="truncate text-sm font-semibold">
                       {u.name}

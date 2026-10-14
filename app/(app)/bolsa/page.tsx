@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { isManager, requestVisibilityWhere, clientVisibilityWhere } from "@/lib/authz";
-import { Avatar, Bar } from "@/components/ui";
+import { avatarSrc, Avatar, Bar } from "@/components/ui";
 import { hoursLabel, shortDate } from "@/lib/format";
 import { getHoursSummaries } from "@/lib/hoursLedger";
 import { checkHoursAlerts } from "@/lib/hoursAlerts";
@@ -137,6 +137,7 @@ export default async function BolsaPage() {
                       <span className="inline-flex items-center gap-2">
                         <Avatar
                           name={t.user.name}
+                          photo={avatarSrc(t.user)}
                           color={t.user.color}
                           size={20}
                         />

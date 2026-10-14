@@ -11,7 +11,7 @@ import { projectHref } from "@/lib/projectInsights";
 import { withSlug } from "@/lib/slug";
 import { getHoursSummaries, type CycleSummary } from "@/lib/hoursLedger";
 import { getStatuses } from "@/lib/statuses";
-import { Avatar } from "@/components/ui";
+import { avatarSrc, Avatar } from "@/components/ui";
 import { hoursLabel, initials, longDate, shortDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -38,8 +38,8 @@ export default async function ClienteFichaPage({ params }: { params: Promise<{ i
   const client = await prisma.client.findUnique({
     where: { id },
     include: {
-      accountManager: { select: { name: true, color: true } },
-      members: { include: { user: { select: { name: true, color: true } } } },
+      accountManager: { select: { id: true, name: true, color: true, avatarUpdatedAt: true } },
+      members: { include: { user: { select: { id: true, name: true, color: true, avatarUpdatedAt: true } } } },
       projects: { where: { archivedAt: null }, orderBy: { createdAt: "desc" }, include: { _count: { select: { requests: { where: { deletedAt: null } } } } } },
       requests: { where: { deletedAt: null }, select: { status: true } },
     },
@@ -242,7 +242,7 @@ export default async function ClienteFichaPage({ params }: { params: Promise<{ i
                 <dt className="text-xs text-[#6b7280]">Coordinador de cuenta</dt>
                 <dd className="mt-1">
                   {client.accountManager ? (
-                    <Person name={client.accountManager.name} color={client.accountManager.color} />
+                    <Person name={client.accountManager.name} color={client.accountManager.color} photo={avatarSrc(client.accountManager)} />
                   ) : (
                     "—"
                   )}
@@ -252,7 +252,7 @@ export default async function ClienteFichaPage({ params }: { params: Promise<{ i
                 <dt className="text-xs text-[#6b7280]">Equipo asignado</dt>
                 <dd className="mt-1 space-y-1.5">
                   {client.members.length
-                    ? client.members.map((m) => <Person key={m.userId} name={m.user.name} color={m.user.color} />)
+                    ? client.members.map((m) => <Person key={m.userId} name={m.user.name} color={m.user.color} photo={avatarSrc(m.user)} />)
                     : "—"}
                 </dd>
               </div>
@@ -352,10 +352,10 @@ function Line({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
-function Person({ name, color }: { name: string; color: string | null }) {
+function Person({ name, color, photo }: { name: string; color: string | null; photo: string | null }) {
   return (
     <div className="flex items-center gap-2 font-medium">
-      <Avatar name={name} color={color} size={24} />
+      <Avatar name={name} color={color} photo={photo} size={24} />
       {name}
     </div>
   );

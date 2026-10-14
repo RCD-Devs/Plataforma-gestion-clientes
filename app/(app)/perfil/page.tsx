@@ -5,7 +5,8 @@ import { getSessionUser } from "@/lib/session";
 import { hasAccess, clientScopeWhere, type Capabilities } from "@/lib/permissions";
 import { getStatuses, getStatusMap } from "@/lib/statuses";
 import { parseLocalDate, toDateInput, chileDateKey } from "@/lib/dates";
-import { Avatar } from "@/components/ui";
+import { avatarSrc, Avatar } from "@/components/ui";
+import { AvatarUpload } from "@/components/AvatarUpload";
 import { PersonalCalendar, DayHours } from "@/components/PersonalCalendar";
 import { SubmitButton } from "@/components/SubmitButton";
 import { updateWorkHours } from "@/app/actions";
@@ -50,12 +51,13 @@ export default async function PerfilPage({
     <div className="flex h-full flex-col">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e4e8ec] bg-white px-6 py-3">
         <div className="flex items-center gap-3">
-          <Avatar name={user.name} color={user.color} size={40} />
+          <Avatar name={user.name} color={user.color} photo={avatarSrc(user)} size={56} />
           <div>
             <h1 className="font-brand text-base font-semibold">{user.name}</h1>
             <p className="text-xs text-[#5d6b77]">
               {user.roleNames.length > 0 ? user.roleNames.join(" · ") : "Sin rol asignado"}
             </p>
+            <AvatarUpload hasPhoto={Boolean(user.avatarUpdatedAt)} />
           </div>
         </div>
       </header>

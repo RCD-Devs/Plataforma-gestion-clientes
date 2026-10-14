@@ -6,6 +6,7 @@ import { requestVisibilityWhere, canActOnRequest } from "@/lib/authz";
 import { requestFilterWhere, filterOptions } from "@/lib/requestFilters";
 import { Filters } from "@/components/Filters";
 import { Board, type BoardCard } from "@/components/Board";
+import { avatarSrc } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,7 @@ export default async function TableroPage({
     hours: r.timeEntries.reduce((a, t) => a + t.hours, 0),
     clientLabel: r.client.code || r.client.name,
     assignee: r.assignee
-      ? { name: r.assignee.name, color: r.assignee.color }
+      ? { name: r.assignee.name, color: r.assignee.color, photo: avatarSrc(r.assignee) }
       : null,
     canDrag: canActOnRequest(user, r),
   }));

@@ -6,7 +6,7 @@ import { slugify } from "@/lib/slug";
 import { getSessionUser } from "@/lib/session";
 import { hasAccess } from "@/lib/permissions";
 import { ROLE_MAP } from "@/lib/constants";
-import { Avatar, StatCard } from "@/components/ui";
+import { avatarSrc, Avatar, StatCard } from "@/components/ui";
 import { StatusBadge } from "@/components/StatusBadge";
 import { hoursLabel, shortDate } from "@/lib/format";
 import { daysFromToday, endOfToday, toDateInput } from "@/lib/dates";
@@ -83,12 +83,13 @@ export default async function EquipoPage({
   });
   const totalHours = entries.reduce((a, e) => a + e.hours, 0);
 
-  const byUser = new Map<string, { name: string; color: string | null; role: string; hours: number }>();
+  const byUser = new Map<string, { name: string; color: string | null; photo: string | null; role: string; hours: number }>();
   const byClient = new Map<string, { name: string; hours: number }>();
   for (const e of entries) {
     const u = byUser.get(e.userId) ?? {
       name: e.user.name,
       color: e.user.color,
+      photo: avatarSrc(e.user),
       role: e.user.role,
       hours: 0,
     };
@@ -180,7 +181,7 @@ export default async function EquipoPage({
                   href={`/tablero?responsable=${slugify(m.name)}`}
                   className="flex items-center gap-2 rounded-lg border border-[#f1f3f4] px-3 py-2 text-sm hover:border-[#0bdbcf]"
                 >
-                  <Avatar name={m.name} color={m.color} size={24} />
+                  <Avatar name={m.name} photo={avatarSrc(m)} color={m.color} size={24} />
                   <span>
                     <span className="block font-medium">{m.name}</span>
                     <span className="block text-xs text-[#7f7f7f]">
@@ -233,7 +234,7 @@ export default async function EquipoPage({
                   >
                     <span className="flex min-w-0 items-center gap-2">
                       {t.assignee && (
-                        <Avatar name={t.assignee.name} color={t.assignee.color} size={20} />
+                        <Avatar name={t.assignee.name} photo={avatarSrc(t.assignee)} color={t.assignee.color} size={20} />
                       )}
                       <span className="truncate">
                         <span className="font-semibold">{t.key}</span> · {t.title}{" "}
@@ -261,7 +262,7 @@ export default async function EquipoPage({
             <div className="space-y-3">
               {perUser.map((u) => (
                 <div key={u.name} className="flex items-center gap-3">
-                  <Avatar name={u.name} color={u.color} size={24} />
+                  <Avatar name={u.name} photo={u.photo} color={u.color} size={24} />
                   <div className="min-w-0 flex-1">
                     <div className="mb-0.5 flex justify-between text-xs">
                       <span className="truncate">
@@ -349,7 +350,7 @@ export default async function EquipoPage({
                       <td className="px-4 py-3">
                         {t.assignee ? (
                           <span className="inline-flex items-center gap-2">
-                            <Avatar name={t.assignee.name} color={t.assignee.color} size={20} />
+                            <Avatar name={t.assignee.name} photo={avatarSrc(t.assignee)} color={t.assignee.color} size={20} />
                             {t.assignee.name}
                           </span>
                         ) : (

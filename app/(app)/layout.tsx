@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/session";
 import { Sidebar } from "@/components/Nav";
+import { avatarSrc } from "@/components/ui";
 import { AiAssistant } from "@/components/AiAssistant";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           name: user.name,
           email: user.email,
           color: user.color,
+          photo: avatarSrc(user),
           roleCodes: user.roleCodes,
           roleNames: user.roleNames,
           capabilities: user.capabilities,

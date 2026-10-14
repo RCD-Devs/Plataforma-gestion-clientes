@@ -15,7 +15,7 @@ export type BoardCard = {
   priority: string;
   hours: number;
   clientLabel: string;
-  assignee: { name: string; color: string | null } | null;
+  assignee: { name: string; color: string | null; photo: string | null } | null;
   // false si el usuario actual no puede actuar sobre esta solicitud
   // (canActOnRequest) — la tarjeta se ve pero no se puede arrastrar. El
   // servidor vuelve a validar en changeStatus de todos modos.
@@ -66,6 +66,7 @@ export function Board({
                     <Avatar
                       name={c.assignee.name}
                       color={c.assignee.color}
+                      photo={c.assignee.photo}
                       size={22}
                     />
                   ) : (

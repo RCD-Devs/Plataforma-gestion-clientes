@@ -19,6 +19,7 @@ import { hasAccess, canOnClient, canManageClients, ACTIONS, type ActionId, type 
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { logAudit } from "@/lib/audit";
 import { storeUploadedFile } from "@/lib/attachments";
+import { sniffFile } from "@/lib/files";
 import { deleteFromStorage } from "@/lib/storage";
 import crypto from "crypto";
 import { notifyClient, notifyTeam, notifyMention } from "@/lib/email";
@@ -2670,4 +2671,34 @@ export async function confirmScheduleBlockHours(blockId: string, formData: FormD
   revalidatePath("/bolsa");
   revalidatePath("/dashboard");
   return { ok: true };
+}
+
+// Foto de perfil propia. Llega ya recortada a 256x256 JPEG (AvatarUpload);
+// igual se valida tamaño y tipo real por magic number.
+export async function setAvatar(formData: FormData): Promise<{ ok: boolean }> {
+  const user = await getSessionUser();
+  const file = formData.get("avatar");
+  if (!user || !(file instanceof File) || file.size === 0 || file.size > 300 * 1024) return { ok: false };
+  const bytes = Buffer.from(await file.arrayBuffer());
+  if (sniffFile(bytes)?.contentType !== "image/jpeg") return { ok: false };
+  await prisma.$transaction([
+    prisma.userAvatar.upsert({
+      where: { userId: user.id },
+      create: { userId: user.id, data: bytes },
+      update: { data: bytes },
+    }),
+    prisma.user.update({ where: { id: user.id }, data: { avatarUpdatedAt: new Date() } }),
+  ]);
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+export async function removeAvatar() {
+  const user = await getSessionUser();
+  if (!user) return;
+  await prisma.$transaction([
+    prisma.userAvatar.deleteMany({ where: { userId: user.id } }),
+    prisma.user.update({ where: { id: user.id }, data: { avatarUpdatedAt: null } }),
+  ]);
+  revalidatePath("/", "layout");
 }

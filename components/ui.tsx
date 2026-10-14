@@ -6,15 +6,35 @@ import { initials } from "@/lib/format";
 // que no puede importar nada que toque la BD (lib/db) — eso metía Prisma
 // en el bundle del navegador. StatusBadge vive aparte por eso.
 
+// URL de la foto de perfil, o null si no tiene (se ven las iniciales).
+export function avatarSrc(u?: { id: string; avatarUpdatedAt?: Date | null } | null) {
+  return u?.avatarUpdatedAt ? `/api/avatar/${u.id}?v=${new Date(u.avatarUpdatedAt).getTime()}` : null;
+}
+
 export function Avatar({
   name,
   color,
   size = 24,
+  photo,
 }: {
   name: string;
   color?: string | null;
   size?: number;
+  photo?: string | null;
 }) {
+  if (photo)
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- 256px ya optimizado; next/image no aporta acá
+      <img
+        src={photo}
+        alt={name}
+        title={name}
+        width={size}
+        height={size}
+        style={{ width: size, height: size }}
+        className="inline-block shrink-0 rounded-full object-cover"
+      />
+    );
   return (
     <span
       title={name}

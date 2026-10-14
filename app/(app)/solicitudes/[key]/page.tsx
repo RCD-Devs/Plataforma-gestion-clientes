@@ -12,7 +12,7 @@ import {
   PrioritySelect,
   ClientSelect,
 } from "@/components/controls";
-import { Avatar, ClientTag } from "@/components/ui";
+import { avatarSrc, Avatar, ClientTag } from "@/components/ui";
 import {
   addUrlAttachment,
   logHours,
@@ -413,6 +413,7 @@ export default async function RequestDetail({
                 <div key={c.id} id={`c-${c.id}`} className="flex scroll-mt-4 gap-2">
                   <Avatar
                     name={c.authorName || c.author?.name || "?"}
+                    photo={avatarSrc(c.author)}
                     color={c.isClient ? "#0ea5e9" : c.author?.color}
                     size={28}
                   />
@@ -553,6 +554,7 @@ export default async function RequestDetail({
                 id: c.user.id,
                 name: c.user.name,
                 color: c.user.color,
+                photo: avatarSrc(c.user),
               }))}
               users={users.filter((u) => u.isActive)}
             />
@@ -570,7 +572,7 @@ export default async function RequestDetail({
                 <div key={t.id} className="py-2.5 text-xs first:pt-0">
                   <div className="flex items-center justify-between gap-2">
                     <span className="flex min-w-0 items-center gap-1.5 font-medium text-[#374151]">
-                      <Avatar name={t.user.name} color={t.user.color} size={18} />
+                      <Avatar name={t.user.name} photo={avatarSrc(t.user)} color={t.user.color} size={18} />
                       <span className="truncate">{t.user.name}</span>
                     </span>
                     <span className="shrink-0 font-semibold">{hoursLabel(t.hours)}</span>

@@ -28,6 +28,7 @@ export function Sidebar({
     name: string;
     email: string;
     color?: string | null;
+    photo?: string | null;
     roleCodes: string[];
     roleNames: string[];
     capabilities: Capabilities;
@@ -133,7 +134,7 @@ export function Sidebar({
             onClick={closeOnNavigate}
             className="flex items-center gap-2 rounded-lg p-1 -m-1 hover:bg-white/5"
           >
-            <Avatar name={user.name} color={user.color} size={30} />
+            <Avatar name={user.name} color={user.color} photo={user.photo} size={30} />
             <div className="min-w-0 leading-tight">
               <div className="truncate text-sm font-semibold text-white">
                 {user.name}

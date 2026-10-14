@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { requestVisibilityWhere } from "@/lib/authz";
 import { Filters } from "@/components/Filters";
-import { Avatar, PriorityTag, ClientTag } from "@/components/ui";
+import { avatarSrc, Avatar, PriorityTag, ClientTag } from "@/components/ui";
 import { StatusBadge } from "@/components/StatusBadge";
 import { hoursLabel, relative } from "@/lib/format";
 import { getUnreadRequestIds } from "@/lib/commentReads";
@@ -114,7 +114,7 @@ export default async function SolicitudesPage({
                       {r.assignee ? (
                         <span className="inline-flex items-center gap-2">
                           <Avatar
-                            name={r.assignee.name}
+                            name={r.assignee.name} photo={avatarSrc(r.assignee)}
                             color={r.assignee.color}
                             size={22}
                           />

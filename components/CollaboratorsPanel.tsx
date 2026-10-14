@@ -10,7 +10,7 @@ export function CollaboratorsPanel({
   users,
 }: {
   requestId: string;
-  collaborators: { id: string; name: string; color: string | null }[];
+  collaborators: { id: string; name: string; color: string | null; photo: string | null }[];
   users: { id: string; name: string }[];
 }) {
   const [pending, start] = useTransition();
@@ -23,7 +23,7 @@ export function CollaboratorsPanel({
       {collaborators.map((c) => (
         <div key={c.id} className="flex items-center justify-between text-xs">
           <span className="flex items-center gap-1.5">
-            <Avatar name={c.name} color={c.color} size={18} />
+            <Avatar name={c.name} color={c.color} photo={c.photo} size={18} />
             {c.name}
           </span>
           <button

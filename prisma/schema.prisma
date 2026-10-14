@@ -156,6 +156,12 @@ model User {
   color     String?
   createdAt DateTime @default(now())
 
+  // Foto de perfil: los bytes viven en UserAvatar (tabla aparte, para que
+  // los include de User no los arrastren). Esta fecha versiona la URL
+  // /api/avatar/<id>?v=… — null = sin foto, se ven las iniciales.
+  avatarUpdatedAt DateTime?
+  avatar          UserAvatar?
+
   // Jornada laboral: horas netas esperadas por día [lun..dom] para
   // comparar con las horas registradas en el calendario. null = default
   // (ver lib/workSchedule.ts).
@@ -623,4 +629,11 @@ model SlaAlertLog {
   id        String   @id @default(cuid())
   requestId String   @unique
   createdAt DateTime @default(now())
+}
+
+// JPEG 256x256 ya recortado en el navegador (ver AvatarUpload).
+model UserAvatar {
+  userId String @id
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  data   Bytes
 }

@@ -5,7 +5,7 @@ import { ActiveToggle } from "@/components/admin/ActiveToggle";
 import { ResendInviteButton } from "@/components/admin/ResendInviteButton";
 import { UserDeleteButton } from "@/components/admin/UserDeleteButton";
 import { ROLE_MAP } from "@/lib/constants";
-import { Avatar } from "@/components/ui";
+import { avatarSrc, Avatar } from "@/components/ui";
 import { getStatuses } from "@/lib/statuses";
 import { getSessionUser } from "@/lib/session";
 
@@ -117,7 +117,7 @@ export default async function AdminUsuariosPage() {
               <tr key={u.id} className="border-b border-[#f3f4f6] last:border-0">
                 <td className="px-4 py-3">
                   <span className="flex items-center gap-2">
-                    <Avatar name={u.name} color={u.color} size={22} />
+                    <Avatar name={u.name} photo={avatarSrc(u)} color={u.color} size={22} />
                     <span>
                       <div className="font-medium">{u.name}</div>
                       <div className="text-xs text-[#6b7280]">{u.email}</div>
