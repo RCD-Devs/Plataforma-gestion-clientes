@@ -5,27 +5,51 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { PortalShell, shellProps } from "@/components/portal/PortalShell";
 import { requirePortalUser } from "@/lib/portal";
 import { shortDate } from "@/lib/format";
+import { getStatuses } from "@/lib/statuses";
 
 export const dynamic = "force-dynamic";
 
 export default async function SolicitudesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string }>;
+  searchParams: Promise<{
+    ok?: string;
+    estado?: string;
+    proyecto?: string;
+    mias?: string;
+  }>;
 }) {
-  const { ok } = await searchParams;
+  const { ok, estado, proyecto, mias } = await searchParams;
   const ctx = await requirePortalUser();
   const { client, email } = ctx;
+  const filtered = Boolean(estado || proyecto || mias);
 
-  const requests = await prisma.request.findMany({
-    where: { clientId: client.id },
-    include: {
-      attachments: { select: { id: true } },
-      comments: { where: { isInternal: false }, select: { id: true } },
-      project: { select: { name: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const [requests, statuses, projects] = await Promise.all([
+    prisma.request.findMany({
+      where: {
+        clientId: client.id,
+        ...(estado && { status: estado }),
+        ...(proyecto && {
+          project: { OR: [{ slug: proyecto }, { id: proyecto }] },
+        }),
+        ...(mias && { requesterEmail: email }),
+      },
+      include: {
+        attachments: { select: { id: true } },
+        comments: { where: { isInternal: false }, select: { id: true } },
+        project: { select: { name: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    getStatuses(),
+    prisma.project.findMany({
+      where: { clientId: client.id, archivedAt: null },
+      select: { id: true, slug: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
+  const cls =
+    "h-8 rounded-md border border-[#e4e8ec] bg-white px-2 text-sm text-[#374151] outline-none focus:border-[#0bdbcf]";
 
   return (
     <PortalShell {...shellProps(ctx)}>
@@ -41,8 +65,52 @@ export default async function SolicitudesPage({
 
       <div className="mb-3 flex items-center justify-between">
         <h1 className="font-brand text-sm font-semibold">Mis solicitudes</h1>
-        <span className="text-xs text-[#5d6b77]">{requests.length} en total</span>
+        <span className="text-xs text-[#5d6b77]">
+          {requests.length} en total
+        </span>
       </div>
+      {/* GET nativo: los filtros quedan en la URL, sin JS. */}
+      <form className="mb-3 flex flex-wrap items-center gap-2">
+        <select name="estado" defaultValue={estado ?? ""} className={cls}>
+          <option value="">Estado</option>
+          {statuses.map((s) => (
+            <option key={s.code} value={s.code}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+        {projects.length > 0 && (
+          <select name="proyecto" defaultValue={proyecto ?? ""} className={cls}>
+            <option value="">Proyecto</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.slug ?? p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        )}
+        <label className="flex items-center gap-1 text-xs text-[#5d6b77]">
+          <input
+            type="checkbox"
+            name="mias"
+            value="1"
+            defaultChecked={Boolean(mias)}
+            className="h-3.5 w-3.5 accent-[#0bdbcf]"
+          />
+          Solo las mías
+        </label>
+        <button className="h-8 rounded-md bg-[#081826] px-3 text-xs font-semibold text-white">
+          Filtrar
+        </button>
+        {filtered && (
+          <Link
+            href="/portal/solicitudes"
+            className="text-xs text-[#08a89f] hover:underline"
+          >
+            Limpiar
+          </Link>
+        )}
+      </form>
       <div className="overflow-x-auto rounded-2xl border border-[#e4e8ec] bg-white">
         <table className="w-full min-w-[640px] text-sm">
           <thead>
@@ -78,7 +146,9 @@ export default async function SolicitudesPage({
                         </span>
                       )}
                     </div>
-                    <div className="mt-0.5 line-clamp-1 font-semibold">{r.title}</div>
+                    <div className="mt-0.5 line-clamp-1 font-semibold">
+                      {r.title}
+                    </div>
                   </Link>
                 </td>
                 <td className="px-4 py-3">
@@ -105,12 +175,24 @@ export default async function SolicitudesPage({
             ))}
             {requests.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-sm text-[#7f7f7f]">
-                  Aún no tienes solicitudes.{" "}
-                  <Link href="/portal/nueva" className="text-[#08a89f] hover:underline">
-                    Ingresa la primera
-                  </Link>
-                  .
+                <td
+                  colSpan={6}
+                  className="px-4 py-10 text-center text-sm text-[#7f7f7f]"
+                >
+                  {filtered ? (
+                    "No hay solicitudes con esos filtros."
+                  ) : (
+                    <>
+                      Aún no tienes solicitudes.{" "}
+                      <Link
+                        href="/portal/nueva"
+                        className="text-[#08a89f] hover:underline"
+                      >
+                        Ingresa la primera
+                      </Link>
+                      .
+                    </>
+                  )}
                 </td>
               </tr>
             )}
