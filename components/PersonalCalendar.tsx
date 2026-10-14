@@ -10,6 +10,7 @@ import {
   updateScheduleBlock,
 } from "@/app/actions";
 import { SubmitButton } from "@/components/SubmitButton";
+import { slugify } from "@/lib/slug";
 import { REQUEST_TYPES, PRIORITIES } from "@/lib/constants";
 import { WEEKDAY_LABELS, expectedHours, extraHours, weekdayIndex } from "@/lib/workSchedule";
 
@@ -444,6 +445,128 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
 const inputCls = "w-full rounded-lg border border-[#e4e8ec] px-3 py-2 text-sm outline-none focus:border-[#0bdbcf]";
 const labelCls = "mb-1 block text-xs font-semibold text-[#5d6b77]";
 
+const MAX_TASK_OPTIONS = 6;
+
+// Buscador de tareas: escribir filtra por folio, título o cliente (sin
+// tildes, palabras en cualquier orden) y muestra a lo más 6 opciones.
+function TaskPicker({ tasks }: { tasks: CalendarTask[] }) {
+  const [query, setQuery] = useState("");
+  const [picked, setPicked] = useState<CalendarTask | null>(null);
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const index = useMemo(
+    () => tasks.map((t) => ({ t, text: slugify(`${t.key} ${t.title} ${t.clientName}`) })),
+    [tasks],
+  );
+  const words = slugify(query).split("-").filter(Boolean);
+  const matches = index
+    .filter((x) => words.every((w) => x.text.includes(w)))
+    .slice(0, MAX_TASK_OPTIONS)
+    .map((x) => x.t);
+
+  function pick(t: CalendarTask) {
+    setPicked(t);
+    setOpen(false);
+    setQuery("");
+  }
+
+  if (picked)
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-[#0bdbcf] bg-[#f0fdfc] px-3 py-2 text-sm">
+        <input type="hidden" name="requestId" value={picked.id} />
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-semibold">{picked.title}</div>
+          <div className="truncate text-xs text-[#5d6b77]">
+            {picked.key} · {picked.clientName}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setPicked(null);
+            setOpen(true);
+            requestAnimationFrame(() => inputRef.current?.focus());
+          }}
+          className="shrink-0 text-xs font-semibold text-[#08a89f] hover:underline"
+        >
+          Cambiar
+        </button>
+      </div>
+    );
+
+  return (
+    <div className="relative">
+      <input
+        ref={inputRef}
+        value={query}
+        required
+        autoFocus
+        autoComplete="off"
+        placeholder="Busca por folio, título o cliente…"
+        className={inputCls}
+        role="combobox"
+        aria-expanded={open && matches.length > 0}
+        aria-controls="task-options"
+        // Escribir sin elegir no basta: el form exige una tarea de la lista.
+        onInvalid={(e) => e.currentTarget.setCustomValidity("Elige una tarea de la lista")}
+        onChange={(e) => {
+          e.currentTarget.setCustomValidity("");
+          setQuery(e.target.value);
+          setOpen(true);
+          setActive(0);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onKeyDown={(e) => {
+          if (!open || matches.length === 0) return;
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            e.preventDefault();
+            const d = e.key === "ArrowDown" ? 1 : -1;
+            setActive((a) => (a + d + matches.length) % matches.length);
+          } else if (e.key === "Enter") {
+            e.preventDefault();
+            pick(matches[active]);
+          } else if (e.key === "Escape") {
+            e.stopPropagation();
+            setOpen(false);
+          }
+        }}
+      />
+      {open && (
+        <ul
+          id="task-options"
+          role="listbox"
+          className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-lg border border-[#e4e8ec] bg-white py-1 shadow-lg"
+        >
+          {matches.map((t, i) => (
+            <li
+              key={t.id}
+              role="option"
+              aria-selected={i === active}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                pick(t);
+              }}
+              onMouseEnter={() => setActive(i)}
+              className={`cursor-pointer px-3 py-1.5 ${i === active ? "bg-[#e0fbf9]" : ""}`}
+            >
+              <div className="truncate text-sm">{t.title}</div>
+              <div className="truncate text-xs text-[#5d6b77]">
+                {t.key} · {t.clientName}
+              </div>
+            </li>
+          ))}
+          {matches.length === 0 && (
+            <li className="px-3 py-2 text-xs text-[#6b7280]">Sin resultados para “{query}”.</li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function BlockFormModal({
   start,
   end,
@@ -502,16 +625,7 @@ function BlockFormModal({
         {mode === "existing" ? (
           <div>
             <label className={labelCls}>Tarea</label>
-            <select name="requestId" required className={inputCls} defaultValue="">
-              <option value="" disabled>
-                Selecciona…
-              </option>
-              {tasks.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.key} · {t.title} ({t.clientName})
-                </option>
-              ))}
-            </select>
+            <TaskPicker tasks={tasks} />
           </div>
         ) : (
           <>
