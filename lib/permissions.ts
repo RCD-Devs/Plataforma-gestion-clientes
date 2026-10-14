@@ -18,6 +18,7 @@ export type ActionId =
   | "requests.assign"
   | "requests.set_priority"
   | "requests.change_client"
+  | "requests.unarchive"
   | "clients.view"
   | "reports.export"
   | "team.view_load"
@@ -48,6 +49,11 @@ export const ACTIONS: { key: ActionId; label: string; scopes: Scope[] }[] = [
   {
     key: "requests.change_client",
     label: "Cambiar el cliente de una solicitud (toma folio nuevo; sus horas pasan a la bolsa del cliente nuevo)",
+    scopes: ["all", "own_clients", "none"],
+  },
+  {
+    key: "requests.unarchive",
+    label: "Desarchivar solicitudes (devolverlas del histórico al trabajo activo)",
     scopes: ["all", "own_clients", "none"],
   },
   {

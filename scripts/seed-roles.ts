@@ -39,6 +39,7 @@ const DEFAULT_PERMISSIONS: [string, ActionId, Scope][] = [
   ["ADMIN", "projects.budget", "all"],
   ["ADMIN", "hours.manage", "all"],
   ["ADMIN", "requests.change_client", "all"],
+  ["ADMIN", "requests.unarchive", "all"],
 
   ["LIDER_AREA", "requests.access", "all"],
   ["LIDER_AREA", "requests.assign", "all"],

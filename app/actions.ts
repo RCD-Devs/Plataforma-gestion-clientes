@@ -552,9 +552,15 @@ export async function unarchiveRequest(requestId: string) {
     where: { id: requestId },
     include: { client: true, collaborators: true },
   });
-  // Restaurar un histórico es decisión de Admin; y con el cliente archivado
-  // no se restaura suelta (se reactiva el cliente, ver setClientActive).
-  if (!existing || !user.roleCodes.includes("ADMIN") || !existing.client.isActive) return;
+  // Restaurar un histórico pide requests.unarchive (Admin por defecto); y con
+  // el cliente archivado no se restaura suelta (se reactiva el cliente, ver
+  // setClientActive).
+  if (
+    !existing ||
+    !canOnClient(user.capabilities, "requests.unarchive", user.id, existing.client, user.ownClientIds) ||
+    !existing.client.isActive
+  )
+    return;
 
   const req = await prisma.request.update({
     where: { id: requestId },

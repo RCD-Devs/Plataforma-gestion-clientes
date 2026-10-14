@@ -73,6 +73,8 @@ export default async function RequestDetail({
     !req.parentId &&
     canOnClient(user.capabilities, "requests.change_client", user.id, req.client, user.ownClientIds);
 
+  const canUnarchive = canOnClient(user.capabilities, "requests.unarchive", user.id, req.client, user.ownClientIds);
+
   const [users, projects, stages, customFields, statuses, statusMap, clients] = await Promise.all([
     // select explícito: esto viaja a componentes de cliente, y la fila
     // completa incluía passwordHash.
@@ -158,10 +160,10 @@ export default async function RequestDetail({
         </div>
         <div className="mt-1 flex items-center justify-between gap-3">
           <h1 className="text-xl font-semibold">{req.title}</h1>
-          {/* Archivada = histórico: restaurar es solo de Admin, y con el cliente
+          {/* Archivada = histórico: restaurar pide requests.unarchive, y con el cliente
               archivado ni eso (se reactiva el cliente). */}
           <div className="flex items-center gap-4">
-            {(!req.archivedAt || (user.roleCodes.includes("ADMIN") && req.client.isActive)) && (
+            {(!req.archivedAt || (canUnarchive && req.client.isActive)) && (
               <ArchiveButton requestId={req.id} archived={!!req.archivedAt} />
             )}
             {!req.archivedAt && <DeleteRequestButton requestId={req.id} />}
