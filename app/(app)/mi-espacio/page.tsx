@@ -12,6 +12,7 @@ import { hoursLabel, relative, shortDate } from "@/lib/format";
 import { dueInfo } from "@/lib/dates";
 import { getUnreadRequestIds } from "@/lib/commentReads";
 import { getPendingNudge } from "@/lib/nudges";
+import { DragColumns } from "@/components/Board";
 import { DeliveriesPopover } from "@/components/DeliveriesPopover";
 import { escalateSlaAlerts } from "@/lib/slaAlerts";
 
@@ -256,99 +257,87 @@ export default async function MiEspacioPage({
             </div>
           </div>
         ) : (
-          <div className="thin-scroll flex min-h-[60vh] flex-1 gap-4 overflow-x-auto p-6">
-            {statuses.map((s) => {
-              const items = tasks.filter((t) => t.status === s.code);
-              return (
-                <div key={s.code} className="flex min-h-0 w-80 shrink-0 flex-col rounded-xl bg-[#eef1f4] p-2">
-                  <div className="mb-2 flex items-center gap-2 px-1">
-                    <span
-                      style={{ background: s.color }}
-                      className="h-2.5 w-2.5 rounded-full"
-                    />
-                    <span className="text-sm font-semibold">{s.label}</span>
-                    <span className="rounded bg-[#eceff1] px-1.5 text-xs text-[#5d6b77]">
-                      {items.length}
-                    </span>
-                  </div>
-                  <div className="thin-scroll flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto">
-                    {items.map((t) => {
-                      const due = dueInfo(t.dueDate, finalCodes.has(t.status));
-                      const hrs = t.timeEntries.reduce((a, e) => a + e.hours, 0);
-                      return (
-                        <div
-                          key={t.id}
-                          className="rounded-xl border border-[#e4e8ec] bg-white p-3"
-                        >
-                          <div className="mb-1.5 flex items-center gap-1.5">
-                            <ClientTag name={t.client.code || t.client.name} />
-                            <PriorityTag priority={t.priority} />
-                            {unreadIds.has(t.id) && (
-                              <span
-                                title="El cliente respondió y nadie lo ha visto"
-                                className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#d21f3c]"
-                              />
-                            )}
-                            {t.clientPriority && (
-                              <span className="text-[11px] text-[#c97416]">
-                                ★{t.clientPriority}/5
-                              </span>
-                            )}
-                          </div>
-                          <Link
-                            href={`/solicitudes/${t.key}`}
-                            className="block hover:underline"
-                          >
-                            <div className="text-sm font-semibold leading-snug">
-                              {t.title}
-                            </div>
-                          </Link>
-                          <div className="mt-1 line-clamp-2 text-xs text-[#5d6b77]">
-                            {t.description}
-                          </div>
-                          <div className="mt-2 space-y-0.5 text-[11px] text-[#7f7f7f]">
-                            <div>
-                              {t.key} · ingreso {shortDate(t.createdAt)} ·
-                              entrega {shortDate(t.dueDate)}
-                            </div>
-                            <div className="truncate">
-                              ✉ {t.requesterEmail || "—"} · 📎{" "}
-                              {t.attachments.length} · 💬 {t.comments.length}
-                              {hrs > 0 && <> · ◷ {hoursLabel(hrs)}</>}
-                            </div>
-                          </div>
-                          {due && (
-                            <div
-                              className={`mt-2 rounded-md border px-2 py-1 text-[11px] font-semibold ${toneCls[due.tone]}`}
-                            >
-                              ⏰ {due.text}
-                            </div>
-                          )}
-                          <div className="mt-2 flex items-center justify-between gap-2 border-t border-[#f1f3f4] pt-2">
-                            <StatusSelect requestId={t.id} value={t.status} statuses={statuses} />
-                            <HandoffPanel
-                              requestId={t.id}
-                              teammates={teammates.map((m) => ({
-                                id: m.id,
-                                name: m.name,
-                                role: m.role,
-                              }))}
-                              statuses={statuses}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {items.length === 0 && (
-                      <div className="rounded-xl border border-dashed border-[#e4e8ec] p-3 text-center text-xs text-[#6b7280]">
-                        Sin tareas
-                      </div>
+          <DragColumns
+            statuses={statuses}
+            className="thin-scroll flex min-h-[60vh] flex-1 gap-4 overflow-x-auto p-6"
+            columnClassName="w-80"
+            columnBg="bg-[#eef1f4]"
+            listClassName="thin-scroll min-h-0 flex-1 gap-2.5 overflow-y-auto"
+            emptyLabel="Sin tareas"
+            cards={tasks.map((t) => {
+              const due = dueInfo(t.dueDate, finalCodes.has(t.status));
+              const hrs = t.timeEntries.reduce((a, e) => a + e.hours, 0);
+              return {
+                id: t.id,
+                status: t.status,
+                // Son mis tareas (asignado/colaborador): canActOnRequest da
+                // true; changeStatus igual revalida en el servidor.
+                canDrag: true,
+                node: (
+                <div
+                  className="rounded-xl border border-[#e4e8ec] bg-white p-3 transition hover:border-[#0bdbcf] hover:shadow-sm"
+                >
+                  <div className="mb-1.5 flex items-center gap-1.5">
+                    <ClientTag name={t.client.code || t.client.name} />
+                    <PriorityTag priority={t.priority} />
+                    {unreadIds.has(t.id) && (
+                      <span
+                        title="El cliente respondió y nadie lo ha visto"
+                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#d21f3c]"
+                      />
+                    )}
+                    {t.clientPriority && (
+                      <span className="text-[11px] text-[#c97416]">
+                        ★{t.clientPriority}/5
+                      </span>
                     )}
                   </div>
+                  <Link
+                    href={`/solicitudes/${t.key}`}
+                    className="block hover:underline"
+                  >
+                    <div className="text-sm font-semibold leading-snug">
+                      {t.title}
+                    </div>
+                  </Link>
+                  <div className="mt-1 line-clamp-2 text-xs text-[#5d6b77]">
+                    {t.description}
+                  </div>
+                  <div className="mt-2 space-y-0.5 text-[11px] text-[#7f7f7f]">
+                    <div>
+                      {t.key} · ingreso {shortDate(t.createdAt)} ·
+                      entrega {shortDate(t.dueDate)}
+                    </div>
+                    <div className="truncate">
+                      ✉ {t.requesterEmail || "—"} · 📎{" "}
+                      {t.attachments.length} · 💬 {t.comments.length}
+                      {hrs > 0 && <> · ◷ {hoursLabel(hrs)}</>}
+                    </div>
+                  </div>
+                  {due && (
+                    <div
+                      className={`mt-2 rounded-md border px-2 py-1 text-[11px] font-semibold ${toneCls[due.tone]}`}
+                    >
+                      ⏰ {due.text}
+                    </div>
+                  )}
+                  <div className="mt-2 flex items-center justify-between gap-2 border-t border-[#f1f3f4] pt-2">
+                    <StatusSelect requestId={t.id} value={t.status} statuses={statuses} />
+                    <HandoffPanel
+                      requestId={t.id}
+                      teammates={teammates.map((m) => ({
+                        id: m.id,
+                        name: m.name,
+                        role: m.role,
+                      }))}
+                      statuses={statuses}
+                    />
+                  </div>
                 </div>
-              );
+                ),
+              };
             })}
-          </div>
+          />
         )}
     </div>
   );

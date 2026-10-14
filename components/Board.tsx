@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import type { StatusInfo } from "@/lib/statuses";
 import { changeStatus } from "@/app/actions";
@@ -35,8 +35,89 @@ export function Board({
   statuses: StatusInfo[];
   cards: BoardCard[];
 }) {
+  return (
+    <DragColumns
+      statuses={statuses}
+      className="thin-scroll flex flex-1 gap-4 overflow-x-auto p-6"
+      columnClassName="w-72"
+      listClassName="gap-2"
+      emptyLabel="Sin tarjetas"
+      cards={cards.map((c) => ({
+        id: c.id,
+        status: c.status,
+        canDrag: c.canDrag,
+        node: (
+          <div className="rounded-xl border border-[#e6e8eb] bg-white p-3 transition hover:border-[#0bdbcf] hover:shadow-sm">
+            <Link href={`/solicitudes/${c.key}`} className="block">
+              <div className="mb-2 flex items-center gap-1.5">
+                <ClientTag name={c.clientLabel} />
+                <PriorityTag priority={c.priority} />
+              </div>
+              <div className="mb-2 text-sm leading-snug">{c.title}</div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-[#6b7280]">{c.key}</span>
+                <div className="flex items-center gap-2">
+                  {c.hours > 0 && (
+                    <span className="text-xs text-[#6b7280]">
+                      {hoursLabel(c.hours)}
+                    </span>
+                  )}
+                  {c.assignee ? (
+                    <Avatar
+                      name={c.assignee.name}
+                      color={c.assignee.color}
+                      size={22}
+                    />
+                  ) : (
+                    <span className="h-[22px] w-[22px] rounded-full border border-dashed border-[#d1d5db]" />
+                  )}
+                </div>
+              </div>
+            </Link>
+          </div>
+        ),
+      }))}
+    />
+  );
+}
+
+export type DragCard = {
+  id: string;
+  status: string;
+  canDrag: boolean;
+  node: ReactNode;
+};
+
+// Columnas con drag-and-drop, compartidas por /tablero y /mi-espacio. Las
+// tarjetas llegan ya renderizadas (`node`), así Mi espacio puede pasar sus
+// tarjetas server-side con StatusSelect/HandoffPanel adentro.
+export function DragColumns({
+  statuses,
+  cards,
+  className,
+  columnClassName,
+  columnBg = "",
+  listClassName = "",
+  emptyLabel,
+}: {
+  statuses: StatusInfo[];
+  cards: DragCard[];
+  className: string;
+  columnClassName: string;
+  columnBg?: string;
+  listClassName?: string;
+  emptyLabel: string;
+}) {
   const [items, setItems] = useState(cards);
+  // Si el servidor manda datos nuevos (filtro, StatusSelect, refresh tras
+  // soltar), mandan esos — patrón "ajustar estado al cambiar props".
+  const [prevCards, setPrevCards] = useState(cards);
+  if (cards !== prevCards) {
+    setPrevCards(cards);
+    setItems(cards);
+  }
   const [dragOverCode, setDragOverCode] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   function moveCard(id: string, toStatus: string) {
@@ -57,9 +138,10 @@ export function Board({
   }
 
   return (
-    <div className="thin-scroll flex flex-1 gap-4 overflow-x-auto p-6">
+    <div className={className}>
       {statuses.map((s) => {
         const colItems = items.filter((c) => c.status === s.code);
+        const over = dragOverCode === s.code;
         return (
           <div
             key={s.code}
@@ -76,11 +158,13 @@ export function Board({
               const id = e.dataTransfer.getData("text/plain");
               if (id) moveCard(id, s.code);
             }}
-            className={`flex w-72 shrink-0 flex-col rounded-xl transition-colors ${
-              dragOverCode === s.code ? "bg-[#e0fbf9]" : ""
+            className={`flex min-h-0 shrink-0 flex-col rounded-xl p-2 transition-colors ${columnClassName} ${
+              over
+                ? "bg-[#bff3ee] ring-2 ring-inset ring-[#0bdbcf]"
+                : columnBg
             }`}
           >
-            <div className="mb-3 flex items-center gap-2">
+            <div className="mb-2 flex items-center gap-2 px-1">
               <span
                 style={{ background: s.color }}
                 className="h-2.5 w-2.5 rounded-full"
@@ -90,7 +174,7 @@ export function Board({
                 {colItems.length}
               </span>
             </div>
-            <div className="flex flex-col gap-2">
+            <div className={`flex flex-col ${listClassName}`}>
               {colItems.map((c) => (
                 <div
                   key={c.id}
@@ -98,42 +182,22 @@ export function Board({
                   onDragStart={(e) => {
                     e.dataTransfer.setData("text/plain", c.id);
                     e.dataTransfer.effectAllowed = "move";
+                    setDraggingId(c.id);
                   }}
-                  className={`rounded-xl border border-[#e6e8eb] bg-white p-3 transition hover:border-[#0bdbcf] hover:shadow-sm ${
-                    c.canDrag ? "cursor-grab active:cursor-grabbing" : ""
+                  onDragEnd={() => {
+                    setDraggingId(null);
+                    setDragOverCode(null);
+                  }}
+                  className={`${c.canDrag ? "cursor-grab active:cursor-grabbing" : ""} ${
+                    draggingId === c.id ? "opacity-40" : ""
                   }`}
                 >
-                  <Link href={`/solicitudes/${c.key}`} className="block">
-                    <div className="mb-2 flex items-center gap-1.5">
-                      <ClientTag name={c.clientLabel} />
-                      <PriorityTag priority={c.priority} />
-                    </div>
-                    <div className="mb-2 text-sm leading-snug">{c.title}</div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-[#6b7280]">{c.key}</span>
-                      <div className="flex items-center gap-2">
-                        {c.hours > 0 && (
-                          <span className="text-xs text-[#6b7280]">
-                            {hoursLabel(c.hours)}
-                          </span>
-                        )}
-                        {c.assignee ? (
-                          <Avatar
-                            name={c.assignee.name}
-                            color={c.assignee.color}
-                            size={22}
-                          />
-                        ) : (
-                          <span className="h-[22px] w-[22px] rounded-full border border-dashed border-[#d1d5db]" />
-                        )}
-                      </div>
-                    </div>
-                  </Link>
+                  {c.node}
                 </div>
               ))}
               {colItems.length === 0 && (
-                <div className="rounded-xl border border-dashed border-[#e6e8eb] p-3 text-center text-xs text-[#6b7280]">
-                  Sin tarjetas
+                <div className="rounded-xl border border-dashed border-[#d1d5db] p-3 text-center text-xs text-[#6b7280]">
+                  {emptyLabel}
                 </div>
               )}
             </div>
