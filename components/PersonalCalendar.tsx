@@ -517,9 +517,15 @@ function TaskPicker({ tasks }: { tasks: CalendarTask[] }) {
           setOpen(true);
           setActive(0);
         }}
-        onFocus={() => setOpen(true)}
+        // Abre al hacer clic (no al enfocar: el autoFocus la dejaba abierta).
+        onClick={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={(e) => {
+          if (!open && e.key === "ArrowDown") {
+            e.preventDefault();
+            setOpen(true);
+            return;
+          }
           if (!open || matches.length === 0) return;
           if (e.key === "ArrowDown" || e.key === "ArrowUp") {
             e.preventDefault();
