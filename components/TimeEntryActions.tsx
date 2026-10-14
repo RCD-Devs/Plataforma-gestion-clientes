@@ -27,8 +27,10 @@ export function TimeEntryActions({
 
   if (editing) {
     return (
+      // w-full: vive en la columna angosta del detalle; con flex-wrap el
+      // campo de detalle quedaba en 0 px y solo se veían hora y fecha.
       <form
-        className="mt-1 flex flex-wrap items-center gap-1.5"
+        className="mt-1 w-full space-y-1.5"
         onSubmit={(e) => {
           e.preventDefault();
           const fd = new FormData(e.currentTarget);
@@ -38,15 +40,26 @@ export function TimeEntryActions({
           });
         }}
       >
-        <input name="hours" type="number" step="any" min="0.01" defaultValue={hours} required className={`${inputCls} w-16`} />
-        <input name="date" type="date" defaultValue={toDateInput(date)} className={inputCls} />
-        <input name="note" defaultValue={note ?? ""} placeholder="Detalle" className={`${inputCls} min-w-0 flex-1`} />
-        <button type="submit" disabled={pending} className="text-xs font-semibold text-[#08a89f] hover:underline disabled:opacity-50">
-          Guardar
-        </button>
-        <button type="button" onClick={() => setEditing(false)} className="text-xs text-[#6b7280] hover:underline">
-          Cancelar
-        </button>
+        <div className="flex items-center gap-1.5">
+          <input name="hours" type="number" step="any" min="0.01" defaultValue={hours} required aria-label="Horas" className={`${inputCls} w-16`} />
+          <input name="date" type="date" defaultValue={toDateInput(date)} aria-label="Fecha" className={`${inputCls} min-w-0 flex-1`} />
+        </div>
+        <textarea
+          name="note"
+          defaultValue={note ?? ""}
+          placeholder="Detalle de lo que se hizo"
+          aria-label="Detalle"
+          rows={3}
+          className={`${inputCls} block w-full resize-y`}
+        />
+        <div className="flex justify-end gap-3">
+          <button type="button" onClick={() => setEditing(false)} className="text-xs text-[#6b7280] hover:underline">
+            Cancelar
+          </button>
+          <button type="submit" disabled={pending} className="text-xs font-semibold text-[#08a89f] hover:underline disabled:opacity-50">
+            Guardar
+          </button>
+        </div>
       </form>
     );
   }
