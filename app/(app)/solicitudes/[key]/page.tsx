@@ -441,7 +441,9 @@ export default async function RequestDetail({
                 <AssigneeSelect
                   requestId={req.id}
                   value={req.assigneeId}
-                  users={users}
+                  // Inactivos fuera, salvo el responsable actual (si no, el
+                  // select mostraría otra persona).
+                  users={users.filter((u) => u.isActive || u.id === req.assigneeId)}
                 />
               </Row>
               <Row label="Prioridad">
@@ -491,7 +493,7 @@ export default async function RequestDetail({
                 name: c.user.name,
                 color: c.user.color,
               }))}
-              users={users}
+              users={users.filter((u) => u.isActive)}
             />
           </div>
 

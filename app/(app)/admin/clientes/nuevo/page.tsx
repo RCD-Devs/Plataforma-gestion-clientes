@@ -16,6 +16,7 @@ export default async function NuevoClientePage({
     include: { roles: { include: { role: { include: { permissions: true } } } } },
   });
   const managers = users
+    .filter((u) => u.isActive)
     .map(attachCapabilities)
     .filter((u) => hasAccess(u.capabilities, "clients.view"));
 

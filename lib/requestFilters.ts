@@ -78,7 +78,7 @@ export async function requestFilterWhere(sp: SP): Promise<Prisma.RequestWhereInp
 export async function filterOptions(user: AuthzUser) {
   const [clients, users, teams, projects, statuses] = await Promise.all([
     prisma.client.findMany({ where: workClientsWhere(user), orderBy: { name: "asc" } }),
-    prisma.user.findMany({ where: { role: { not: "CLIENTE" } }, orderBy: { name: "asc" } }),
+    prisma.user.findMany({ where: { role: { not: "CLIENTE" }, isActive: true }, orderBy: { name: "asc" } }),
     prisma.team.findMany({ orderBy: { name: "asc" } }),
     prisma.project.findMany({
       where: { archivedAt: null, client: workClientsWhere(user) },

@@ -16,7 +16,7 @@ export default async function EditarEquipoPage({
   const { error } = await searchParams;
   const [team, users] = await Promise.all([
     prisma.team.findUnique({ where: { id } }),
-    prisma.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, role: true, teamId: true } }), // TeamForm es de cliente: sin passwordHash
+    prisma.user.findMany({ where: { OR: [{ isActive: true }, { teamId: id }] }, orderBy: { name: "asc" }, select: { id: true, name: true, role: true, teamId: true } }), // TeamForm es de cliente: sin passwordHash
   ]);
   if (!team) notFound();
 

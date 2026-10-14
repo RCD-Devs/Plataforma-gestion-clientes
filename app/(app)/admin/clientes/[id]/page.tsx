@@ -39,6 +39,7 @@ export default async function EditarClientePage({
   ]);
   if (!client) notFound();
   const managers = users
+    .filter((u) => u.isActive)
     .map(attachCapabilities)
     .filter((u) => hasAccess(u.capabilities, "clients.view"));
   const summaries = await getHoursSummaries([client]);

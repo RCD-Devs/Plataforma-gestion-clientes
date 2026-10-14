@@ -64,7 +64,7 @@ export default async function MiEspacioPage({
       orderBy: [{ updatedAt: "desc" }],
     }),
     prisma.user.findMany({
-      where: { role: { not: "CLIENTE" }, id: { not: user.id } },
+      where: { role: { not: "CLIENTE" }, isActive: true, id: { not: user.id } },
       orderBy: { name: "asc" },
     }),
     prisma.notification.findMany({
