@@ -22,7 +22,7 @@ import { storeUploadedFile } from "@/lib/attachments";
 import { sniffFile } from "@/lib/files";
 import { deleteFromStorage } from "@/lib/storage";
 import crypto from "crypto";
-import { notifyClient, notifyTeam, notifyMention } from "@/lib/email";
+import { notifyClient, notifyTeam, notifyMention, notifyReply } from "@/lib/email";
 import { PRIORITY_MAP } from "@/lib/constants";
 import { getStatusMap, getStatuses } from "@/lib/statuses";
 import { isValidEmail } from "@/lib/validate";
@@ -1456,7 +1456,8 @@ async function notifyMentions(
   author: { id: string; name: string },
   body: string,
   ids: string[],
-) {
+): Promise<Set<string>> {
+  const notified = new Set<string>();
   const candidates = [...new Set(ids)].filter((id) => id && id !== author.id).slice(0, 20);
   for (const id of candidates) {
     const u = await loadAuthzUser(id);
@@ -1465,7 +1466,7 @@ async function notifyMentions(
       where: { id: req.id },
       include: { client: true, collaborators: true },
     });
-    if (!full) return;
+    if (!full) return notified;
     if (!canViewRequest(u, full)) {
       await prisma.requestCollaborator.create({ data: { requestId: req.id, userId: u.id } });
       await prisma.activity.create({
@@ -1478,7 +1479,9 @@ async function notifyMentions(
       });
     }
     await notifyMention({ to: u.email, requestId: req.id, requestKey: req.key, authorName: author.name, body });
+    notified.add(u.id);
   }
+  return notified;
 }
 
 export async function addComment(formData: FormData) {
@@ -1510,7 +1513,10 @@ export async function addComment(formData: FormData) {
   // Cita: solo vale un comentario de esta misma solicitud.
   const replyToId = String(formData.get("replyToId") || "");
   const replyTo = replyToId
-    ? await prisma.comment.findFirst({ where: { id: replyToId, requestId }, select: { id: true } })
+    ? await prisma.comment.findFirst({
+        where: { id: replyToId, requestId },
+        select: { id: true, author: { select: { id: true, email: true, role: true, isActive: true } } },
+      })
     : null;
 
   await prisma.comment.create({
@@ -1532,7 +1538,22 @@ export async function addComment(formData: FormData) {
       actorName: authorName,
     },
   });
-  if (!isClient) await notifyMentions(req, user!, body, formData.getAll("mentions").map(String));
+  const mentioned = isClient
+    ? new Set<string>()
+    : await notifyMentions(req, user!, body, formData.getAll("mentions").map(String));
+  // Respuesta: avisa al autor del comentario citado (solo equipo — el
+  // cliente ya recibe "Nuevo comentario"), salvo que se responda a sí
+  // mismo o ya le llegó el aviso por mención en este mismo comentario.
+  const repliedTo = replyTo?.author;
+  if (
+    repliedTo &&
+    repliedTo.isActive &&
+    repliedTo.role !== "CLIENTE" &&
+    repliedTo.id !== user!.id &&
+    !mentioned.has(repliedTo.id)
+  ) {
+    await notifyReply({ to: repliedTo.email, requestId, requestKey: req.key, authorName, body });
+  }
   if (!isClient && !isInternal && req?.requesterEmail) {
     await notifyClient({
       to: req.requesterEmail,

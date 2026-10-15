@@ -110,14 +110,35 @@ export async function notifyMention(opts: {
   authorName: string;
   body: string;
 }) {
-  const title = `${opts.authorName} te mencionó en ${opts.requestKey}`;
-  await notifyTeam({ to: opts.to, requestId: opts.requestId, title, body: opts.body.slice(0, 280) });
+  await notifyComment({ ...opts, title: `${opts.authorName} te mencionó en ${opts.requestKey}` });
+}
+
+// Respuesta a un comentario tuyo: mismo trato que una mención (campana +
+// correo), si no nadie se entera de que le respondieron.
+export async function notifyReply(opts: {
+  to: string;
+  requestId: string;
+  requestKey: string;
+  authorName: string;
+  body: string;
+}) {
+  await notifyComment({ ...opts, title: `${opts.authorName} respondió tu comentario en ${opts.requestKey}` });
+}
+
+async function notifyComment(opts: {
+  to: string;
+  requestId: string;
+  requestKey: string;
+  title: string;
+  body: string;
+}) {
+  await notifyTeam({ to: opts.to, requestId: opts.requestId, title: opts.title, body: opts.body.slice(0, 280) });
   const url = `${appBaseUrl()}/solicitudes/${opts.requestKey}`;
   await sendEmail({
     to: opts.to,
-    subject: title,
+    subject: opts.title,
     html: emailLayout({
-      title,
+      title: opts.title,
       bodyHtml: `<p style="margin:0;white-space:pre-wrap;">${escapeHtml(opts.body)}</p>`,
       ctaLabel: "Ver la tarea",
       ctaUrl: url,
