@@ -30,6 +30,7 @@ import { getPortalContext, canActAsClient, PORTAL_CLIENT_COOKIE } from "@/lib/po
 import { stageDateIssue } from "@/lib/projectBudget";
 import { parseLocalDate, zonedTimeToUtc } from "@/lib/dates";
 import { overlapsOf } from "@/lib/scheduleBlocks";
+import { decryptToken, revokeToken } from "@/lib/googleCalendar";
 import { uniqueSlug } from "@/lib/slug";
 import { projectHref } from "@/lib/projectInsights";
 import { uniqueClientCode } from "@/lib/clientCode";
@@ -2547,6 +2548,8 @@ async function overlapWarnings(userId: string, start: Date, end: Date, excludeId
 // Crea el bloque, ligado a una tarea existente o a una nueva creada al
 // vuelo con los mismos campos que una tarea común (tipo, cliente,
 // prioridad, etc.). El choque de horario nunca bloquea: solo se informa.
+// Si viene de una reunión de Google Calendar (googleEventId), además
+// registra de una vez las horas indicadas.
 export async function createScheduleBlock(formData: FormData): Promise<ScheduleResult> {
   const user = await getSessionUser();
   if (!user || !isTeamRole(user.role)) return { ok: false };
@@ -2554,6 +2557,16 @@ export async function createScheduleBlock(formData: FormData): Promise<ScheduleR
   const start = parseDateTimeLocal(String(formData.get("start") || ""));
   const end = parseDateTimeLocal(String(formData.get("end") || ""));
   if (!start || !end || end <= start) return { ok: false };
+
+  const googleEventId = String(formData.get("googleEventId") || "").slice(0, 1024) || null;
+  const hours = parseFloat(String(formData.get("hours") || "0"));
+  if (googleEventId) {
+    if (!hours || hours <= 0) return { ok: false };
+    const already = await prisma.scheduleBlock.findUnique({
+      where: { userId_googleEventId: { userId: user.id, googleEventId } },
+    });
+    if (already) return { ok: false };
+  }
 
   const mode = String(formData.get("mode") || "existing");
   let requestId = String(formData.get("requestId") || "");
@@ -2595,12 +2608,54 @@ export async function createScheduleBlock(formData: FormData): Promise<ScheduleR
     if (await requestLocked(requestId)) return { ok: false };
   }
 
+  const note = String(formData.get("note") || "").trim();
   const block = await prisma.scheduleBlock.create({
-    data: { userId: user.id, requestId, start, end, note: String(formData.get("note") || "").trim() || null },
+    data: { userId: user.id, requestId, start, end, note: note || null, googleEventId },
   });
+  if (googleEventId) await logBlockHours(user, block.id, requestId, hours, note, start, "una reunión de Google Calendar");
   const overlaps = await overlapWarnings(user.id, start, end, block.id);
   revalidatePath("/perfil");
   return { ok: true, overlaps };
+}
+
+// TimeEntry real a partir de un bloque, y lo enlaza — compartido entre
+// "Registrar horas" de un bloque y cargar una reunión de Google.
+async function logBlockHours(
+  user: { id: string; name: string },
+  blockId: string,
+  requestId: string,
+  hours: number,
+  note: string,
+  date: Date,
+  source: string,
+) {
+  const entry = await prisma.timeEntry.create({
+    data: { requestId, userId: user.id, hours, note: note || null, date },
+  });
+  await prisma.scheduleBlock.update({ where: { id: blockId }, data: { timeEntryId: entry.id } });
+  await prisma.activity.create({
+    data: {
+      requestId,
+      type: "time_logged",
+      message: `Cargó ${hours} h desde ${source}${note ? ` — ${note}` : ""}`,
+      actorName: user.name,
+    },
+  });
+  revalidatePath("/bolsa");
+  revalidatePath("/dashboard");
+}
+
+// Desvincula Google Calendar: borra el token y lo revoca en Google. Los
+// bloques ya cargados desde reuniones se mantienen.
+export async function disconnectGoogleCalendar(): Promise<void> {
+  const user = await getSessionUser();
+  if (!user) return;
+  const link = await prisma.googleCalendarLink.findUnique({ where: { userId: user.id } });
+  if (!link) return;
+  await prisma.googleCalendarLink.delete({ where: { userId: user.id } });
+  const token = decryptToken(link.refreshToken);
+  if (token) await revokeToken(token);
+  revalidatePath("/perfil");
 }
 
 // Mover o redimensionar un bloque (arrastrar en el calendario).
@@ -2655,27 +2710,16 @@ export async function confirmScheduleBlockHours(blockId: string, formData: FormD
   const note = String(formData.get("note") || "").trim();
   const dateStr = String(formData.get("date") || "");
 
-  const entry = await prisma.timeEntry.create({
-    data: {
-      requestId: block.requestId,
-      userId: user.id,
-      hours,
-      note: note || null,
-      date: dateStr ? parseLocalDate(dateStr) : block.start,
-    },
-  });
-  await prisma.scheduleBlock.update({ where: { id: blockId }, data: { timeEntryId: entry.id } });
-  await prisma.activity.create({
-    data: {
-      requestId: block.requestId,
-      type: "time_logged",
-      message: `Cargó ${hours} h desde su calendario${note ? ` — ${note}` : ""}`,
-      actorName: user.name,
-    },
-  });
+  await logBlockHours(
+    user,
+    blockId,
+    block.requestId,
+    hours,
+    note,
+    dateStr ? parseLocalDate(dateStr) : block.start,
+    "su calendario",
+  );
   revalidatePath("/perfil");
-  revalidatePath("/bolsa");
-  revalidatePath("/dashboard");
   return { ok: true };
 }
 

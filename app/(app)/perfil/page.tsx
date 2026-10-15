@@ -9,7 +9,8 @@ import { avatarSrc, Avatar } from "@/components/ui";
 import { AvatarUpload } from "@/components/AvatarUpload";
 import { PersonalCalendar, DayHours } from "@/components/PersonalCalendar";
 import { SubmitButton } from "@/components/SubmitButton";
-import { updateWorkHours } from "@/app/actions";
+import { disconnectGoogleCalendar, updateWorkHours } from "@/app/actions";
+import { fetchGoogleEvents, googleConfigured, type GoogleFetchResult } from "@/lib/googleCalendar";
 import {
   calendarDays,
   expectedHours,
@@ -36,13 +37,14 @@ export default async function PerfilPage({
     date?: string;
     view?: string;
     tab?: string;
+    google?: string;
   }>;
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
   if (user.role === "CLIENTE") redirect("/portal");
 
-  const { week, date, view, tab } = await searchParams;
+  const { week, date, view, tab, google } = await searchParams;
   // `week` = enlaces viejos (?week=YYYY-MM-DD).
   const calDate = date ?? week ?? "";
   const activeTab = tab === "calendario" ? "calendario" : "resumen";
@@ -80,6 +82,7 @@ export default async function PerfilPage({
             capabilities={user.capabilities}
             view={view === "dia" || view === "mes" ? view : "semana"}
             date={/^\d{4}-\d{2}-\d{2}$/.test(calDate) ? calDate : toDateInput(new Date())}
+            googleResult={google}
           />
         ) : (
           <PersonalSummary data={await loadPersonalDashboard(user.id)} />
@@ -94,11 +97,13 @@ async function CalendarTab({
   capabilities,
   view,
   date,
+  googleResult,
 }: {
   userId: string;
   capabilities: Capabilities;
   view: CalendarView;
   date: string;
+  googleResult?: string;
 }) {
   const days = calendarDays(view, date);
   const start = parseLocalDate(days[0]);
@@ -131,7 +136,7 @@ async function CalendarTab({
     ? clientScopeWhere(capabilities, "clients.view", userId)
     : { OR: [{ accountManagerId: userId }, { members: { some: { userId } } }] };
 
-  const [blocks, myTasks, clients, entries, me] = await Promise.all([
+  const [blocks, myTasks, clients, entries, me, googleLink] = await Promise.all([
     prisma.scheduleBlock.findMany({
       where: {
         userId,
@@ -182,7 +187,24 @@ async function CalendarTab({
       where: { id: userId },
       select: { workHours: true },
     }),
+    prisma.googleCalendarLink.findUnique({ where: { userId } }),
   ]);
+
+  // Reuniones de Google del rango visible (no en la vista mes, que es solo
+  // un resumen). Se consultan en vivo en cada carga: no se guardan en REVO.
+  const google: GoogleFetchResult | null =
+    googleLink && view !== "mes" ? await fetchGoogleEvents(googleLink.refreshToken, start, end) : null;
+  let googleEvents = google?.status === "ok" ? google.events : [];
+  if (googleEvents.length > 0) {
+    // Las ya cargadas (aunque el bloque se haya movido a otro día) no se
+    // vuelven a ofrecer.
+    const imported = await prisma.scheduleBlock.findMany({
+      where: { userId, googleEventId: { in: googleEvents.map((e) => e.id) } },
+      select: { googleEventId: true },
+    });
+    const done = new Set(imported.map((b) => b.googleEventId));
+    googleEvents = googleEvents.filter((e) => !done.has(e.id));
+  }
 
   const workHours = parseWorkHours(me?.workHours);
   const hoursByDay: Record<string, number> = {};
@@ -234,8 +256,11 @@ async function CalendarTab({
             ))}
           </div>
           <WorkHoursForm workHours={workHours} />
+          {googleConfigured() && <GoogleCalendarControl email={googleLink?.googleEmail ?? null} />}
         </div>
       </div>
+
+      <GoogleNotice result={googleResult} fetch={google} />
 
       {view === "mes" ? (
         <MonthGrid
@@ -253,6 +278,7 @@ async function CalendarTab({
           hoursByDay={hoursByDay}
           workHours={workHours}
           blocks={calendarBlocks}
+          googleEvents={googleEvents}
           tasks={openTasks.map((t) => ({
             id: t.id,
             key: t.key,
@@ -384,5 +410,74 @@ function WorkHoursForm({ workHours }: { workHours: number[] }) {
         </SubmitButton>
       </form>
     </details>
+  );
+}
+
+// Vincular / desvincular el Google Calendar propio (solo lectura).
+function GoogleCalendarControl({ email }: { email: string | null }) {
+  if (!email)
+    return (
+      <a
+        href="/api/google/connect"
+        className="rounded-lg border border-[#e4e8ec] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#5d6b77] hover:text-[#081826]"
+      >
+        Vincular Google Calendar
+      </a>
+    );
+  return (
+    <details className="relative">
+      <summary className="cursor-pointer list-none rounded-lg border border-[#e4e8ec] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#5d6b77] hover:text-[#081826]">
+        Google Calendar ✓
+      </summary>
+      <div className="absolute right-0 z-20 mt-1 w-72 space-y-3 rounded-xl border border-[#e4e8ec] bg-white p-4 shadow-lg">
+        <p className="text-xs text-[#5d6b77]">
+          Vinculado con <span className="font-semibold text-[#081826]">{email}</span>. Tus reuniones aparecen con borde
+          punteado: haz clic en una para cargarla como horas a una tarea. REVO solo lee tu calendario, nunca lo modifica.
+        </p>
+        <div className="flex gap-2">
+          <a
+            href="/api/google/connect"
+            className="flex-1 rounded-md border border-[#e4e8ec] py-1.5 text-center text-xs font-semibold text-[#5d6b77] hover:text-[#081826]"
+          >
+            Cambiar cuenta
+          </a>
+          <form action={disconnectGoogleCalendar} className="flex-1">
+            <SubmitButton className="w-full rounded-md border border-[#f1c3c9] py-1.5 text-xs font-semibold text-[#d21f3c] hover:bg-[#fdeef0]">
+              Desvincular
+            </SubmitButton>
+          </form>
+        </div>
+      </div>
+    </details>
+  );
+}
+
+// Resultado de la vinculación (?google=… al volver de Google) o problema
+// al leer las reuniones en esta carga.
+function GoogleNotice({ result, fetch }: { result?: string; fetch: GoogleFetchResult | null }) {
+  const notice =
+    fetch?.status === "reconnect"
+      ? { ok: false, text: "Google Calendar dejó de dar acceso. Vuelve a vincularlo para ver tus reuniones." }
+      : fetch?.status === "error"
+        ? { ok: false, text: "No se pudieron cargar tus reuniones de Google en este momento. Intenta recargar." }
+        : result === "ok"
+          ? { ok: true, text: "Google Calendar vinculado. Tus reuniones aparecen con borde punteado." }
+          : result === "error"
+            ? { ok: false, text: "No se pudo vincular Google Calendar. Intenta de nuevo." }
+            : result === "no-config"
+              ? { ok: false, text: "La integración con Google Calendar aún no está configurada." }
+              : null;
+  if (!notice) return null;
+  return (
+    <div
+      className={`mb-3 flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm ${notice.ok ? "border-[#9fe3c6] bg-[#e3f6ee] text-[#0a7a52]" : "border-[#fda565] bg-[#fdf1e3] text-[#9a5a25]"}`}
+    >
+      <span>{notice.text}</span>
+      {fetch?.status === "reconnect" && (
+        <a href="/api/google/connect" className="shrink-0 text-xs font-semibold hover:underline">
+          Vincular de nuevo
+        </a>
+      )}
+    </div>
   );
 }

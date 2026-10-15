@@ -162,6 +162,9 @@ model User {
   avatarUpdatedAt DateTime?
   avatar          UserAvatar?
 
+  // Google Calendar vinculado (solo lectura) — null = sin vincular.
+  googleCalendar GoogleCalendarLink?
+
   // Jornada laboral: horas netas esperadas por día [lun..dom] para
   // comparar con las horas registradas en el calendario. null = default
   // (ver lib/workSchedule.ts).
@@ -477,8 +480,28 @@ model ScheduleBlock {
   timeEntryId String?    @unique
   timeEntry   TimeEntry? @relation(fields: [timeEntryId], references: [id])
 
+  // Reunión de Google Calendar de la que se cargó este bloque — evita
+  // cargar dos veces la misma reunión. null = bloque creado a mano.
+  googleEventId String?
+
+  @@unique([userId, googleEventId])
   @@index([userId])
   @@index([requestId])
+}
+
+// Calendario de Google vinculado por cada persona (OAuth propio, solo
+// lectura): sus reuniones se ven en el calendario de /perfil y se pueden
+// cargar como horas a una tarea. REVO nunca escribe en Google. El refresh
+// token va cifrado (lib/googleCalendar.ts).
+model GoogleCalendarLink {
+  id           String   @id @default(cuid())
+  googleEmail  String
+  refreshToken String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Activity {

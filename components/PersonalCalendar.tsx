@@ -23,6 +23,14 @@ export type CalendarBlock = {
   request: { key: string; title: string; status: string; color: string };
 };
 
+// Reunión de Google Calendar aún no cargada (ver lib/googleCalendar.ts).
+export type CalendarGoogleEvent = {
+  id: string;
+  title: string;
+  start: string; // ISO
+  end: string; // ISO
+};
+
 export type CalendarTask = {
   id: string;
   key: string;
@@ -57,6 +65,7 @@ export function PersonalCalendar({
   hoursByDay,
   workHours,
   blocks,
+  googleEvents = [],
   tasks,
   clients,
 }: {
@@ -64,6 +73,7 @@ export function PersonalCalendar({
   hoursByDay: Record<string, number>; // horas registradas (TimeEntry) por día
   workHours: number[]; // jornada esperada lun..dom
   blocks: CalendarBlock[];
+  googleEvents?: CalendarGoogleEvent[];
   tasks: CalendarTask[];
   clients: {
     id: string;
@@ -102,9 +112,18 @@ export function PersonalCalendar({
     end: Date;
   } | null>(null);
   const [panel, setPanel] = useState<
-    { kind: "create"; start: Date; end: Date } | { kind: "confirm"; block: (typeof items)[number] } | null
+    | { kind: "create"; start: Date; end: Date }
+    | { kind: "confirm"; block: (typeof items)[number] }
+    | { kind: "google"; event: CalendarGoogleEvent }
+    | null
   >(null);
   const [warning, setWarning] = useState<string | null>(null);
+  // Horas, posiciones y "hoy" dependen de la zona horaria: el servidor
+  // (UTC en Vercel) y el navegador no coinciden, ni en cómo formatea
+  // toLocaleTimeString. Se dibujan solo en el navegador, tras montar, para
+  // no provocar errores de hidratación.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const dragState = useRef<
     | { kind: "create"; day: number; dayStart: Date; originY: number }
     | {
@@ -305,7 +324,10 @@ export function PersonalCalendar({
               const dayEnd = new Date(day);
               dayEnd.setDate(dayEnd.getDate() + 1);
               const dayBlocks = items.filter((b) => b.startD >= dayStart && b.startD < dayEnd);
-              const isToday = new Date().toDateString() === day.toDateString();
+              const dayMeetings = googleEvents
+                .map((ev) => ({ ev, startD: new Date(ev.start), endD: new Date(ev.end) }))
+                .filter((m) => m.startD >= dayStart && m.startD < dayEnd);
+              const isToday = mounted && new Date().toDateString() === day.toDateString();
               const registered = hoursByDay[dayKeys[i]] ?? 0;
               const expected = expectedHours(workHours, dayKeys[i]);
               const extra = extraHours(registered, expected);
@@ -349,7 +371,27 @@ export function PersonalCalendar({
                         }}
                       />
                     )}
-                    {dayBlocks.map((b) => (
+                    {/* Reuniones de Google: debajo de los bloques propios, clic = cargarla a una tarea. */}
+                    {mounted &&
+                      dayMeetings.map(({ ev, startD, endD }) => (
+                      <button
+                        key={ev.id}
+                        type="button"
+                        data-block
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={() => setPanel({ kind: "google", event: ev })}
+                        className="absolute inset-x-1 overflow-hidden rounded-md border-2 border-dashed border-[#9aa5ad] bg-[#f4f6f8]/90 px-1.5 py-1 text-left text-[11px] leading-tight text-[#3d4a55] hover:border-[#0bdbcf] hover:bg-[#f0fdfc]"
+                        style={{ top: topOf(startD), height: heightOf(startD, endD) }}
+                        title={`Reunión de Google Calendar: ${ev.title}\n${fmtTime(startD)}–${fmtTime(endD)}\nClic para cargarla como horas`}
+                      >
+                        <div className="truncate font-semibold">{ev.title}</div>
+                        <div className="text-[10px] opacity-80">
+                          {fmtTime(startD)}–{fmtTime(endD)} · Google
+                        </div>
+                      </button>
+                    ))}
+                    {mounted &&
+                      dayBlocks.map((b) => (
                       <div
                         key={b.id}
                         data-block
@@ -389,12 +431,24 @@ export function PersonalCalendar({
       <p className="mt-2 text-xs text-[#7f7f7f]">
         Arrastra sobre una columna vacía para crear un bloque, arrastra un bloque para moverlo, y su borde inferior para
         ajustar la duración. Los bloques pueden cruzarse: solo se avisa, no se bloquea.
+        {googleEvents.length > 0 && " Las reuniones de Google (borde punteado) se cargan como horas con un clic."}
       </p>
 
       {panel?.kind === "create" && (
         <BlockFormModal
           start={panel.start}
           end={panel.end}
+          tasks={tasks}
+          clients={clients}
+          onClose={() => setPanel(null)}
+          onSubmit={onCreate}
+        />
+      )}
+      {panel?.kind === "google" && (
+        <BlockFormModal
+          start={new Date(panel.event.start)}
+          end={new Date(panel.event.end)}
+          googleEvent={panel.event}
           tasks={tasks}
           clients={clients}
           onClose={() => setPanel(null)}
@@ -576,6 +630,7 @@ function TaskPicker({ tasks }: { tasks: CalendarTask[] }) {
 function BlockFormModal({
   start,
   end,
+  googleEvent,
   tasks,
   clients,
   onClose,
@@ -583,6 +638,8 @@ function BlockFormModal({
 }: {
   start: Date;
   end: Date;
+  // Si viene, el bloque se crea desde esa reunión y registra horas altiro.
+  googleEvent?: CalendarGoogleEvent;
   tasks: CalendarTask[];
   clients: {
     id: string;
@@ -595,13 +652,17 @@ function BlockFormModal({
   const [mode, setMode] = useState<"existing" | "new">(tasks.length > 0 ? "existing" : "new");
   const [clientId, setClientId] = useState("");
   const projects = clients.find((c) => c.id === clientId)?.projects ?? [];
+  // Mismo redondeo al cuarto de hora que ConfirmBlockModal (step="0.25").
+  const durationH = Math.round((end.getTime() - start.getTime()) / 3600000 / 0.25) * 0.25;
 
   return (
-    <Modal title="Nuevo bloque de horario" onClose={onClose}>
+    <Modal title={googleEvent ? "Cargar reunión de Google" : "Nuevo bloque de horario"} onClose={onClose}>
       <form action={onSubmit} className="space-y-3">
         <input type="hidden" name="start" value={toLocalInput(start)} />
         <input type="hidden" name="end" value={toLocalInput(end)} />
+        {googleEvent && <input type="hidden" name="googleEventId" value={googleEvent.id} />}
         <div className="rounded-lg bg-[#f4f6f8] px-3 py-2 text-sm text-[#5d6b77]">
+          {googleEvent && <div className="mb-0.5 font-semibold text-[#081826]">{googleEvent.title}</div>}
           {start.toLocaleDateString("es-CL", {
             weekday: "long",
             day: "2-digit",
@@ -700,14 +761,35 @@ function BlockFormModal({
           </>
         )}
 
-        <div>
-          <label className={labelCls}>Nota del bloque (opcional)</label>
-          <input name="note" placeholder="Ej. avanzar diseño home" className={inputCls} />
-        </div>
+        {googleEvent ? (
+          <div className="grid grid-cols-[6rem_1fr] gap-3">
+            <div>
+              <label className={labelCls}>Horas</label>
+              <input
+                name="hours"
+                type="number"
+                step="0.25"
+                min="0.25"
+                defaultValue={durationH}
+                required
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Nota</label>
+              <input name="note" defaultValue={googleEvent.title} className={inputCls} />
+            </div>
+          </div>
+        ) : (
+          <div>
+            <label className={labelCls}>Nota del bloque (opcional)</label>
+            <input name="note" placeholder="Ej. avanzar diseño home" className={inputCls} />
+          </div>
+        )}
 
         <div className="flex gap-2 pt-1">
           <SubmitButton className="rounded-md bg-[#0bdbcf] px-4 py-2 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]">
-            Crear bloque
+            {googleEvent ? "Cargar horas" : "Crear bloque"}
           </SubmitButton>
           <button
             type="button"
