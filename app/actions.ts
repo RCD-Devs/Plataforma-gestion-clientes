@@ -320,6 +320,13 @@ async function clientIsActive(clientId: string): Promise<boolean> {
   return (await prisma.client.count({ where: { id: clientId, isActive: true } })) > 0;
 }
 
+// ¿Va correo al solicitante? No si la solicitud tiene los correos apagados,
+// ni si quien actúa es el propio solicitante (nadie necesita un correo por
+// su propio cambio). La campana in-app se crea igual.
+function emailsRequester(req: { requesterEmail: string; emailRequester: boolean }, actorEmail: string) {
+  return req.emailRequester && req.requesterEmail.trim().toLowerCase() !== actorEmail.trim().toLowerCase();
+}
+
 async function requestLocked(requestId: string): Promise<boolean> {
   const r = await prisma.request.findUnique({ where: { id: requestId }, select: { archivedAt: true } });
   return !r || !!r.archivedAt;
@@ -365,6 +372,7 @@ export async function changeStatus(
       requestId,
       title: `Tu solicitud ${req.key} ahora está "${label}"`,
       body: `El estado de tu solicitud "${req.title}" (${req.key}) para ${req.client.name} cambió a "${label}".`,
+      email: emailsRequester(req, user.email),
     });
   }
   refreshLists(req.key);
@@ -413,6 +421,31 @@ export async function updatePriority(
   const req = await prisma.request.update({
     where: { id: requestId },
     data: { priority },
+  });
+  refreshLists(req.key);
+  return { ok: true };
+}
+
+// Prender/apagar los correos al solicitante de una solicitud ya creada.
+// Cualquiera del equipo; la campana in-app sigue llegando igual.
+export async function setEmailRequester(
+  requestId: string,
+  enabled: boolean,
+): Promise<{ ok: boolean }> {
+  const user = await getSessionUser();
+  if (!user || !isTeamRole(user.role)) return { ok: false };
+  if (await requestLocked(requestId)) return { ok: false };
+  const req = await prisma.request.update({
+    where: { id: requestId },
+    data: { emailRequester: enabled },
+  });
+  await prisma.activity.create({
+    data: {
+      requestId,
+      type: "email_requester",
+      message: enabled ? "Activó los correos al solicitante" : "Desactivó los correos al solicitante",
+      actorName: user.name,
+    },
   });
   refreshLists(req.key);
   return { ok: true };
@@ -675,6 +708,7 @@ export async function createSubtask(parentId: string, formData: FormData) {
         projectId: parent.projectId,
         parentId: parent.id,
         requesterEmail: parent.requesterEmail,
+        emailRequester: parent.emailRequester,
         status: "POR_HACER",
       },
     }),
@@ -1505,6 +1539,7 @@ export async function addComment(formData: FormData) {
       requestId,
       title: `Nuevo comentario en ${req.key}`,
       body,
+      email: emailsRequester(req, user!.email),
     });
   }
   if (isClient) {
@@ -1706,6 +1741,7 @@ export async function handoffRequest(formData: FormData) {
       requestId,
       title: `Tu solicitud ${req.key} ahora está "${label}"`,
       body: `El estado de tu solicitud "${req.title}" (${req.key}) para ${req.client.name} cambió a "${label}".`,
+      email: emailsRequester(req, user.email),
     });
   }
   refreshLists(req.key);
@@ -1756,6 +1792,7 @@ export async function submitRequest(formData: FormData) {
   const rawPriority = String(formData.get("priority") || "MEDIA");
   const priority = PRIORITY_MAP[rawPriority] ? rawPriority : "MEDIA";
   const dueStr = String(formData.get("dueDate") || "");
+  const emailRequester = formData.get("emailRequester") === "1";
   if (!clientId || !title) redirect("/solicitar?error=datos");
   // Cliente archivado: no recibe solicitudes por ninguna vía (el select ya
   // no lo muestra; esto cubre un POST armado a mano).
@@ -1797,6 +1834,7 @@ export async function submitRequest(formData: FormData) {
         description,
         priority,
         requesterEmail,
+        emailRequester,
         clientId,
         projectId: project?.id ?? null,
         assigneeId: assignee?.id ?? null,
@@ -1830,6 +1868,7 @@ export async function submitRequest(formData: FormData) {
     requestId: req.id,
     title: `Recibimos tu solicitud ${req.key}`,
     body: `Recibimos tu solicitud "${title}" para ${req.client.name}. Su folio es ${req.key} y su estado es "Sin triaje". Te avisaremos por correo cada cambio de estado.`,
+    email: emailsRequester(req, sessionUser.email),
   });
   refreshLists();
   redirect(`/solicitar/gracias?key=${req.key}`);

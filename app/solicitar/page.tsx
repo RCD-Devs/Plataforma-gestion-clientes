@@ -110,6 +110,16 @@ export default async function SolicitarPage({
               className={inputCls}
             />
           </Field>
+          <label className="-mt-2 inline-flex cursor-pointer items-center gap-1.5 text-xs text-[#6b7280]">
+            <input
+              type="checkbox"
+              name="emailRequester"
+              value="1"
+              defaultChecked
+              className="h-3.5 w-3.5 accent-[#0bdbcf]"
+            />
+            Avisar por correo al solicitante (se puede cambiar después en la ficha)
+          </label>
 
           <Field label="Tipo de solicitud">
             <select name="type" className={inputCls} defaultValue={REQUEST_TYPES[0]}>

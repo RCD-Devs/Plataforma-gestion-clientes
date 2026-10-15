@@ -11,6 +11,7 @@ import {
   AssigneeSelect,
   PrioritySelect,
   ClientSelect,
+  EmailRequesterToggle,
 } from "@/components/controls";
 import { avatarSrc, Avatar, ClientTag } from "@/components/ui";
 import {
@@ -532,6 +533,11 @@ export default async function RequestDetail({
               <Row label="Solicitante">
                 <span className="truncate">{req.requesterEmail || "—"}</span>
               </Row>
+              {req.requesterEmail && (
+                <Row label="Correos al solicitante">
+                  <EmailRequesterToggle requestId={req.id} value={req.emailRequester} />
+                </Row>
+              )}
               <Row label="Prioridad cliente">
                 <span>{req.clientPriority ? `${req.clientPriority}/5` : "—"}</span>
               </Row>

@@ -129,27 +129,37 @@ function escapeHtml(s: string) {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
+// email: false deja solo la notificación in-app (solicitud con correos
+// apagados, o el aviso sería por una acción del propio solicitante).
 export async function notifyClient(opts: {
   to: string;
   requestId?: string;
   title: string;
   body: string;
+  email?: boolean;
 }) {
   if (!opts.to) return;
-  await sendEmail({
-    to: opts.to,
-    subject: opts.title,
-    html: emailLayout({ title: opts.title, bodyHtml: `<p style="margin:0;">${opts.body}</p>` }),
-  });
+  const email = opts.email ?? true;
+  if (email) {
+    await sendEmail({
+      to: opts.to,
+      subject: opts.title,
+      html: emailLayout({ title: opts.title, bodyHtml: `<p style="margin:0;">${opts.body}</p>` }),
+    });
+  }
   await prisma.notification.createMany({
     data: [
-      {
-        recipientEmail: opts.to,
-        requestId: opts.requestId,
-        title: opts.title,
-        body: opts.body,
-        channel: "email",
-      },
+      ...(email
+        ? [
+            {
+              recipientEmail: opts.to,
+              requestId: opts.requestId,
+              title: opts.title,
+              body: opts.body,
+              channel: "email",
+            },
+          ]
+        : []),
       {
         recipientEmail: opts.to,
         requestId: opts.requestId,

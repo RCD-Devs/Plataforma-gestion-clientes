@@ -10,6 +10,7 @@ import {
   updatePriority,
   setClientPriority,
   changeRequestClient,
+  setEmailRequester,
 } from "@/app/actions";
 
 const selectCls =
@@ -145,6 +146,36 @@ export function PrioritySelect({
         </span>
       )}
     </span>
+  );
+}
+
+export function EmailRequesterToggle({
+  requestId,
+  value,
+}: {
+  requestId: string;
+  value: boolean;
+}) {
+  const s = useRevertOnFailure(value);
+  return (
+    <label className="inline-flex cursor-pointer items-center gap-1.5 text-sm">
+      <input
+        type="checkbox"
+        checked={s.value}
+        disabled={s.pending}
+        onChange={(e) => {
+          const v = e.target.checked;
+          s.run(v, () => setEmailRequester(requestId, v));
+        }}
+        className="h-3.5 w-3.5 accent-[#0bdbcf]"
+      />
+      <span className={s.value ? "" : "text-[#6b7280]"}>{s.value ? "Activados" : "Desactivados"}</span>
+      {s.failed && (
+        <span className="text-xs text-[#d21f3c]" title="No se pudo guardar el cambio">
+          ⚠
+        </span>
+      )}
+    </label>
   );
 }
 

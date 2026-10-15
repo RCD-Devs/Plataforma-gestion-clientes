@@ -291,6 +291,10 @@ model Request {
   clientPriority Int?
   dueDate        DateTime?
   requesterEmail String    @default("")
+  // Correos al solicitante (creación, cambios de estado, comentarios).
+  // Apagado = solo campana/historial; lo cambia cualquiera del equipo
+  // desde el formulario o la ficha. Las subtareas lo heredan del padre.
+  emailRequester Boolean   @default(true)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   finalizedAt    DateTime?
