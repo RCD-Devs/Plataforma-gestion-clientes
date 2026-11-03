@@ -56,7 +56,8 @@ const CLIENT_ALIAS: Record<string, [string, string?]> = {
   blogariel: ["Ariel Jeria"],
   rompecabeza: ["Grupo Revo"],
   interno: ["Grupo Revo"],
-  vraea: ["UdeC"],
+  vraea: ["VRAEA"], // ya existe en prod (24 sep: se junta ahí en vez de crear UdeC)
+  udec: ["VRAEA"],
   casaideas: ["Casa & Ideas"],
   bancosecurity: ["Grupo Security"],
   ayg: ["Arteaga & Gorziglia"],
