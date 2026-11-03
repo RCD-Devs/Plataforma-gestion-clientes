@@ -17,7 +17,7 @@ export function TeamForm({
   action,
   submitLabel,
 }: {
-  team?: { id: string; name: string; color: string | null };
+  team?: { id: string; name: string; color: string | null; leadIds?: string[] };
   users: { id: string; name: string; role: string; teamId: string | null }[];
   error?: string;
   action: (formData: FormData) => void | Promise<void>;
@@ -66,6 +66,30 @@ export function TeamForm({
           {users.length === 0 && (
             <p className="text-xs text-[#6b7280]">Aún no hay usuarios creados.</p>
           )}
+        </div>
+      </div>
+      <div>
+        <label className={labelCls}>A cargo del equipo</label>
+        <p className="mb-1.5 text-xs text-[#6b7280]">
+          Directores o líderes que gestionan la daily de este equipo aunque pertenezcan a otro. Una persona puede estar a
+          cargo de varios equipos.
+        </p>
+        <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-[#e4e8ec] p-3">
+          {users.map((u) => (
+            <label key={u.id} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                name="leadIds"
+                value={u.id}
+                defaultChecked={team?.leadIds?.includes(u.id) ?? false}
+                className="h-4 w-4 accent-[#0bdbcf]"
+              />
+              {u.name}{" "}
+              <span className="text-xs text-[#6b7280]">
+                · {ROLE_MAP[u.role]?.label ?? u.role}
+              </span>
+            </label>
+          ))}
         </div>
       </div>
       <div className="flex gap-2 pt-2">

@@ -85,6 +85,7 @@ export async function loadAuthzUser(userId: string) {
       roles: { include: { role: { include: { permissions: true } } } },
       managedClients: { select: { id: true } },
       clientMemberships: { select: { clientId: true } },
+      teamsLed: { select: { teamId: true } },
     },
   });
   if (!user || !user.isActive) return null;
@@ -106,7 +107,10 @@ export async function loadAuthzUser(userId: string) {
     ...new Set([...user.managedClients.map((c) => c.id), ...user.clientMemberships.map((m) => m.clientId)]),
   ];
 
-  return { ...user, capabilities, roleCodes, roleNames, ownClientIds };
+  // "Mis equipos" (dailys): el propio + los que tengo a cargo.
+  const ownTeamIds = [...new Set([...(user.teamId ? [user.teamId] : []), ...user.teamsLed.map((t) => t.teamId)])];
+
+  return { ...user, capabilities, roleCodes, roleNames, ownClientIds, ownTeamIds };
 }
 
 export type SessionUser = NonNullable<Awaited<ReturnType<typeof getSessionUser>>>;

@@ -22,8 +22,9 @@ import {
   requestVisibilityWhere,
   followUpVisibilityWhere,
   canManageFollowUp,
+  canManageDailyTeam,
 } from "@/lib/authz";
-import { hasAccess, canOnClient, canManageClients, ACTIONS, type ActionId, type Capabilities } from "@/lib/permissions";
+import { hasAccess, canOnClient, canManageClients, ACTIONS, type ActionId, type Capabilities, type Scope } from "@/lib/permissions";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { logAudit } from "@/lib/audit";
 import { storeUploadedFile } from "@/lib/attachments";
@@ -1307,15 +1308,14 @@ export async function updateRolePermissions(roleId: string, formData: FormData) 
   await prisma.$transaction([
     prisma.role.update({ where: { id: roleId }, data: { name } }),
     prisma.rolePermission.deleteMany({ where: { roleId } }),
+    // "Sin acceso" se guarda como fila explícita (scope "none"), no como
+    // ausencia: si no, la carga de roles del deploy (seed-roles, que crea
+    // los permisos por defecto que faltan) se lo volvía a dar al rol.
     prisma.rolePermission.createMany({
-      data: ACTIONS.filter((a) => {
+      data: ACTIONS.map((a) => {
         const scope = String(formData.get(`scope__${a.key}`) || "none");
-        return scope !== "none";
-      }).map((a) => ({
-        roleId,
-        action: a.key,
-        scope: String(formData.get(`scope__${a.key}`) || "none"),
-      })),
+        return { roleId, action: a.key, scope: a.scopes.includes(scope as Scope) ? scope : "none" };
+      }),
     }),
   ]);
   await logAudit({
@@ -2505,10 +2505,12 @@ export async function createTeam(formData: FormData) {
   if (!name) redirect("/admin/equipos/nuevo?error=nombre");
 
   const memberIds = formData.getAll("memberIds").map(String).filter(Boolean);
+  const leadIds = [...new Set(formData.getAll("leadIds").map(String).filter(Boolean))];
   const team = await prisma.team.create({
     data: {
       name,
       color: String(formData.get("color") || "").trim() || null,
+      leads: { create: leadIds.map((userId) => ({ userId })) },
     },
   });
   if (memberIds.length > 0) {
@@ -2535,11 +2537,14 @@ export async function updateTeam(id: string, formData: FormData) {
   if (!name) redirect(`/admin/equipos/${id}?error=nombre`);
 
   const memberIds = formData.getAll("memberIds").map(String).filter(Boolean);
+  const leadIds = [...new Set(formData.getAll("leadIds").map(String).filter(Boolean))];
   await prisma.team.update({
     where: { id },
     data: {
       name,
       color: String(formData.get("color") || "").trim() || null,
+      // A cargo del equipo (dailys): se reemplaza el conjunto completo.
+      leads: { deleteMany: {}, create: leadIds.map((userId) => ({ userId })) },
     },
   });
   // User.teamId es 1-a-muchos (sin tabla intermedia): se reconcilia
@@ -3012,11 +3017,14 @@ export async function renameMeeting(formData: FormData) {
   const user = await getSessionUser();
   if (!user || !isTeamRole(user.role)) return;
   const id = String(formData.get("id") || "");
-  const meeting = await prisma.meeting.findUnique({ where: { id }, select: { createdById: true, seriesId: true } });
+  const meeting = await prisma.meeting.findUnique({
+    where: { id },
+    select: { createdById: true, series: { select: { teamId: true } } },
+  });
   if (!meeting) return;
   // Daily automática: su createdBy es quien encabeza la rotación, no un autor real.
-  const allowed = meeting.seriesId
-    ? hasAccess(user.capabilities, "followups.manage")
+  const allowed = meeting.series
+    ? canManageDailyTeam(user, meeting.series.teamId)
     : canManageFollowUp(user, { ownerId: meeting.createdById });
   if (!allowed) return;
   const title = String(formData.get("title") || "").trim().slice(0, 120) || null;
@@ -3078,12 +3086,18 @@ export async function deleteFollowUp(formData: FormData) {
 }
 
 // ── Dailys por equipo (etapa 2) ────────────────────────────────────────
-// Configurar y cambiar fechas: followups.manage (Admin, Líder, Director).
-// Verlas: todo el equipo interno.
+// Configurar y cambiar fechas: dailys.manage — Admin en todos los equipos;
+// Director/Líder en los suyos (propio + a cargo). Ver: lib/authz dailyAccess.
 
-async function dailyManager() {
+async function dailyManager(teamId: string | null | undefined) {
   const user = await getSessionUser();
-  return user && isTeamRole(user.role) && hasAccess(user.capabilities, "followups.manage") ? user : null;
+  return user && teamId && isTeamRole(user.role) && canManageDailyTeam(user, teamId) ? user : null;
+}
+
+// Equipo de la daily planificada (para validar permisos sobre esa fecha).
+async function meetingTeamId(id: string) {
+  return (await prisma.meeting.findUnique({ where: { id }, select: { series: { select: { teamId: true } } } }))?.series
+    ?.teamId;
 }
 
 function revalidateDailys() {
@@ -3095,13 +3109,19 @@ function revalidateDailys() {
 // Días (1=lun…7=dom), hora y orden de rotación; replanifica lo futuro
 // automático (lo cambiado a mano y lo que ya tiene acuerdos se respeta).
 export async function saveDailySeries(formData: FormData) {
-  const user = await dailyManager();
-  if (!user) return;
   const teamId = String(formData.get("teamId") || "");
+  const user = await dailyManager(teamId);
+  if (!user) return;
   if (!(await prisma.team.count({ where: { id: teamId } }))) return;
   const weekdays = [...new Set(formData.getAll("weekdays").map(Number))].filter((d) => Number.isInteger(d) && d >= 1 && d <= 7).sort();
-  const time = String(formData.get("time") || "");
-  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return;
+  // Hora propia de cada día elegido (time_1 … time_7).
+  const dayTimes: Record<string, string> = {};
+  for (const d of weekdays) {
+    const t = String(formData.get(`time_${d}`) || "");
+    if (!isTime(t)) return;
+    dayTimes[String(d)] = t;
+  }
+  const time = dayTimes[String(weekdays[0])] ?? "09:30"; // general, para lo que no tenga hora propia
   const requested = [...new Set(formData.getAll("memberIds").map(String))];
   const valid = new Set(
     (await prisma.user.findMany({ where: { id: { in: requested }, isActive: true, role: { not: "CLIENTE" } }, select: { id: true } })).map(
@@ -3112,18 +3132,33 @@ export async function saveDailySeries(formData: FormData) {
 
   const series = await prisma.dailySeries.upsert({
     where: { teamId },
-    create: { teamId, weekdays, time, memberIds },
-    update: { weekdays, time, memberIds },
+    create: { teamId, weekdays, time, dayTimes, memberIds },
+    update: { weekdays, time, dayTimes, memberIds },
   });
   await replanSeries(series.id);
   revalidateDailys();
 }
 
+const isTime = (t: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(t);
+
+// Otra hora solo para esa fecha (y se vuelve a avisar con la hora nueva).
+export async function setDailyTime(formData: FormData) {
+  const id = String(formData.get("id") || "");
+  const time = String(formData.get("time") || "");
+  const user = await dailyManager(await meetingTeamId(id));
+  if (!user || !isTime(time)) return;
+  await prisma.meeting.updateMany({
+    where: { id, seriesId: { not: null } },
+    data: { time, manualAt: new Date(), dayBeforeNotifiedAt: null, dayOfNotifiedAt: null },
+  });
+  revalidateDailys();
+}
+
 // Otra persona lidera esa fecha (y se le vuelve a avisar).
 export async function setDailyFacilitator(formData: FormData) {
-  const user = await dailyManager();
-  if (!user) return;
   const id = String(formData.get("id") || "");
+  const user = await dailyManager(await meetingTeamId(id));
+  if (!user) return;
   const facilitatorId = String(formData.get("facilitatorId") || "");
   if (!(await prisma.user.count({ where: { id: facilitatorId, isActive: true, role: { not: "CLIENTE" } } }))) return;
   await prisma.meeting.updateMany({
@@ -3135,9 +3170,9 @@ export async function setDailyFacilitator(formData: FormData) {
 
 // cancel=1 la cancela; cancel=0 la restaura (ej. un feriado en que sí hubo daily).
 export async function setDailyCancelled(formData: FormData) {
-  const user = await dailyManager();
-  if (!user) return;
   const id = String(formData.get("id") || "");
+  const user = await dailyManager(await meetingTeamId(id));
+  if (!user) return;
   const cancel = formData.get("cancel") === "1";
   await prisma.meeting.updateMany({
     where: { id, seriesId: { not: null } },

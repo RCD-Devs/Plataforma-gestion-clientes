@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { isTeamRole, isManager, canActOnRequest, requestVisibilityWhere, clientVisibilityWhere } from "./authz";
+import {
+  isTeamRole,
+  isManager,
+  canActOnRequest,
+  requestVisibilityWhere,
+  clientVisibilityWhere,
+  dailyAccess,
+  canManageDailyTeam,
+} from "./authz";
 import type { Capabilities } from "./permissions";
 
 // Mismas capacidades que scripts/seed-roles.ts otorga por defecto a cada
@@ -151,5 +159,25 @@ describe("clientes asignados (miembros)", () => {
     const asignado = { ...coordinador, ownClientIds: ["c-1"] };
     expect(canActOnRequest(asignado, req("c-9", "otro"))).toBe(false);
     expect(canActOnRequest(coordinador, req("c-1", "otro"))).toBe(false);
+  });
+});
+
+describe("dailys por equipo", () => {
+  const base = { teamId: "t-diseno", ownTeamIds: ["t-diseno", "t-dev"] };
+  it("Admin (all) ve y gestiona cualquier equipo", () => {
+    const admin = { ...base, capabilities: { "dailys.manage": ["all"] } as Capabilities };
+    expect(dailyAccess(admin).all).toBe(true);
+    expect(canManageDailyTeam(admin, "t-seo")).toBe(true);
+  });
+  it("Director/Líder (own_teams) gestiona su equipo y los que tiene a cargo, no otros", () => {
+    const lider = { ...base, capabilities: { "dailys.manage": ["own_teams"] } as Capabilities };
+    expect(dailyAccess(lider).view.sort()).toEqual(["t-dev", "t-diseno"]);
+    expect(canManageDailyTeam(lider, "t-dev")).toBe(true);
+    expect(canManageDailyTeam(lider, "t-seo")).toBe(false);
+  });
+  it("El resto ve solo su propio equipo, sin gestionar", () => {
+    const disenador = { ...base, capabilities: {} as Capabilities };
+    expect(dailyAccess(disenador)).toEqual({ all: false, manage: [], view: ["t-diseno"] });
+    expect(canManageDailyTeam(disenador, "t-diseno")).toBe(false);
   });
 });

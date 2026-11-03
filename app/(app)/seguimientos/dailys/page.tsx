@@ -2,17 +2,17 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
-import { isTeamRole } from "@/lib/authz";
-import { hasAccess } from "@/lib/permissions";
+import { isTeamRole, dailyAccess } from "@/lib/authz";
 import { chileDateKey } from "@/lib/dates";
 import { dueLabel } from "@/lib/followUps";
-import { isoWeekday, monthBounds } from "@/lib/dailyRotation";
+import { isoWeekday, monthBounds, timeForDay } from "@/lib/dailyRotation";
 import { holidayYearsCovered } from "@/lib/holidaysCL";
 import { Avatar, avatarSrc } from "@/components/ui";
 import { AutoSubmitSelect } from "@/components/AutoSubmitSelect";
 import { SeguimientosTabs } from "@/components/SeguimientosTabs";
 import { DailySeriesForm } from "@/components/DailySeriesForm";
-import { setDailyCancelled, setDailyFacilitator } from "@/app/actions";
+import { setDailyCancelled, setDailyFacilitator, setDailyTime } from "@/app/actions";
+import { Popover } from "@/components/Popover";
 
 export const dynamic = "force-dynamic";
 
@@ -25,8 +25,9 @@ function shiftMonth(month: string, d: number) {
   return new Date(Date.UTC(y, m - 1 + d, 1)).toISOString().slice(0, 7);
 }
 
-// Dailys por equipo (etapa 2): quién lidera cada fecha del mes. Lo ve
-// todo el equipo interno; configurar y cambiar fechas, followups.manage.
+// Dailys por equipo (etapa 2): quién lidera cada fecha del mes. Admin ve y
+// gestiona todos los equipos; Director/Líder, los suyos (propio + a
+// cargo); el resto ve solo su equipo, sin editar (lib/authz dailyAccess).
 export default async function DailysPage({
   searchParams,
 }: {
@@ -36,12 +37,16 @@ export default async function DailysPage({
   if (!user) redirect("/login");
   if (!isTeamRole(user.role)) redirect("/portal");
   const sp = await searchParams;
-  const canManage = hasAccess(user.capabilities, "followups.manage");
+  const access = dailyAccess(user);
   const todayKey = chileDateKey(new Date());
   const month = /^\d{4}-\d{2}$/.test(sp.mes ?? "") ? sp.mes! : todayKey.slice(0, 7);
 
   const [teams, people] = await Promise.all([
-    prisma.team.findMany({ include: { daily: true }, orderBy: { name: "asc" } }),
+    prisma.team.findMany({
+      where: access.all ? {} : { id: { in: access.view } },
+      include: { daily: true },
+      orderBy: { name: "asc" },
+    }),
     prisma.user.findMany({
       where: { role: { not: "CLIENTE" }, isActive: true },
       select: { id: true, name: true, teamId: true },
@@ -52,13 +57,18 @@ export default async function DailysPage({
     return (
       <div className="flex h-full flex-col">
         <SeguimientosTabs active="dailys" />
-        <p className="p-10 text-center text-sm text-[#7f7f7f]">No hay equipos creados. Se crean en Administración → Equipos.</p>
+        <p className="p-10 text-center text-sm text-[#7f7f7f]">
+          {access.all
+            ? "No hay equipos creados. Se crean en Administración → Equipos."
+            : "No tienes un equipo asignado. Pídele a un Admin que te agregue a uno en Administración → Equipos."}
+        </p>
       </div>
     );
   }
   const team =
     teams.find((t) => t.id === sp.equipo) ?? teams.find((t) => t.id === user.teamId) ?? teams.find((t) => t.daily) ?? teams[0];
   const series = team.daily;
+  const canManage = access.all || access.manage.includes(team.id);
   const href = (patch: { equipo?: string; mes?: string }) => {
     const q = new URLSearchParams({ equipo: patch.equipo ?? team.id, mes: patch.mes ?? month });
     return `/seguimientos/dailys?${q}`;
@@ -83,6 +93,9 @@ export default async function DailysPage({
     : [[], []];
   const next = upcoming[0];
   const rotation = new Set(series?.memberIds ?? []);
+  // Hora de una fecha: la suya (puede venir cambiada a mano) o la del día en la serie.
+  const timeOf = (m: { time: string | null; dayKey: string | null }) =>
+    m.time ?? (series ? timeForDay(series.dayTimes, series.time, isoWeekday(m.dayKey!)) : "");
   const missingHolidays = !holidayYearsCovered().has(month.slice(0, 4));
 
   const facilitatorPicker = (meetingId: string, current: string | null) => (
@@ -115,7 +128,7 @@ export default async function DailysPage({
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-4xl space-y-6 px-4 py-6 sm:px-6">
           {/* Equipos */}
-          <nav aria-label="Equipo" className="flex flex-wrap gap-2">
+          <nav aria-label="Equipo" className={`flex flex-wrap gap-2 ${teams.length === 1 ? "hidden" : ""}`}>
             {teams.map((t) => {
               const on = t.id === team.id;
               return (
@@ -167,7 +180,7 @@ export default async function DailysPage({
                     <div className="min-w-0 flex-1">
                       <div className="text-[11px] font-semibold uppercase tracking-wide text-[#08766f]">Próxima daily</div>
                       <div className="text-lg font-semibold text-[#081826] first-letter:uppercase">
-                        {dueLabel(next.dayKey!, todayKey)} · {series.time}
+                        {dueLabel(next.dayKey!, todayKey)} · {timeOf(next)}
                       </div>
                       <div className="text-sm text-[#3b4552]">
                         {next.facilitator ? (
@@ -243,7 +256,7 @@ export default async function DailysPage({
                           <div className="min-w-0 flex-1">
                             {cancelled ? (
                               <div className="text-sm text-[#7f7f7f]">
-                                <span className="line-through">Daily {series.time}</span>
+                                <span className="line-through">Daily {timeOf(m)}</span>
                                 <span className="ml-2 rounded-full bg-[#f3f4f6] px-2 py-0.5 text-[11px] font-semibold text-[#5d6b77]">
                                   {m.cancelReason ?? "Cancelada"}
                                 </span>
@@ -254,8 +267,8 @@ export default async function DailysPage({
                                 <span className="font-medium text-[#081826]">
                                   {m.facilitator ? (m.facilitator.id === user.id ? "Tú" : m.facilitator.name) : "Sin asignar"}
                                 </span>
-                                <span className="text-xs text-[#9aa3ad]">
-                                  {series.time}
+                                <span className="text-xs tabular-nums text-[#9aa3ad]">
+                                  {timeOf(m)}
                                   {m.manualAt && " · cambiada a mano"}
                                 </span>
                               </div>
@@ -269,6 +282,27 @@ export default async function DailysPage({
                           {canManage && !past && (
                             <div className="flex items-center gap-2">
                               {!cancelled && facilitatorPicker(m.id, m.facilitatorId)}
+                              {!cancelled && (
+                                <Popover
+                                  ariaLabel="Cambiar la hora de esta daily"
+                                  trigger={<span className="text-xs font-semibold tabular-nums text-[#5d6b77]">{timeOf(m)}</span>}
+                                  panelClassName="w-56"
+                                >
+                                  <form action={setDailyTime} className="flex items-center gap-2 p-3">
+                                    <input type="hidden" name="id" value={m.id} />
+                                    <input
+                                      type="time"
+                                      name="time"
+                                      required
+                                      defaultValue={timeOf(m)}
+                                      aria-label="Hora"
+                                      className="min-w-0 flex-1 rounded-md border border-[#e4e8ec] px-2 py-1.5 text-sm"
+                                    />
+                                    <button className="rounded-md bg-[#081826] px-3 py-1.5 text-xs font-semibold text-white">Guardar</button>
+                                  </form>
+                                  <p className="px-3 pb-3 text-[11px] text-[#7f7f7f]">Solo para esta fecha.</p>
+                                </Popover>
+                              )}
                               <form action={setDailyCancelled}>
                                 <input type="hidden" name="id" value={m.id} />
                                 <input type="hidden" name="cancel" value={cancelled ? "0" : "1"} />
@@ -295,7 +329,8 @@ export default async function DailysPage({
                     <span>
                       <span className="block text-sm font-semibold text-[#081826]">Configuración de la daily</span>
                       <span className="text-xs text-[#5d6b77]">
-                        {series.weekdays.map((d) => WEEKDAY_LONG[d]).join(", ") || "sin días"} · {series.time} · {series.memberIds.length} en la rotación
+                        {series.weekdays.map((d) => `${WEEKDAY_LONG[d]} ${timeForDay(series.dayTimes, series.time, d)}`).join(" · ") || "sin días"} ·{" "}
+                        {series.memberIds.length} en la rotación
                       </span>
                     </span>
                     <span aria-hidden="true" className="text-xs text-[#5d6b77] transition group-open/cfg:rotate-180">▼</span>
@@ -303,7 +338,11 @@ export default async function DailysPage({
                   <div className="border-t border-[#f1f3f4] p-5">
                     <DailySeriesForm
                       teamId={team.id}
-                      initial={{ weekdays: series.weekdays, time: series.time, memberIds: series.memberIds }}
+                      initial={{
+                        weekdays: series.weekdays,
+                        times: Object.fromEntries([1, 2, 3, 4, 5, 6, 7].map((d) => [d, timeForDay(series.dayTimes, series.time, d)])),
+                        memberIds: series.memberIds,
+                      }}
                       people={people.map((p) => ({ id: p.id, name: p.name, inTeam: p.teamId === team.id }))}
                     />
                   </div>

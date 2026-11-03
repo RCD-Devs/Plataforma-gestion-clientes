@@ -15,14 +15,14 @@ export default async function EditarEquipoPage({
   const { id } = await params;
   const { error } = await searchParams;
   const [team, users] = await Promise.all([
-    prisma.team.findUnique({ where: { id } }),
+    prisma.team.findUnique({ where: { id }, include: { leads: { select: { userId: true } } } }),
     prisma.user.findMany({ where: { OR: [{ isActive: true }, { teamId: id }] }, orderBy: { name: "asc" }, select: { id: true, name: true, role: true, teamId: true } }), // TeamForm es de cliente: sin passwordHash
   ]);
   if (!team) notFound();
 
   return (
     <TeamForm
-      team={team}
+      team={{ ...team, leadIds: team.leads.map((l) => l.userId) }}
       users={users}
       error={error}
       action={updateTeam.bind(null, id)}

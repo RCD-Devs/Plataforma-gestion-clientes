@@ -3,7 +3,9 @@
 // del 16 sep 2026, para que activar el sistema de roles editables no
 // cambie quién puede hacer qué el día que se despliega. Idempotente:
 // upsert por code/[roleId,action], nunca pisa un permiso que un Admin ya
-// haya editado a mano (mismo criterio que seed-statuses.ts).
+// haya editado a mano (mismo criterio que seed-statuses.ts). "Sin acceso"
+// se guarda como fila con scope "none" (updateRolePermissions), así el
+// upsert la ve y no vuelve a otorgar el permiso por defecto.
 //
 // CLIENTE no está acá — sigue siendo User.role == "CLIENTE", un eje
 // distinto al de roles de equipo (ver ADR "El rol Cliente se mantiene").
@@ -42,6 +44,7 @@ const DEFAULT_PERMISSIONS: [string, ActionId, Scope][] = [
   ["ADMIN", "requests.unarchive", "all"],
   ["ADMIN", "followups.view_all", "all"],
   ["ADMIN", "followups.manage", "all"],
+  ["ADMIN", "dailys.manage", "all"],
 
   ["LIDER_AREA", "requests.access", "all"],
   ["LIDER_AREA", "requests.assign", "all"],
@@ -54,6 +57,7 @@ const DEFAULT_PERMISSIONS: [string, ActionId, Scope][] = [
   ["LIDER_AREA", "projects.budget", "all"],
   ["LIDER_AREA", "followups.view_all", "all"],
   ["LIDER_AREA", "followups.manage", "all"],
+  ["LIDER_AREA", "dailys.manage", "own_teams"],
 
   ["COORDINADOR_CUENTA", "requests.access", "own_clients"],
   ["COORDINADOR_CUENTA", "requests.assign", "all"],
@@ -94,11 +98,15 @@ export async function seedRoles(client: PrismaClient = prisma) {
     select: { id: true },
   });
   for (const r of directors) {
-    for (const action of ["followups.view_all", "followups.manage"] as const) {
+    for (const [action, scope] of [
+      ["followups.view_all", "all"],
+      ["followups.manage", "all"],
+      ["dailys.manage", "own_teams"],
+    ] as const) {
       await client.rolePermission.upsert({
         where: { roleId_action: { roleId: r.id, action } },
         update: {},
-        create: { roleId: r.id, action, scope: "all" },
+        create: { roleId: r.id, action, scope },
       });
     }
   }

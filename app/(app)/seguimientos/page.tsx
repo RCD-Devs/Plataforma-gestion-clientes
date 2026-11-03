@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
-import { isTeamRole, workClientsWhere, followUpVisibilityWhere, canManageFollowUp } from "@/lib/authz";
+import { isTeamRole, workClientsWhere, followUpVisibilityWhere, canManageFollowUp, canManageDailyTeam } from "@/lib/authz";
 import { hasAccess } from "@/lib/permissions";
 import { chileDateKey, DAY } from "@/lib/dates";
 import { addDaysKey, daysToNextMonday, dueLabel, followUpBucket, type FollowUpBucket } from "@/lib/followUps";
@@ -99,7 +99,7 @@ export default async function SeguimientosPage({
         seriesId: true,
         createdBy: { select: { name: true } },
         facilitator: { select: { id: true, name: true } },
-        series: { select: { time: true, team: { select: { name: true } } } },
+        series: { select: { time: true, teamId: true, team: { select: { name: true } } } },
       },
     },
   } as const;
@@ -144,6 +144,7 @@ export default async function SeguimientosPage({
         createdById: true,
         seriesId: true,
         dayKey: true,
+        time: true,
         facilitator: { select: { id: true, name: true } },
         series: { select: { time: true, team: { select: { name: true } } } },
       },
@@ -405,7 +406,7 @@ export default async function SeguimientosPage({
               </span>
               <span className="min-w-0 flex-1">
                 <span className="font-semibold text-[#081826]">
-                  {meetingTitle(todayDaily)} · {todayDaily.series?.time}
+                  {meetingTitle(todayDaily)} · {todayDaily.time ?? todayDaily.series?.time}
                 </span>
                 <span className="text-[#3b4552]">
                   {" "}
@@ -463,8 +464,8 @@ export default async function SeguimientosPage({
               <>
                 {capsules.map(({ meeting: m, items }) => {
                   // Daily automática: su "autor" es quien encabeza la rotación; renombrarla es de quien gestiona.
-                  const canRename = m.seriesId
-                    ? hasAccess(user.capabilities, "followups.manage")
+                  const canRename = m.series
+                    ? canManageDailyTeam(user, m.series.teamId)
                     : canManageFollowUp(user, { ownerId: m.createdById });
                   return (
                     <section key={m.id} className="rounded-2xl border border-[#d9e6ec] bg-[#eef5f8] p-2">

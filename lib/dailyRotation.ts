@@ -25,6 +25,13 @@ export function planDays(fromKey: string, toKey: string, weekdays: number[], hol
   return out;
 }
 
+// Hora de la daily para un día de la semana: la propia del día (dayTimes)
+// o la general de la serie.
+export function timeForDay(dayTimes: unknown, fallback: string, weekday: number): string {
+  const v = (dayTimes as Record<string, unknown> | null)?.[String(weekday)];
+  return typeof v === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? v : fallback;
+}
+
 // Los próximos n turnos siguiendo el orden, partiendo después de quien
 // lideró la última vez (así la carga queda pareja entre meses). Si esa
 // persona ya no está en el orden, parte desde el primero.

@@ -93,7 +93,7 @@ export default async function MiEspacioPage({
     // ¿Me toca liderar la daily hoy?
     prisma.meeting.findFirst({
       where: { facilitatorId: user.id, dayKey: chileDateKey(new Date()), cancelledAt: null, seriesId: { not: null } },
-      select: { series: { select: { time: true, team: { select: { name: true } } } } },
+      select: { time: true, series: { select: { time: true, team: { select: { name: true } } } } },
     }),
   ]);
   const todayKey = chileDateKey(new Date());
@@ -134,7 +134,7 @@ export default async function MiEspacioPage({
             href="/seguimientos"
             className="rounded-lg border border-[#0bdbcf] bg-[#e0fbf9] px-3 py-1.5 text-xs font-semibold text-[#08766f] hover:bg-[#ccf7f3]"
           >
-            ★ Hoy lideras la daily de {leadToday.series.team.name} · {leadToday.series.time}
+            ★ Hoy lideras la daily de {leadToday.series.team.name} · {leadToday.time ?? leadToday.series.time}
           </Link>
         )}
         {followUpsDue > 0 && (

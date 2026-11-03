@@ -4,11 +4,12 @@
 // de autorización de siempre, ahora editables por rol desde /admin/roles.
 import type { Prisma } from "@prisma/client";
 
-export type Scope = "all" | "own_clients" | "assigned" | "none";
+export type Scope = "all" | "own_clients" | "own_teams" | "assigned" | "none";
 
 export const SCOPES: { key: Scope; label: string }[] = [
   { key: "all", label: "Todo" },
   { key: "own_clients", label: "Solo sus clientes" },
+  { key: "own_teams", label: "Solo sus equipos" },
   { key: "assigned", label: "Solo asignadas/colabora" },
   { key: "none", label: "Sin acceso" },
 ];
@@ -30,7 +31,8 @@ export type ActionId =
   | "projects.budget"
   | "hours.manage"
   | "followups.view_all"
-  | "followups.manage";
+  | "followups.manage"
+  | "dailys.manage";
 
 export const ACTIONS: { key: ActionId; label: string; scopes: Scope[] }[] = [
   {
@@ -67,6 +69,11 @@ export const ACTIONS: { key: ActionId; label: string; scopes: Scope[] }[] = [
     key: "followups.manage",
     label: "Editar, reasignar, sumar participantes y eliminar seguimientos de otros (quien lo anota siempre puede)",
     scopes: ["all", "none"],
+  },
+  {
+    key: "dailys.manage",
+    label: "Configurar dailys y cambiar quién lidera (sus equipos = el propio + los que tiene a cargo en Equipos)",
+    scopes: ["all", "own_teams", "none"],
   },
   {
     key: "clients.view",

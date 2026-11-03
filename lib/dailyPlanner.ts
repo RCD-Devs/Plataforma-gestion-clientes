@@ -4,7 +4,7 @@
 // mano (manualAt) ni las que ya tienen acuerdos.
 import { prisma } from "./db";
 import { chileDateKey, parseLocalDate } from "./dates";
-import { monthBounds, nextFacilitators, planDays } from "./dailyRotation";
+import { isoWeekday, monthBounds, nextFacilitators, planDays, timeForDay } from "./dailyRotation";
 import { HOLIDAYS_CL, holidayYearsCovered } from "./holidaysCL";
 
 export function planHorizon(todayKey: string): string {
@@ -47,6 +47,7 @@ export async function fillSeries(seriesId: string, fromKey: string, toKey: strin
       seriesId,
       dayKey: d.key,
       date: parseLocalDate(d.key),
+      time: timeForDay(series.dayTimes, series.time, isoWeekday(d.key)),
       createdById: order[0], // la daily automática no tiene autor real
       facilitatorId: d.holiday ? null : leaderOf.get(d.key),
       cancelledAt: d.holiday ? new Date() : null,

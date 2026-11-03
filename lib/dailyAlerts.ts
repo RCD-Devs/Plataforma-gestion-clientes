@@ -22,6 +22,7 @@ export async function notifyDailyFacilitators() {
     select: {
       id: true,
       dayKey: true,
+      time: true,
       facilitator: { select: { email: true } },
       series: { select: { time: true, team: { select: { name: true } } } },
     },
@@ -36,7 +37,7 @@ export async function notifyDailyFacilitators() {
     await notifyDailyFacilitator({
       to: m.facilitator.email,
       teamName: m.series.team.name,
-      time: m.series.time,
+      time: m.time ?? m.series.time,
       when: isToday ? "hoy" : "mañana",
     });
     sent++;

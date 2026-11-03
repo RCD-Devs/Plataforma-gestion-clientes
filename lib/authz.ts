@@ -70,6 +70,23 @@ export function canManageFollowUp(user: AuthzUser, f: { ownerId: string }): bool
   return f.ownerId === user.id || hasAccess(user.capabilities, "followups.manage");
 }
 
+// Dailys por equipo: "all" ve y gestiona todos; "own_teams" ve y gestiona
+// los suyos (el propio + los que tiene a cargo); el resto ve solo su
+// propio equipo, sin editar.
+type DailyUser = { capabilities: AuthzUser["capabilities"]; teamId: string | null; ownTeamIds: string[] };
+
+export function dailyAccess(user: DailyUser): { all: boolean; manage: string[]; view: string[] } {
+  const scopes = user.capabilities["dailys.manage"] ?? [];
+  if (scopes.includes("all")) return { all: true, manage: [], view: [] };
+  const manage = scopes.includes("own_teams") ? user.ownTeamIds : [];
+  return { all: false, manage, view: [...new Set([...manage, ...(user.teamId ? [user.teamId] : [])])] };
+}
+
+export function canManageDailyTeam(user: DailyUser, teamId: string): boolean {
+  const a = dailyAccess(user);
+  return a.all || a.manage.includes(teamId);
+}
+
 // Filtro para prisma.client.findMany.
 export function clientVisibilityWhere(user: AuthzUser): Prisma.ClientWhereInput {
   return clientScopeWhere(user.capabilities, "clients.view", user.id);

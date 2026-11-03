@@ -28,10 +28,12 @@ export function DailySeriesForm({
   people,
 }: {
   teamId: string;
-  initial: { weekdays: number[]; time: string; memberIds: string[] } | null;
+  initial: { weekdays: number[]; times: Record<number, string>; memberIds: string[] } | null;
   people: Person[];
 }) {
   const [days, setDays] = useState<number[]>(initial?.weekdays ?? [1, 3, 5]);
+  const [times, setTimes] = useState<Record<number, string>>(initial?.times ?? {});
+  const timeOf = (d: number) => times[d] ?? "09:30";
   const [order, setOrder] = useState<string[]>(
     initial?.memberIds ?? people.filter((p) => p.inTeam).map((p) => p.id),
   );
@@ -50,44 +52,54 @@ export function DailySeriesForm({
     <form action={saveDailySeries} className="space-y-5">
       <input type="hidden" name="teamId" value={teamId} />
       {days.map((d) => (
-        <input key={d} type="hidden" name="weekdays" value={d} />
+        <span key={d}>
+          <input type="hidden" name="weekdays" value={d} />
+          <input type="hidden" name={`time_${d}`} value={timeOf(d)} />
+        </span>
       ))}
       {shown.map((id) => (
         <input key={id} type="hidden" name="memberIds" value={id} />
       ))}
 
-      <div className="flex flex-wrap items-end gap-6">
-        <div>
-          <span className={label}>Días</span>
-          <div className="flex gap-1">
-            {DAYS.map(([d, name]) => {
-              const on = days.includes(d);
-              return (
+      <div>
+        <span className={label}>Días y horario — cada día con su hora</span>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {DAYS.map(([d, name]) => {
+            const on = days.includes(d);
+            return (
+              <div
+                key={d}
+                className={`flex items-center gap-2 rounded-xl border px-3 py-2 transition ${
+                  on ? "border-[#081826] bg-white" : "border-[#e4e8ec] bg-[#fafbfc]"
+                }`}
+              >
                 <button
-                  key={d}
                   type="button"
-                  aria-pressed={on}
+                  role="switch"
+                  aria-checked={on}
+                  aria-label={`Daily los ${name}`}
                   onClick={() => setDays((v) => (on ? v.filter((x) => x !== d) : [...v, d].sort()))}
-                  className={`h-9 w-11 rounded-lg border text-xs font-semibold transition ${
-                    on ? "border-[#081826] bg-[#081826] text-white" : "border-[#e4e8ec] bg-white text-[#5d6b77] hover:border-[#c3ccd4]"
-                  }`}
+                  className={`relative h-5 w-9 shrink-0 rounded-full transition ${on ? "bg-[#08a89f]" : "bg-[#d5dbe0]"}`}
                 >
-                  {name}
+                  <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${on ? "left-[18px]" : "left-0.5"}`} />
                 </button>
-              );
-            })}
-          </div>
+                <span className={`w-9 text-sm font-semibold ${on ? "text-[#081826]" : "text-[#9aa3ad]"}`}>{name}</span>
+                {on ? (
+                  <input
+                    type="time"
+                    required
+                    value={timeOf(d)}
+                    onChange={(e) => setTimes((t) => ({ ...t, [d]: e.target.value }))}
+                    aria-label={`Hora del ${name}`}
+                    className="ml-auto h-8 rounded-lg border border-[#e4e8ec] px-2 text-sm tabular-nums outline-none focus:border-[#0bdbcf]"
+                  />
+                ) : (
+                  <span className="ml-auto text-xs text-[#9aa3ad]">Sin daily</span>
+                )}
+              </div>
+            );
+          })}
         </div>
-        <label>
-          <span className={label}>Hora</span>
-          <input
-            type="time"
-            name="time"
-            required
-            defaultValue={initial?.time ?? "09:30"}
-            className="h-9 rounded-lg border border-[#e4e8ec] px-3 text-sm outline-none focus:border-[#0bdbcf]"
-          />
-        </label>
       </div>
 
       <div>

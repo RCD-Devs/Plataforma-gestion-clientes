@@ -143,6 +143,19 @@ model Team {
   members  User[]
   requests Request[]
   daily    DailySeries?
+  // Personas a cargo (Director/Líder): gestionan su daily aunque su
+  // propio User.teamId sea otro. Una persona puede tener varios.
+  leads    TeamLead[]
+}
+
+model TeamLead {
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([teamId, userId])
+  @@index([userId])
 }
 
 model User {
@@ -204,6 +217,7 @@ model User {
   meetingsCreated   Meeting[]
   meetingsLed       Meeting[]              @relation("meetingFacilitator")
   followUpsResolved FollowUp[]             @relation("followUpResolver")
+  teamsLed          TeamLead[]
 }
 
 // Roles y permisos como datos editables (ADR-011, Nuevo #3, 16 sep 2026).
@@ -749,6 +763,7 @@ model Meeting {
   seriesId      String?
   series        DailySeries? @relation(fields: [seriesId], references: [id], onDelete: Cascade)
   dayKey        String?
+  time          String? // hora de esa daily ("09:30"); se puede cambiar a mano
   facilitatorId String?
   facilitator   User?        @relation("meetingFacilitator", fields: [facilitatorId], references: [id], onDelete: SetNull)
   cancelledAt   DateTime?
@@ -773,7 +788,9 @@ model DailySeries {
   teamId    String   @unique
   team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
   weekdays  Int[] // 1 = lunes … 7 = domingo
-  time      String // "09:30", hora de Chile
+  time      String // hora por defecto ("09:30", Chile) para días sin hora propia
+  // Hora de cada día: { "1": "09:30", "3": "10:00" }. Prima sobre `time`.
+  dayTimes  Json?
   memberIds String[]
   createdAt DateTime @default(now())
 
