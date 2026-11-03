@@ -15,6 +15,7 @@ import { Popover } from "@/components/Popover";
 import { AutoSubmitSelect } from "@/components/AutoSubmitSelect";
 import { FollowUpForm, type FollowUpInitial, type MeetingOption } from "@/components/FollowUpForm";
 import { EditFollowUpButton } from "@/components/EditFollowUpButton";
+import { SeguimientosTabs } from "@/components/SeguimientosTabs";
 import { deleteFollowUp, postponeFollowUp, renameMeeting, setFollowUpDone } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
@@ -87,8 +88,20 @@ export default async function SeguimientosPage({
     waitingOn: { select: { name: true } },
     owner: person,
     assignee: person,
+    doneBy: { select: { id: true, name: true } },
     participants: { select: { user: person } },
-    meeting: { select: { id: true, title: true, date: true, createdById: true, createdBy: { select: { name: true } } } },
+    meeting: {
+      select: {
+        id: true,
+        title: true,
+        date: true,
+        createdById: true,
+        seriesId: true,
+        createdBy: { select: { name: true } },
+        facilitator: { select: { id: true, name: true } },
+        series: { select: { time: true, team: { select: { name: true } } } },
+      },
+    },
   } as const;
   const todayKey = chileDateKey(new Date());
   const [open, done, doneThisWeek, clients, people, recentMeetings] = await Promise.all([
@@ -117,22 +130,42 @@ export default async function SeguimientosPage({
     prisma.meeting.findMany({
       where: {
         date: { gte: new Date(Date.now() - MEETINGS_DAYS * DAY) },
-        OR: [{ createdById: user.id }, { followUps: { some: visible } }],
+        OR: [
+          { createdById: user.id, seriesId: null },
+          { followUps: { some: visible } },
+          // Dailys de mi equipo hasta hoy (las futuras planificadas no se ofrecen).
+          ...(user.teamId ? [{ series: { teamId: user.teamId }, dayKey: { lte: todayKey }, cancelledAt: null }] : []),
+        ],
       },
-      select: { id: true, title: true, date: true, createdById: true },
+      select: {
+        id: true,
+        title: true,
+        date: true,
+        createdById: true,
+        seriesId: true,
+        dayKey: true,
+        facilitator: { select: { id: true, name: true } },
+        series: { select: { time: true, team: { select: { name: true } } } },
+      },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       take: 30,
     }),
   ]);
 
-  const meetingTitle = (m: { title: string | null }) => m.title || "Reunión";
+  const meetingTitle = (m: { title: string | null; series?: { team: { name: string } } | null }) =>
+    m.title || (m.series ? `Daily ${m.series.team.name}` : "Reunión");
   const meetings: MeetingOption[] = recentMeetings.map((m) => ({
     id: m.id,
     label: `${meetingTitle(m)} · ${meetingShortFmt.format(m.date)}`,
   }));
   // Si hoy ya abrí una reunión, lo nuevo cae ahí por defecto.
+  // Daily de hoy de mi equipo (si hay): banner + reunión por defecto al
+  // anotar; si no, la reunión que yo abrí hoy.
+  const todayDaily = recentMeetings.find((m) => m.seriesId && m.dayKey === todayKey);
   const defaultMeetingId =
-    recentMeetings.find((m) => m.createdById === user.id && chileDateKey(m.date) === todayKey)?.id ?? "";
+    todayDaily?.id ??
+    recentMeetings.find((m) => !m.seriesId && m.createdById === user.id && chileDateKey(m.date) === todayKey)?.id ??
+    "";
 
   const rows = open.map((f) => {
     const dueKey = chileDateKey(f.dueDate);
@@ -255,17 +288,27 @@ export default async function SeguimientosPage({
           bucket === "late" ? "shadow-[inset_3px_0_0_#d21f3c]" : ""
         }`}
       >
-        <form action={setFollowUpDone} className="pt-0.5">
-          {hidden(f)}
-          <input type="hidden" name="done" value="1" />
-          <SubmitButton
-            pendingLabel={<CheckIcon />}
-            className="grid h-5 w-5 place-items-center rounded-full border-2 border-[#c3ccd4] text-transparent transition hover:border-[#08a89f] hover:bg-[#e0fbf9] hover:text-[#08a89f] disabled:opacity-100! disabled:border-[#08a89f] disabled:bg-[#08a89f] disabled:text-white"
+        {f.owner.id === user.id ? (
+          <form action={setFollowUpDone} className="pt-0.5">
+            {hidden(f)}
+            <input type="hidden" name="done" value="1" />
+            <SubmitButton
+              pendingLabel={<CheckIcon />}
+              className="grid h-5 w-5 place-items-center rounded-full border-2 border-[#c3ccd4] text-transparent transition hover:border-[#08a89f] hover:bg-[#e0fbf9] hover:text-[#08a89f] disabled:opacity-100! disabled:border-[#08a89f] disabled:bg-[#08a89f] disabled:text-white"
+            >
+              <span className="sr-only">Marcar como resuelto</span>
+              <CheckIcon />
+            </SubmitButton>
+          </form>
+        ) : (
+          // Solo quien lo anotó lo resuelve: los demás ven el círculo inactivo.
+          <span
+            title={`Solo ${f.owner.name} puede marcarlo como resuelto`}
+            className="mt-0.5 block h-5 w-5 shrink-0 cursor-help rounded-full border-2 border-dashed border-[#d5dbe0]"
           >
-            <span className="sr-only">Marcar como hecho</span>
-            <CheckIcon />
-          </SubmitButton>
-        </form>
+            <span className="sr-only">Solo {f.owner.name} puede marcarlo como resuelto</span>
+          </span>
+        )}
         <div className="min-w-0 flex-1">
           <p className="whitespace-pre-line text-sm font-medium leading-snug text-[#081826]">{f.text}</p>
           {meta(f, showMeeting)}
@@ -304,7 +347,7 @@ export default async function SeguimientosPage({
     { key: "late", label: "Vencidos", n: count("late"), cls: "text-[#a01830]", ring: "border-[#d21f3c] ring-[#d21f3c]/15" },
     { key: "today", label: "Para hoy", n: count("today"), cls: "text-[#c2541f]", ring: "border-[#fb693b] ring-[#fb693b]/15" },
     { key: "upcoming", label: "Próximos", n: count("upcoming"), cls: "text-[#081826]", ring: "border-[#081826] ring-[#081826]/10" },
-    { key: "done", label: "Hechos esta semana", n: doneThisWeek, cls: "text-[#08a89f]", ring: "border-[#08a89f] ring-[#08a89f]/15" },
+    { key: "done", label: "Resueltos esta semana", n: doneThisWeek, cls: "text-[#08a89f]", ring: "border-[#08a89f] ring-[#08a89f]/15" },
   ];
 
   return (
@@ -348,9 +391,32 @@ export default async function SeguimientosPage({
           </nav>
         </div>
       </header>
+      <SeguimientosTabs active="seguimientos" />
 
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-4xl space-y-6 px-4 py-6 sm:px-6">
+          {todayDaily && (
+            <Link
+              href="/seguimientos/dailys"
+              className="flex items-center gap-3 rounded-xl border border-[#0bdbcf]/40 bg-[#f0fdfc] px-4 py-3 text-sm transition hover:border-[#0bdbcf]"
+            >
+              <span aria-hidden="true" className="grid h-8 w-8 place-items-center rounded-lg bg-[#0bdbcf] text-xs font-bold text-[#081826]">
+                HOY
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="font-semibold text-[#081826]">
+                  {meetingTitle(todayDaily)} · {todayDaily.series?.time}
+                </span>
+                <span className="text-[#3b4552]">
+                  {" "}
+                  — lidera {todayDaily.facilitator ? (todayDaily.facilitator.id === user.id ? "tú" : todayDaily.facilitator.name) : "nadie asignado"}
+                </span>
+                <span className="block text-xs text-[#5d6b77]">Lo que anotes abajo queda como acuerdo de esta daily.</span>
+              </span>
+              <span className="text-xs font-semibold text-[#08a89f]">Ver planificación →</span>
+            </Link>
+          )}
+
           <FollowUpForm mode="create" {...formProps} defaultMeetingId={defaultMeetingId} />
 
           {/* Filtros: clic muestra solo ese grupo; clic de nuevo, todo. */}
@@ -396,7 +462,10 @@ export default async function SeguimientosPage({
             ) : (
               <>
                 {capsules.map(({ meeting: m, items }) => {
-                  const canRename = canManageFollowUp(user, { ownerId: m.createdById });
+                  // Daily automática: su "autor" es quien encabeza la rotación; renombrarla es de quien gestiona.
+                  const canRename = m.seriesId
+                    ? hasAccess(user.capabilities, "followups.manage")
+                    : canManageFollowUp(user, { ownerId: m.createdById });
                   return (
                     <section key={m.id} className="rounded-2xl border border-[#d9e6ec] bg-[#eef5f8] p-2">
                       <div className="flex items-center gap-3 px-2 pb-2.5 pt-1.5">
@@ -410,7 +479,9 @@ export default async function SeguimientosPage({
                           <h2 className="truncate text-sm font-semibold text-[#081826]">{meetingTitle(m)}</h2>
                           <p className="text-xs text-[#5d6b77] first-letter:uppercase">
                             {meetingDayFmt.format(m.date)} · {items.length} abierto{items.length === 1 ? "" : "s"}
-                            {m.createdById !== user.id && ` · creada por ${m.createdBy.name}`}
+                            {m.seriesId
+                              ? m.facilitator && ` · lideró ${m.facilitator.id === user.id ? "tú" : m.facilitator.name}`
+                              : m.createdById !== user.id && ` · creada por ${m.createdBy.name}`}
                           </p>
                         </div>
                         {canRename && (
@@ -474,7 +545,7 @@ export default async function SeguimientosPage({
             <details open={filter === "done"} className="group/done">
               <summary className="flex cursor-pointer list-none items-center gap-2 px-1 text-xs font-semibold uppercase tracking-wide text-[#5d6b77] hover:text-[#081826]">
                 <span aria-hidden="true" className="inline-block text-[9px] transition group-open/done:rotate-90">▶</span>
-                Completados
+                Resueltos (historial)
                 <span className="font-normal text-[#9aa3ad]">
                   {done.length}
                   {done.length === DONE_LIMIT ? "+" : ""}
@@ -483,19 +554,25 @@ export default async function SeguimientosPage({
               <ul className="mt-2 divide-y divide-[#f1f3f4] rounded-xl border border-[#e4e8ec] bg-white">
                 {done.map((f) => (
                   <li key={f.id} className="group flex items-start gap-3 px-4 py-3 first:rounded-t-xl last:rounded-b-xl hover:bg-[#fafbfc]">
-                    <form action={setFollowUpDone} className="pt-0.5">
-                      {hidden(f)}
-                      <input type="hidden" name="done" value="0" />
-                      <SubmitButton
-                        pendingLabel={<CheckIcon />}
-                        className="grid h-5 w-5 place-items-center rounded-full border-2 border-[#08a89f] bg-[#08a89f] text-white transition hover:border-[#c3ccd4] hover:bg-white hover:text-[#c3ccd4]"
-                      >
-                        <span className="sr-only">Reabrir</span>
+                    {f.owner.id === user.id ? (
+                      <form action={setFollowUpDone} className="pt-0.5">
+                        {hidden(f)}
+                        <input type="hidden" name="done" value="0" />
+                        <SubmitButton
+                          pendingLabel={<CheckIcon />}
+                          className="grid h-5 w-5 place-items-center rounded-full border-2 border-[#08a89f] bg-[#08a89f] text-white transition hover:border-[#c3ccd4] hover:bg-white hover:text-[#c3ccd4]"
+                        >
+                          <span className="sr-only">Reabrir</span>
+                          <CheckIcon />
+                        </SubmitButton>
+                      </form>
+                    ) : (
+                      <span title="Resuelto" className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#08a89f] text-white">
                         <CheckIcon />
-                      </SubmitButton>
-                    </form>
+                      </span>
+                    )}
                     <div className="min-w-0 flex-1">
-                      <p className="whitespace-pre-line text-sm text-[#7f7f7f] line-through decoration-[#c3ccd4]">{f.text}</p>
+                      <p className="whitespace-pre-line text-sm text-[#5d6b77]">{f.text}</p>
                       {meta(f, true)}
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
@@ -503,7 +580,7 @@ export default async function SeguimientosPage({
                         {menu(f, true, canManageFollowUp(user, f))}
                       </div>
                       <span title={longDate(f.doneAt)} className="whitespace-nowrap text-[11px] text-[#9aa3ad]">
-                        Hecho {relative(f.doneAt!)}
+                        Resuelto{f.doneBy && f.doneBy.id !== user.id ? ` por ${f.doneBy.name}` : ""} {relative(f.doneAt!)}
                       </span>
                     </div>
                   </li>

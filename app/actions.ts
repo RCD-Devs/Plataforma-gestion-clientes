@@ -38,6 +38,7 @@ import { getPortalContext, canActAsClient, PORTAL_CLIENT_COOKIE } from "@/lib/po
 import { stageDateIssue } from "@/lib/projectBudget";
 import { parseLocalDate, zonedTimeToUtc, chileDateKey } from "@/lib/dates";
 import { addDaysKey, isDateKey } from "@/lib/followUps";
+import { replanSeries } from "@/lib/dailyPlanner";
 import { overlapsOf } from "@/lib/scheduleBlocks";
 import { decryptToken, revokeToken } from "@/lib/googleCalendar";
 import { uniqueSlug } from "@/lib/slug";
@@ -3011,8 +3012,13 @@ export async function renameMeeting(formData: FormData) {
   const user = await getSessionUser();
   if (!user || !isTeamRole(user.role)) return;
   const id = String(formData.get("id") || "");
-  const meeting = await prisma.meeting.findUnique({ where: { id }, select: { createdById: true } });
-  if (!meeting || !canManageFollowUp(user, { ownerId: meeting.createdById })) return;
+  const meeting = await prisma.meeting.findUnique({ where: { id }, select: { createdById: true, seriesId: true } });
+  if (!meeting) return;
+  // Daily automática: su createdBy es quien encabeza la rotación, no un autor real.
+  const allowed = meeting.seriesId
+    ? hasAccess(user.capabilities, "followups.manage")
+    : canManageFollowUp(user, { ownerId: meeting.createdById });
+  if (!allowed) return;
   const title = String(formData.get("title") || "").trim().slice(0, 120) || null;
   await prisma.meeting.update({ where: { id }, data: { title } });
   revalidateFollowUps();
@@ -3030,13 +3036,17 @@ async function ownFollowUpId(formData: FormData): Promise<string | null> {
   return (await prisma.followUp.count({ where: { AND: [{ id }, followUpVisibilityWhere(user)] } })) ? id : null;
 }
 
-// done=1 lo completa; done=0 lo reabre (deshacer un check por error).
+// done=1 lo marca resuelto; done=0 lo reabre. Solo quien lo anotó: un
+// participante que lo cerraba se lo "desaparecía" al creador (pasa al
+// historial de resueltos, nunca se borra).
 export async function setFollowUpDone(formData: FormData) {
-  const id = await ownFollowUpId(formData);
-  if (!id) return;
-  await prisma.followUp.update({
-    where: { id },
-    data: { doneAt: formData.get("done") === "1" ? new Date() : null },
+  const user = await getSessionUser();
+  const id = String(formData.get("id") || "");
+  if (!user || !isTeamRole(user.role) || !id) return;
+  const done = formData.get("done") === "1";
+  await prisma.followUp.updateMany({
+    where: { id, ownerId: user.id },
+    data: done ? { doneAt: new Date(), doneById: user.id } : { doneAt: null, doneById: null },
   });
   revalidateFollowUps();
 }
@@ -3065,4 +3075,75 @@ export async function deleteFollowUp(formData: FormData) {
   if (!f || !canManageFollowUp(user, f)) return;
   await prisma.followUp.delete({ where: { id } });
   revalidateFollowUps();
+}
+
+// ── Dailys por equipo (etapa 2) ────────────────────────────────────────
+// Configurar y cambiar fechas: followups.manage (Admin, Líder, Director).
+// Verlas: todo el equipo interno.
+
+async function dailyManager() {
+  const user = await getSessionUser();
+  return user && isTeamRole(user.role) && hasAccess(user.capabilities, "followups.manage") ? user : null;
+}
+
+function revalidateDailys() {
+  revalidatePath("/seguimientos/dailys");
+  revalidatePath("/seguimientos");
+  revalidatePath("/mi-espacio");
+}
+
+// Días (1=lun…7=dom), hora y orden de rotación; replanifica lo futuro
+// automático (lo cambiado a mano y lo que ya tiene acuerdos se respeta).
+export async function saveDailySeries(formData: FormData) {
+  const user = await dailyManager();
+  if (!user) return;
+  const teamId = String(formData.get("teamId") || "");
+  if (!(await prisma.team.count({ where: { id: teamId } }))) return;
+  const weekdays = [...new Set(formData.getAll("weekdays").map(Number))].filter((d) => Number.isInteger(d) && d >= 1 && d <= 7).sort();
+  const time = String(formData.get("time") || "");
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return;
+  const requested = [...new Set(formData.getAll("memberIds").map(String))];
+  const valid = new Set(
+    (await prisma.user.findMany({ where: { id: { in: requested }, isActive: true, role: { not: "CLIENTE" } }, select: { id: true } })).map(
+      (u) => u.id,
+    ),
+  );
+  const memberIds = requested.filter((id) => valid.has(id));
+
+  const series = await prisma.dailySeries.upsert({
+    where: { teamId },
+    create: { teamId, weekdays, time, memberIds },
+    update: { weekdays, time, memberIds },
+  });
+  await replanSeries(series.id);
+  revalidateDailys();
+}
+
+// Otra persona lidera esa fecha (y se le vuelve a avisar).
+export async function setDailyFacilitator(formData: FormData) {
+  const user = await dailyManager();
+  if (!user) return;
+  const id = String(formData.get("id") || "");
+  const facilitatorId = String(formData.get("facilitatorId") || "");
+  if (!(await prisma.user.count({ where: { id: facilitatorId, isActive: true, role: { not: "CLIENTE" } } }))) return;
+  await prisma.meeting.updateMany({
+    where: { id, seriesId: { not: null } },
+    data: { facilitatorId, manualAt: new Date(), dayBeforeNotifiedAt: null, dayOfNotifiedAt: null },
+  });
+  revalidateDailys();
+}
+
+// cancel=1 la cancela; cancel=0 la restaura (ej. un feriado en que sí hubo daily).
+export async function setDailyCancelled(formData: FormData) {
+  const user = await dailyManager();
+  if (!user) return;
+  const id = String(formData.get("id") || "");
+  const cancel = formData.get("cancel") === "1";
+  await prisma.meeting.updateMany({
+    where: { id, seriesId: { not: null } },
+    data: cancel
+      ? { cancelledAt: new Date(), cancelReason: `Cancelada por ${user.name}`, manualAt: new Date() }
+      : { cancelledAt: null, cancelReason: null, manualAt: new Date(), dayBeforeNotifiedAt: null, dayOfNotifiedAt: null },
+  });
+  revalidateDailys();
 }

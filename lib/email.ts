@@ -120,6 +120,25 @@ export async function notifyFollowUps(opts: { to: string; texts: string[] }) {
   });
 }
 
+// Quien lidera la daily (lib/dailyAlerts.ts): víspera solo campana; el
+// mismo día, campana + correo.
+export async function notifyDailyFacilitator(opts: { to: string; teamName: string; time: string; when: "hoy" | "mañana" }) {
+  const title = `${opts.when === "hoy" ? "Hoy" : "Mañana"} lideras la daily de ${opts.teamName} (${opts.time})`;
+  const body = "Te toca llevar la reunión y anotar los acuerdos como seguimientos.";
+  await notifyTeam({ to: opts.to, url: "/seguimientos/dailys", title, body });
+  if (opts.when !== "hoy") return;
+  await sendEmail({
+    to: opts.to,
+    subject: title,
+    html: emailLayout({
+      title,
+      bodyHtml: `<p style="margin:0;">${body}</p>`,
+      ctaLabel: "Abrir seguimientos",
+      ctaUrl: `${appBaseUrl()}/seguimientos`,
+    }),
+  });
+}
+
 // Mención (@Nombre) en un comentario: campana + correo con link a la
 // tarea. A diferencia de notifyTeam, sí manda correo — una mención es un
 // pedido directo, no un aviso de fondo.

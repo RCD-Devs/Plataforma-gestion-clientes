@@ -142,6 +142,7 @@ model Team {
 
   members  User[]
   requests Request[]
+  daily    DailySeries?
 }
 
 model User {
@@ -201,6 +202,8 @@ model User {
   followUpsAssigned FollowUp[]             @relation("followUpAssignee")
   followUpParticipations FollowUpParticipant[]
   meetingsCreated   Meeting[]
+  meetingsLed       Meeting[]              @relation("meetingFacilitator")
+  followUpsResolved FollowUp[]             @relation("followUpResolver")
 }
 
 // Roles y permisos como datos editables (ADR-011, Nuevo #3, 16 sep 2026).
@@ -684,7 +687,10 @@ model FollowUp {
   id        String    @id @default(cuid())
   text      String
   dueDate   DateTime // mediodía local del día elegido (parseLocalDate)
-  doneAt    DateTime?
+  doneAt    DateTime? // resuelto (queda en el historial; no se borra)
+  // Quién lo marcó resuelto: solo quien lo anotó puede hacerlo.
+  doneById  String?
+  doneBy    User?     @relation("followUpResolver", fields: [doneById], references: [id], onDelete: SetNull)
   alertedAt DateTime?
   createdAt DateTime  @default(now())
 
@@ -737,7 +743,39 @@ model Meeting {
   createdById String
   createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
 
+  // Daily planificada (etapa 2): pertenece a la serie de un equipo, con
+  // quién la lidera. dayKey = "YYYY-MM-DD" en Chile (único por serie; date
+  // depende de la zona del proceso y no sirve para eso).
+  seriesId      String?
+  series        DailySeries? @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  dayKey        String?
+  facilitatorId String?
+  facilitator   User?        @relation("meetingFacilitator", fields: [facilitatorId], references: [id], onDelete: SetNull)
+  cancelledAt   DateTime?
+  cancelReason  String? // "Feriado: Navidad", "Cancelada por …"
+  // Cambio manual (otra persona o cancelada a mano): replanificar no lo pisa.
+  manualAt      DateTime?
+  // Avisos del Cron a quien lidera (se limpian si cambia la persona).
+  dayBeforeNotifiedAt DateTime?
+  dayOfNotifiedAt     DateTime?
+
   followUps FollowUp[]
 
+  @@unique([seriesId, dayKey])
   @@index([date])
+}
+
+// Daily de un equipo (etapa 2): qué días y a qué hora, y el orden de
+// rotación de quién la lidera. memberIds en orden; los inactivos se
+// saltan al planificar.
+model DailySeries {
+  id        String   @id @default(cuid())
+  teamId    String   @unique
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  weekdays  Int[] // 1 = lunes … 7 = domingo
+  time      String // "09:30", hora de Chile
+  memberIds String[]
+  createdAt DateTime @default(now())
+
+  meetings Meeting[]
 }

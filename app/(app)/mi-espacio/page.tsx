@@ -50,7 +50,7 @@ export default async function MiEspacioPage({
   await escalateSlaAlerts().catch(() => {});
   await alertDueFollowUps().catch(() => {});
 
-  const [tasks, teammates, alerts, unread, opts, nudgeItems, followUpRows] = await Promise.all([
+  const [tasks, teammates, alerts, unread, opts, nudgeItems, followUpRows, leadToday] = await Promise.all([
     prisma.request.findMany({
       where: {
         AND: [
@@ -90,6 +90,11 @@ export default async function MiEspacioPage({
       },
       select: { dueDate: true },
     }),
+    // ¿Me toca liderar la daily hoy?
+    prisma.meeting.findFirst({
+      where: { facilitatorId: user.id, dayKey: chileDateKey(new Date()), cancelledAt: null, seriesId: { not: null } },
+      select: { series: { select: { time: true, team: { select: { name: true } } } } },
+    }),
   ]);
   const todayKey = chileDateKey(new Date());
   const followUpsDue = followUpRows.filter((f) => chileDateKey(f.dueDate) <= todayKey).length;
@@ -124,6 +129,14 @@ export default async function MiEspacioPage({
           </p>
         </div>
         <div className="flex items-center gap-3">
+        {leadToday?.series && (
+          <Link
+            href="/seguimientos"
+            className="rounded-lg border border-[#0bdbcf] bg-[#e0fbf9] px-3 py-1.5 text-xs font-semibold text-[#08766f] hover:bg-[#ccf7f3]"
+          >
+            ★ Hoy lideras la daily de {leadToday.series.team.name} · {leadToday.series.time}
+          </Link>
+        )}
         {followUpsDue > 0 && (
           <Link
             href="/seguimientos"
