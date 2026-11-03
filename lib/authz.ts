@@ -56,6 +56,20 @@ export function requestVisibilityWhere(user: AuthzUser): Prisma.RequestWhereInpu
   return requestScopeWhere(user.capabilities, "requests.access", user.id);
 }
 
+// Seguimientos: los ven (y pueden completar/posponer) quien lo anotó, el
+// responsable y los participantes; followups.view_all (Admin/Líder por
+// defecto) ve los de todo el equipo.
+export function followUpVisibilityWhere(user: AuthzUser): Prisma.FollowUpWhereInput {
+  if (hasAccess(user.capabilities, "followups.view_all")) return {};
+  return { OR: [{ ownerId: user.id }, { assigneeId: user.id }, { participants: { some: { userId: user.id } } }] };
+}
+
+// Editar, reasignar, participantes y eliminar: quien lo anotó, o
+// followups.manage (Admin y Líder de área por defecto, editable en /admin/roles).
+export function canManageFollowUp(user: AuthzUser, f: { ownerId: string }): boolean {
+  return f.ownerId === user.id || hasAccess(user.capabilities, "followups.manage");
+}
+
 // Filtro para prisma.client.findMany.
 export function clientVisibilityWhere(user: AuthzUser): Prisma.ClientWhereInput {
   return clientScopeWhere(user.capabilities, "clients.view", user.id);

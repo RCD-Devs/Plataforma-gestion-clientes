@@ -85,6 +85,7 @@ async function sendEmail(opts: { to: string; subject: string; html: string }) {
 export async function notifyTeam(opts: {
   to: string;
   requestId?: string;
+  url?: string;
   title: string;
   body: string;
 }) {
@@ -93,10 +94,29 @@ export async function notifyTeam(opts: {
     data: {
       recipientEmail: opts.to,
       requestId: opts.requestId,
+      url: opts.url,
       title: opts.title,
       body: opts.body,
       channel: "team",
     },
+  });
+}
+
+// Seguimientos del día (lib/followUpAlerts.ts): una sola campana + un
+// correo por persona con todos los que le tocan hoy (o ya vencidos).
+export async function notifyFollowUps(opts: { to: string; texts: string[] }) {
+  const n = opts.texts.length;
+  const title = n === 1 ? "Tienes un seguimiento para hoy" : `Tienes ${n} seguimientos para hoy`;
+  await notifyTeam({ to: opts.to, url: "/seguimientos", title, body: opts.texts.join(" · ").slice(0, 280) });
+  await sendEmail({
+    to: opts.to,
+    subject: title,
+    html: emailLayout({
+      title,
+      bodyHtml: `<ul style="margin:0;padding-left:18px;">${opts.texts.map((t) => `<li>${escapeHtml(t)}</li>`).join("")}</ul>`,
+      ctaLabel: "Ver mis seguimientos",
+      ctaUrl: `${appBaseUrl()}/seguimientos`,
+    }),
   });
 }
 

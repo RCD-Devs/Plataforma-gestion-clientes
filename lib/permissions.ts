@@ -28,7 +28,9 @@ export type ActionId =
   | "projects.view"
   | "projects.manage"
   | "projects.budget"
-  | "hours.manage";
+  | "hours.manage"
+  | "followups.view_all"
+  | "followups.manage";
 
 export const ACTIONS: { key: ActionId; label: string; scopes: Scope[] }[] = [
   {
@@ -55,6 +57,16 @@ export const ACTIONS: { key: ActionId; label: string; scopes: Scope[] }[] = [
     key: "requests.unarchive",
     label: "Desarchivar solicitudes (devolverlas del histórico al trabajo activo)",
     scopes: ["all", "own_clients", "none"],
+  },
+  {
+    key: "followups.view_all",
+    label: "Ver y gestionar los seguimientos de todo el equipo (sin esto, solo los propios y los asignados)",
+    scopes: ["all", "none"],
+  },
+  {
+    key: "followups.manage",
+    label: "Editar, reasignar, sumar participantes y eliminar seguimientos de otros (quien lo anota siempre puede)",
+    scopes: ["all", "none"],
   },
   {
     key: "clients.view",

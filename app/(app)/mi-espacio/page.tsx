@@ -15,6 +15,8 @@ import { getPendingNudge } from "@/lib/nudges";
 import { DragColumns } from "@/components/Board";
 import { DeliveriesPopover } from "@/components/DeliveriesPopover";
 import { escalateSlaAlerts } from "@/lib/slaAlerts";
+import { alertDueFollowUps } from "@/lib/followUpAlerts";
+import { chileDateKey } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
@@ -46,8 +48,9 @@ export default async function MiEspacioPage({
   // este mismo usuario, así la notificación recién creada ya aparece en
   // "alerts" más abajo, sin esperar a la siguiente carga de página.
   await escalateSlaAlerts().catch(() => {});
+  await alertDueFollowUps().catch(() => {});
 
-  const [tasks, teammates, alerts, unread, opts, nudgeItems] = await Promise.all([
+  const [tasks, teammates, alerts, unread, opts, nudgeItems, followUpRows] = await Promise.all([
     prisma.request.findMany({
       where: {
         AND: [
@@ -77,7 +80,19 @@ export default async function MiEspacioPage({
     }),
     filterOptions(user),
     getPendingNudge(user.id),
+    // Seguimientos que vencen hoy o antes (cota gruesa; el corte exacto
+    // por día Chile se hace abajo).
+    prisma.followUp.findMany({
+      where: {
+        OR: [{ assigneeId: user.id }, { participants: { some: { userId: user.id } } }],
+        doneAt: null,
+        dueDate: { lte: new Date(Date.now() + 86400000) },
+      },
+      select: { dueDate: true },
+    }),
   ]);
+  const todayKey = chileDateKey(new Date());
+  const followUpsDue = followUpRows.filter((f) => chileDateKey(f.dueDate) <= todayKey).length;
   const { statuses } = opts;
   const finalCodes = new Set(statuses.filter((s) => s.isFinal).map((s) => s.code));
 
@@ -109,6 +124,14 @@ export default async function MiEspacioPage({
           </p>
         </div>
         <div className="flex items-center gap-3">
+        {followUpsDue > 0 && (
+          <Link
+            href="/seguimientos"
+            className="rounded-lg border border-[#fb693b] bg-[#feede6] px-3 py-1.5 text-xs font-semibold text-[#9a4a1e] hover:bg-[#fddccd]"
+          >
+            ✓ {followUpsDue} seguimiento{followUpsDue === 1 ? "" : "s"} para hoy
+          </Link>
+        )}
         <DeliveriesPopover
           items={reminders.map(({ t, due }) => ({
             id: t.id,
@@ -128,7 +151,7 @@ export default async function MiEspacioPage({
             body: n.body,
             read: n.read,
             when: relative(n.createdAt),
-            href: n.requestId && alertKeys.has(n.requestId) ? `/solicitudes/${alertKeys.get(n.requestId)}` : undefined,
+            href: n.url ?? (n.requestId && alertKeys.has(n.requestId) ? `/solicitudes/${alertKeys.get(n.requestId)}` : undefined),
           }))}
         />
         <div className="flex items-center gap-1 rounded-lg border border-[#e4e8ec] p-1">

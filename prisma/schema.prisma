@@ -59,6 +59,7 @@ model Client {
   projects          Project[]
   portalViewers     UserClientAccess[]
   members           ClientMember[]
+  followUps         FollowUp[]
 }
 
 // Un cliente puede tener varios proyectos (fusión con Codia Task,
@@ -195,6 +196,11 @@ model User {
   roles           UserRole[]
   portalAccess    UserClientAccess[]
   clientMemberships ClientMember[]
+  followUps         FollowUp[]             @relation("followUpOwner")
+  followUpsWaiting  FollowUp[]             @relation("followUpWaitingOn")
+  followUpsAssigned FollowUp[]             @relation("followUpAssignee")
+  followUpParticipations FollowUpParticipant[]
+  meetingsCreated   Meeting[]
 }
 
 // Roles y permisos como datos editables (ADR-011, Nuevo #3, 16 sep 2026).
@@ -343,6 +349,7 @@ model Request {
   commentReads      CommentRead[]
   scheduleBlocks    ScheduleBlock[]
   statusChanges     StatusChange[]
+  followUps         FollowUp[]
 
   @@index([clientId])
   @@index([assigneeId])
@@ -526,6 +533,8 @@ model Notification {
   title          String
   body           String
   channel        String   @default("inapp")
+  // Link propio cuando no es de una solicitud (ej. "/seguimientos").
+  url            String?
   read           Boolean  @default(false)
   createdAt      DateTime @default(now())
 
@@ -663,4 +672,72 @@ model UserAvatar {
   userId String @id
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   data   Bytes
+}
+
+// Seguimientos (dailys, etapa 1): checklist con fecha — para quien
+// coordina y no tiene solicitudes asignadas. Lo ven quien lo anotó y el
+// responsable; con followups.view_all (Admin/Líder por defecto), todos.
+// El aviso del día (campana + correo, al responsable) sale una vez al
+// cargar /mi-espacio, igual que el SLA (sin cron); alertedAt lo marca y
+// se limpia al posponer.
+model FollowUp {
+  id        String    @id @default(cuid())
+  text      String
+  dueDate   DateTime // mediodía local del día elegido (parseLocalDate)
+  doneAt    DateTime?
+  alertedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  ownerId String
+  owner   User   @relation("followUpOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  // Responsable de hacer el seguimiento (por defecto, quien lo anota).
+  assigneeId String
+  assignee   User   @relation("followUpAssignee", fields: [assigneeId], references: [id], onDelete: Cascade)
+
+  // "Esperando a…": de quién depende. Solo informativo, no se le avisa.
+  waitingOnId String?
+  waitingOn   User?   @relation("followUpWaitingOn", fields: [waitingOnId], references: [id], onDelete: SetNull)
+
+  clientId  String?
+  client    Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  requestId String?
+  request   Request? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+
+  // Reunión donde se anotó (cápsula en /seguimientos). Opcional.
+  meetingId String?
+  meeting   Meeting? @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+
+  // Más personas involucradas: lo ven, lo pueden completar/posponer y
+  // reciben el aviso del día igual que el responsable.
+  participants FollowUpParticipant[]
+
+  @@index([ownerId, doneAt])
+  @@index([assigneeId, doneAt])
+  @@index([doneAt, alertedAt, dueDate])
+}
+
+model FollowUpParticipant {
+  followUpId String
+  followUp   FollowUp @relation(fields: [followUpId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([followUpId, userId])
+  @@index([userId])
+}
+
+// Reunión (daily, reunión de equipo…) que agrupa los seguimientos que
+// salieron de ella. title null = se muestra "Reunión" + fecha.
+model Meeting {
+  id          String   @id @default(cuid())
+  title       String?
+  date        DateTime // mediodía local del día (parseLocalDate)
+  createdAt   DateTime @default(now())
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  followUps FollowUp[]
+
+  @@index([date])
 }

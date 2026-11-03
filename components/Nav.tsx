@@ -10,6 +10,7 @@ import { hasAccess, canManageClients, type Capabilities } from "@/lib/permission
 
 const items = [
   { href: "/mi-espacio", label: "Mi espacio", icon: "▣" },
+  { href: "/seguimientos", label: "Seguimientos", icon: "✓" },
   { href: "/equipo", label: "Mi equipo", icon: "♟", cap: "team.view_load" as const },
   { href: "/tablero", label: "Tablero", icon: "▦" },
   { href: "/solicitudes", label: "Solicitudes", icon: "☰" },

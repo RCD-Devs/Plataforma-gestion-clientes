@@ -104,12 +104,13 @@ export default async function MisNotificacionesPage() {
         <section className="divide-y divide-[#f1f3f4] rounded-xl border border-[#e4e8ec] bg-white">
           {alerts.map((n) => {
             const key = n.requestId ? keys.get(n.requestId) : undefined;
+            const href = n.url ?? (key ? `/solicitudes/${key}` : undefined);
             return (
               <div key={n.id} className={`flex items-start gap-3 px-4 py-3 ${n.read ? "" : "bg-[#e0fbf9]/60"}`}>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-3">
-                    {key ? (
-                      <Link href={`/solicitudes/${key}`} className="text-sm font-semibold hover:text-[#08a89f] hover:underline">
+                    {href ? (
+                      <Link href={href} className="text-sm font-semibold hover:text-[#08a89f] hover:underline">
                         {n.title}
                       </Link>
                     ) : (

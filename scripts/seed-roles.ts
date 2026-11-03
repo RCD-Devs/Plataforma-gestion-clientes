@@ -40,6 +40,8 @@ const DEFAULT_PERMISSIONS: [string, ActionId, Scope][] = [
   ["ADMIN", "hours.manage", "all"],
   ["ADMIN", "requests.change_client", "all"],
   ["ADMIN", "requests.unarchive", "all"],
+  ["ADMIN", "followups.view_all", "all"],
+  ["ADMIN", "followups.manage", "all"],
 
   ["LIDER_AREA", "requests.access", "all"],
   ["LIDER_AREA", "requests.assign", "all"],
@@ -50,6 +52,8 @@ const DEFAULT_PERMISSIONS: [string, ActionId, Scope][] = [
   ["LIDER_AREA", "projects.view", "all"],
   ["LIDER_AREA", "projects.manage", "all"],
   ["LIDER_AREA", "projects.budget", "all"],
+  ["LIDER_AREA", "followups.view_all", "all"],
+  ["LIDER_AREA", "followups.manage", "all"],
 
   ["COORDINADOR_CUENTA", "requests.access", "own_clients"],
   ["COORDINADOR_CUENTA", "requests.assign", "all"],
@@ -80,6 +84,23 @@ export async function seedRoles(client: PrismaClient = prisma) {
       update: {},
       create: { roleId: roleIdByCode[code], action, scope },
     });
+  }
+
+  // "Director de Área" no es rol de sistema (se creó a mano en
+  // /admin/roles, sin code fijo): se le dan los mismos permisos de
+  // seguimientos que a Líder. Igual que arriba, nunca pisa lo editado.
+  const directors = await client.role.findMany({
+    where: { name: { contains: "director", mode: "insensitive" } },
+    select: { id: true },
+  });
+  for (const r of directors) {
+    for (const action of ["followups.view_all", "followups.manage"] as const) {
+      await client.rolePermission.upsert({
+        where: { roleId_action: { roleId: r.id, action } },
+        update: {},
+        create: { roleId: r.id, action, scope: "all" },
+      });
+    }
   }
 
   // Backfill: usuarios de equipo (no CLIENTE) que todavía no tienen ningún

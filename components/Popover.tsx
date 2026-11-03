@@ -8,11 +8,13 @@ export function Popover({
   trigger,
   ariaLabel,
   triggerClassName = "",
+  panelClassName = "w-[min(22rem,calc(100vw-2rem))]",
   children,
 }: {
   trigger: ReactNode;
   ariaLabel: string;
   triggerClassName?: string;
+  panelClassName?: string;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -44,7 +46,7 @@ export function Popover({
         {trigger}
       </button>
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[#e4e8ec] bg-white shadow-lg">
+        <div className={`absolute right-0 z-50 mt-2 overflow-hidden rounded-xl border border-[#e4e8ec] bg-white shadow-lg ${panelClassName}`}>
           {children}
         </div>
       )}

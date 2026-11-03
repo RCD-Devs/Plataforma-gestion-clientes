@@ -14,7 +14,15 @@ import {
 } from "@/lib/password";
 import { hashResetToken, tokenRecordProblem } from "@/lib/reset-token";
 import { sendPasswordReset, sendWelcomeEmail } from "@/lib/email";
-import { isTeamRole, canActOnRequest, canViewRequest } from "@/lib/authz";
+import {
+  isTeamRole,
+  canActOnRequest,
+  canViewRequest,
+  workClientsWhere,
+  requestVisibilityWhere,
+  followUpVisibilityWhere,
+  canManageFollowUp,
+} from "@/lib/authz";
 import { hasAccess, canOnClient, canManageClients, ACTIONS, type ActionId, type Capabilities } from "@/lib/permissions";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { logAudit } from "@/lib/audit";
@@ -28,7 +36,8 @@ import { getStatusMap, getStatuses } from "@/lib/statuses";
 import { isValidEmail } from "@/lib/validate";
 import { getPortalContext, canActAsClient, PORTAL_CLIENT_COOKIE } from "@/lib/portal";
 import { stageDateIssue } from "@/lib/projectBudget";
-import { parseLocalDate, zonedTimeToUtc } from "@/lib/dates";
+import { parseLocalDate, zonedTimeToUtc, chileDateKey } from "@/lib/dates";
+import { addDaysKey, isDateKey } from "@/lib/followUps";
 import { overlapsOf } from "@/lib/scheduleBlocks";
 import { decryptToken, revokeToken } from "@/lib/googleCalendar";
 import { uniqueSlug } from "@/lib/slug";
@@ -2811,4 +2820,249 @@ export async function removeAvatar() {
     prisma.user.update({ where: { id: user.id }, data: { avatarUpdatedAt: null } }),
   ]);
   revalidatePath("/", "layout");
+}
+
+// ── Seguimientos (dailys, etapa 1) ─────────────────────────────────────
+// Completar/posponer: quien lo ve (anotó, responsable, participantes o
+// followups.view_all). Editar/reasignar/eliminar: canManageFollowUp.
+
+// Si la fecha es hoy o ya pasó, no se avisa: se está viendo en este
+// momento. Posponer a futuro limpia alertedAt para que vuelva a avisar.
+function followUpDate(key: string) {
+  return { dueDate: parseLocalDate(key), alertedAt: key <= chileDateKey(new Date()) ? new Date() : null };
+}
+
+function revalidateFollowUps() {
+  revalidatePath("/seguimientos");
+  revalidatePath("/mi-espacio");
+}
+
+// Buscador de solicitudes (TaskPicker en modo `search`): solo las que la
+// persona puede ver; cada palabra debe aparecer en folio, título o cliente.
+export async function searchRequestsForPicker(q: string) {
+  const user = await getSessionUser();
+  if (!user || !isTeamRole(user.role)) return [];
+  const words = q.trim().split(/\s+/).filter(Boolean).slice(0, 5);
+  const rows = await prisma.request.findMany({
+    where: {
+      AND: [
+        requestVisibilityWhere(user),
+        ...words.map((w) => ({
+          OR: [
+            { key: { contains: w, mode: "insensitive" as const } },
+            { title: { contains: w, mode: "insensitive" as const } },
+            { client: { name: { contains: w, mode: "insensitive" as const } } },
+          ],
+        })),
+      ],
+    },
+    select: { id: true, key: true, title: true, client: { select: { name: true } } },
+    orderBy: { updatedAt: "desc" },
+    take: 6,
+  });
+  return rows.map((r) => ({ id: r.id, key: r.key, title: r.title, clientName: r.client.name }));
+}
+
+// Campos compartidos por crear y editar, ya validados contra lo que la
+// persona puede ver. null = formulario inválido.
+async function readFollowUpForm(user: NonNullable<Awaited<ReturnType<typeof getSessionUser>>>, formData: FormData) {
+  const text = String(formData.get("text") || "").trim().slice(0, 500);
+  const date = String(formData.get("date") || "");
+  if (!text || !isDateKey(date)) return null;
+
+  let clientId = String(formData.get("clientId") || "") || null;
+  let requestId = String(formData.get("requestId") || "") || null;
+  if (requestId) {
+    const req = await prisma.request.findUnique({
+      where: { id: requestId },
+      include: { client: true, collaborators: true },
+    });
+    // No se vincula una solicitud que no puede ver; el cliente sale de ella.
+    if (req && canViewRequest(user, req)) clientId = req.clientId;
+    else requestId = null;
+  }
+  if (!requestId && clientId && !(await prisma.client.count({ where: { AND: [{ id: clientId }, workClientsWhere(user)] } }))) {
+    clientId = null;
+  }
+
+  const team = new Map(
+    (
+      await prisma.user.findMany({
+        where: { isActive: true, role: { not: "CLIENTE" } },
+        select: { id: true, email: true },
+      })
+    ).map((u) => [u.id, u]),
+  );
+  const pickTeam = (v: FormDataEntryValue | null) => (team.has(String(v)) ? String(v) : null);
+  const assigneeId = pickTeam(formData.get("assigneeId")) ?? user.id;
+  const waitingOnId = pickTeam(formData.get("waitingOnId"));
+  const participantIds = [...new Set(formData.getAll("participantIds").map(String))].filter(
+    (id) => team.has(id) && id !== assigneeId,
+  );
+
+  // Reunión: una existente, "new" (se crea con título/fecha) o ninguna.
+  let meetingId = String(formData.get("meetingId") || "") || null;
+  if (meetingId === "new") {
+    const mDate = String(formData.get("meetingDate") || "");
+    const title = String(formData.get("meetingTitle") || "").trim().slice(0, 120) || null;
+    meetingId = (
+      await prisma.meeting.create({
+        data: { title, date: parseLocalDate(isDateKey(mDate) ? mDate : chileDateKey(new Date())), createdById: user.id },
+      })
+    ).id;
+  } else if (meetingId && !(await prisma.meeting.count({ where: { id: meetingId } }))) {
+    meetingId = null;
+  }
+
+  return { text, date, clientId, requestId, assigneeId, waitingOnId, participantIds, meetingId, team };
+}
+
+// Aviso inmediato (solo campana) a quien recién queda involucrado; el
+// correo llega el día del seguimiento.
+async function notifyFollowUpInvolved(opts: {
+  actorId: string;
+  actorName: string;
+  team: Map<string, { email: string }>;
+  assigneeId: string | null; // null = no cambió
+  participantIds: string[];
+  text: string;
+  date: string;
+}) {
+  const send = async (userId: string, how: string) => {
+    const to = userId !== opts.actorId ? opts.team.get(userId)?.email : undefined;
+    if (!to) return;
+    await notifyTeam({
+      to,
+      url: "/seguimientos",
+      title: `${opts.actorName} te ${how} un seguimiento`,
+      body: `${opts.text.slice(0, 200)} · ${shortDateKey(opts.date)}`,
+    });
+  };
+  if (opts.assigneeId) await send(opts.assigneeId, "asignó");
+  for (const id of opts.participantIds) await send(id, "sumó a");
+}
+
+export async function createFollowUp(formData: FormData) {
+  const user = await getSessionUser();
+  if (!user || !isTeamRole(user.role)) return;
+  const f = await readFollowUpForm(user, formData);
+  if (!f) return;
+  await prisma.followUp.create({
+    data: {
+      text: f.text,
+      ...followUpDate(f.date),
+      ownerId: user.id,
+      assigneeId: f.assigneeId,
+      clientId: f.clientId,
+      requestId: f.requestId,
+      waitingOnId: f.waitingOnId,
+      meetingId: f.meetingId,
+      participants: { create: f.participantIds.map((userId) => ({ userId })) },
+    },
+  });
+  await notifyFollowUpInvolved({ actorId: user.id, actorName: user.name, ...f });
+  revalidateFollowUps();
+}
+
+// Editar / reasignar / participantes: quien lo anotó o followups.manage.
+export async function updateFollowUp(formData: FormData) {
+  const user = await getSessionUser();
+  if (!user || !isTeamRole(user.role)) return;
+  const id = String(formData.get("id") || "");
+  const existing = await prisma.followUp.findUnique({ where: { id }, include: { participants: true } });
+  if (!existing || !canManageFollowUp(user, existing)) return;
+  const f = await readFollowUpForm(user, formData);
+  if (!f) return;
+
+  const dateChanged = chileDateKey(existing.dueDate) !== f.date;
+  await prisma.$transaction([
+    prisma.followUp.update({
+      where: { id },
+      data: {
+        text: f.text,
+        ...(dateChanged ? followUpDate(f.date) : {}),
+        assigneeId: f.assigneeId,
+        clientId: f.clientId,
+        requestId: f.requestId,
+        waitingOnId: f.waitingOnId,
+        meetingId: f.meetingId,
+      },
+    }),
+    prisma.followUpParticipant.deleteMany({ where: { followUpId: id } }),
+    prisma.followUpParticipant.createMany({ data: f.participantIds.map((userId) => ({ followUpId: id, userId })) }),
+  ]);
+
+  // Solo se avisa a quien recién entra (nuevo responsable o participante).
+  const before = new Set([existing.assigneeId, ...existing.participants.map((p) => p.userId)]);
+  await notifyFollowUpInvolved({
+    actorId: user.id,
+    actorName: user.name,
+    team: f.team,
+    assigneeId: before.has(f.assigneeId) ? null : f.assigneeId,
+    participantIds: f.participantIds.filter((uid) => !before.has(uid)),
+    text: f.text,
+    date: f.date,
+  });
+  revalidateFollowUps();
+}
+
+// Renombrar una reunión: quien la creó o followups.manage.
+export async function renameMeeting(formData: FormData) {
+  const user = await getSessionUser();
+  if (!user || !isTeamRole(user.role)) return;
+  const id = String(formData.get("id") || "");
+  const meeting = await prisma.meeting.findUnique({ where: { id }, select: { createdById: true } });
+  if (!meeting || !canManageFollowUp(user, { ownerId: meeting.createdById })) return;
+  const title = String(formData.get("title") || "").trim().slice(0, 120) || null;
+  await prisma.meeting.update({ where: { id }, data: { title } });
+  revalidateFollowUps();
+}
+
+function shortDateKey(key: string) {
+  const [y, m, d] = key.split("-");
+  return `${d}-${m}-${y}`;
+}
+
+async function ownFollowUpId(formData: FormData): Promise<string | null> {
+  const user = await getSessionUser();
+  const id = String(formData.get("id") || "");
+  if (!user || !isTeamRole(user.role) || !id) return null;
+  return (await prisma.followUp.count({ where: { AND: [{ id }, followUpVisibilityWhere(user)] } })) ? id : null;
+}
+
+// done=1 lo completa; done=0 lo reabre (deshacer un check por error).
+export async function setFollowUpDone(formData: FormData) {
+  const id = await ownFollowUpId(formData);
+  if (!id) return;
+  await prisma.followUp.update({
+    where: { id },
+    data: { doneAt: formData.get("done") === "1" ? new Date() : null },
+  });
+  revalidateFollowUps();
+}
+
+// days=N pospone N días desde HOY (no desde la fecha vieja: lo típico es
+// "vuelvo a preguntar mañana"); o date=YYYY-MM-DD para una fecha puntual.
+export async function postponeFollowUp(formData: FormData) {
+  const id = await ownFollowUpId(formData);
+  if (!id) return;
+  const days = Number(formData.get("days"));
+  const key =
+    Number.isInteger(days) && days > 0 && days <= 365
+      ? addDaysKey(chileDateKey(new Date()), days)
+      : String(formData.get("date") || "");
+  if (!isDateKey(key)) return;
+  await prisma.followUp.update({ where: { id }, data: { ...followUpDate(key), doneAt: null } });
+  revalidateFollowUps();
+}
+
+// Eliminar: quien lo anotó o followups.manage (no basta con verlo).
+export async function deleteFollowUp(formData: FormData) {
+  const user = await getSessionUser();
+  if (!user || !isTeamRole(user.role)) return;
+  const id = String(formData.get("id") || "");
+  const f = await prisma.followUp.findUnique({ where: { id }, select: { ownerId: true } });
+  if (!f || !canManageFollowUp(user, f)) return;
+  await prisma.followUp.delete({ where: { id } });
+  revalidateFollowUps();
 }
