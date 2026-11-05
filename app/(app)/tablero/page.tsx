@@ -22,7 +22,8 @@ export default async function TableroPage({
 
   const [requests, opts] = await Promise.all([
     prisma.request.findMany({
-      where: { AND: [requestVisibilityWhere(user), await requestFilterWhere(sp)] },
+      // parentId null: las subtareas se ven dentro de su tarea, no como tarjetas.
+      where: { AND: [{ parentId: null }, requestVisibilityWhere(user), await requestFilterWhere(sp)] },
       include: {
         client: true,
         assignee: true,
