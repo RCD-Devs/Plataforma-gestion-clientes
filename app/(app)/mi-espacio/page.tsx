@@ -311,7 +311,7 @@ export default async function MiEspacioPage({
                 canDrag: true,
                 node: (
                 <div
-                  className="rounded-xl border border-[#e4e8ec] bg-white p-3 transition hover:border-[#0bdbcf] hover:shadow-sm"
+                  className="relative rounded-xl border border-[#e4e8ec] bg-white p-3 transition hover:border-[#0bdbcf] hover:shadow-sm"
                 >
                   <div className="mb-1.5 flex items-center gap-1.5">
                     <ClientTag name={t.client.code || t.client.name} />
@@ -319,7 +319,7 @@ export default async function MiEspacioPage({
                     {unreadIds.has(t.id) && (
                       <span
                         title="El cliente respondió y nadie lo ha visto"
-                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#d21f3c]"
+                        className="relative z-10 h-1.5 w-1.5 shrink-0 rounded-full bg-[#d21f3c]"
                       />
                     )}
                     {t.clientPriority && (
@@ -328,9 +328,12 @@ export default async function MiEspacioPage({
                       </span>
                     )}
                   </div>
+                  {/* El ::after estira el enlace a toda la tarjeta; draggable=false
+                      para que se arrastre la tarjeta y no el enlace. */}
                   <Link
                     href={`/solicitudes/${t.key}`}
-                    className="block hover:underline"
+                    draggable={false}
+                    className="block after:absolute after:inset-0 hover:underline"
                   >
                     <div className="text-sm font-semibold leading-snug">
                       {t.title}
@@ -358,7 +361,11 @@ export default async function MiEspacioPage({
                     </div>
                   )}
                   <div className="mt-2 flex items-center justify-between gap-2 border-t border-[#f1f3f4] pt-2">
-                    <StatusSelect requestId={t.id} value={t.status} statuses={statuses} />
+                    {/* relative sin z-index: sobre el enlace, y el popover de
+                        Enviar sigue tapando las tarjetas de abajo. */}
+                    <div className="relative">
+                      <StatusSelect requestId={t.id} value={t.status} statuses={statuses} />
+                    </div>
                     <HandoffPanel
                       requestId={t.id}
                       teammates={teammates.map((m) => ({

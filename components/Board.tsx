@@ -47,8 +47,9 @@ export function Board({
         status: c.status,
         canDrag: c.canDrag,
         node: (
-          <div className="rounded-xl border border-[#e6e8eb] bg-white p-3 transition hover:border-[#0bdbcf] hover:shadow-sm">
-            <Link href={`/solicitudes/${c.key}`} className="block">
+          <div className="rounded-xl border border-[#e6e8eb] bg-white transition hover:border-[#0bdbcf] hover:shadow-sm">
+            {/* draggable=false: se arrastra la tarjeta, no el enlace */}
+            <Link href={`/solicitudes/${c.key}`} draggable={false} className="block p-3">
               <div className="mb-2 flex items-center gap-1.5">
                 <ClientTag name={c.clientLabel} />
                 <PriorityTag priority={c.priority} />
