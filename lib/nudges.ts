@@ -143,7 +143,7 @@ async function missingComments(userId: string): Promise<NudgeTask[]> {
 
 // Orden de prioridad igual al original; "sin comentario" solo dispara con
 // 2+ tareas (evita avisar por una sola tarea recién creada). Exportada
-// (Nuevo #16) para que el stream SSE de /mi-espacio pueda recalcular sin
+// (Nuevo #16) para que la campanita de /mi-espacio pueda recalcular sin
 // pasar por el throttle de una vez al día de getPendingNudge.
 export async function evaluateNudgeItems(userId: string, preview = 5): Promise<NudgeItem[]> {
   const [missingTimesRows, dueDatesRows, staleStatusRows, missingCommentsRows] =

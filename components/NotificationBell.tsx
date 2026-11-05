@@ -15,8 +15,11 @@ export type BellItem = {
   href?: string;
 };
 
+const REFRESH_MS = 5 * 60 * 1000;
+
 // Campanita: notificaciones y pendientes ("dale una pasada a esto") ocultos
-// hasta abrir el panel. Los pendientes se actualizan en vivo (SSE) como antes.
+// hasta abrir el panel. Los pendientes se refrescan al abrir, cada 5 minutos
+// con la pestaña visible y al volver a ella (ver app/api/nudges/route.ts).
 export function NotificationBell({
   items,
   unread,
@@ -29,15 +32,22 @@ export function NotificationBell({
   const [nudges, setNudges] = useState<NudgeItem[]>(initialNudges);
 
   useEffect(() => {
-    const source = new EventSource("/api/nudges/stream");
-    source.onmessage = (event) => {
+    const refresh = async () => {
+      if (document.visibilityState !== "visible") return;
       try {
-        setNudges(JSON.parse(event.data));
+        const res = await fetch("/api/nudges");
+        if (res.ok) setNudges(await res.json());
       } catch {
-        // Mensaje corrupto: el próximo tick trae uno bueno.
+        // Sin red: el próximo intervalo reintenta.
       }
     };
-    return () => source.close();
+    refresh();
+    const timer = setInterval(refresh, REFRESH_MS);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, []);
 
   const pending = nudges.filter((n) => NUDGE_LABELS[n.kind]);
