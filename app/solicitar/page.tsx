@@ -4,7 +4,9 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { submitRequest } from "@/app/actions";
 import { ClientProjectFields } from "@/components/ClientProjectFields";
-import { REQUEST_TYPES, PRIORITIES } from "@/lib/constants";
+import { FileInput } from "@/components/FileInput";
+import { SubmitButton } from "@/components/SubmitButton";
+import { REQUEST_TYPES, PRIORITIES, MAX_FILE_SIZE_MB } from "@/lib/constants";
 import { getSessionUser } from "@/lib/session";
 import { hasAccess } from "@/lib/permissions";
 import { workClientsWhere } from "@/lib/authz";
@@ -164,12 +166,21 @@ export default async function SolicitarPage({
             </Field>
           </div>
 
-          <button className="w-full rounded-lg bg-[#0bdbcf] py-2.5 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]">
+          <Field label="Archivos adjuntos" hint={`PDF, PNG, JPG o GIF · hasta ${MAX_FILE_SIZE_MB} MB en total`}>
+            <FileInput
+              multiple
+              className="w-full text-sm text-[#6b7280] file:mr-3 file:rounded-lg file:border-0 file:bg-[#e0fbf9] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-[#065f5a]"
+            />
+          </Field>
+
+          <SubmitButton
+            className="w-full rounded-lg bg-[#0bdbcf] py-2.5 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]"
+            pendingLabel="Enviando…"
+          >
             Enviar solicitud
-          </button>
+          </SubmitButton>
           <p className="text-center text-xs text-[#6b7280]">
-            Podrás adjuntar archivos (PDF, PNG) y seguir el estado desde el
-            portal.
+            Podrás seguir el estado desde el portal.
           </p>
           <p className="text-center text-xs text-[#6b7280]">
             Al enviar aceptas nuestro{" "}

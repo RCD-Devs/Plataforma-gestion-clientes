@@ -20,7 +20,7 @@ async function main() {
 
   const { error } = await supabase.storage.createBucket(ATTACHMENTS_BUCKET, {
     public: false,
-    fileSizeLimit: 10 * 1024 * 1024, // igual al MAX_FILE_SIZE_BYTES de lib/files.ts
+    fileSizeLimit: 10 * 1024 * 1024, // holgado: el tope de subida real es MAX_FILE_SIZE_BYTES
   });
   if (error) throw error;
   console.log(`Bucket "${ATTACHMENTS_BUCKET}" creado (privado).`);

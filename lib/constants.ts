@@ -2,6 +2,12 @@
 // Admin — ver lib/statuses.ts (getStatuses/getStatusMap, respaldados en la
 // tabla Status) y /admin/estados.
 
+// Vercel corta las peticiones sobre 4,5 MB antes de llegar a la app: subir
+// este tope exige también subir bodySizeLimit (next.config.ts) y dejar de
+// pasar los archivos por la función.
+export const MAX_FILE_SIZE_MB = 4;
+export const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+
 export const PRIORITIES = [
   { key: "BAJA", label: "Baja", color: "#7f7f7f" },
   { key: "MEDIA", label: "Media", color: "#08a89f" },

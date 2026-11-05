@@ -1,7 +1,7 @@
 // Valida el tipo real de un archivo por sus primeros bytes (magic number),
 // no por la extensión declarada ni el Content-Type que manda el navegador —
 // ambos los controla quien sube el archivo y son triviales de falsificar.
-export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+export { MAX_FILE_SIZE_BYTES } from "./constants";
 
 type FileSignature = {
   kind: "pdf" | "png";

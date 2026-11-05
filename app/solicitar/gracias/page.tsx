@@ -7,11 +7,11 @@ export const dynamic = "force-dynamic";
 export default async function GraciasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ key?: string }>;
+  searchParams: Promise<{ key?: string; adjuntos?: string }>;
 }) {
   const user = await getSessionUser();
   if (!user || user.role === "CLIENTE") redirect("/login");
-  const { key } = await searchParams;
+  const { key, adjuntos } = await searchParams;
   return (
     <div className="flex min-h-screen items-center justify-center p-6">
       <div className="w-full max-w-md rounded-2xl border border-[#e6e8eb] bg-white p-8 text-center">
@@ -25,6 +25,11 @@ export default async function GraciasPage({
           solicitante recibió un correo de confirmación y se le avisará cada
           cambio de estado.
         </p>
+        {adjuntos && (
+          <p className="mt-3 rounded-lg border border-[#fda565] bg-[#fdf1e3] px-3 py-2 text-sm text-[#9a5a25]">
+            No se pudo adjuntar parte de los archivos. Súbelos desde la solicitud.
+          </p>
+        )}
         <div className="mt-5 flex justify-center gap-2">
           <Link
             href={key ? `/solicitudes/${key}` : "/solicitudes"}

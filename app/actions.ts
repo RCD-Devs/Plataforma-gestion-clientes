@@ -1884,6 +1884,18 @@ export async function submitRequest(formData: FormData) {
       include: { client: true },
     }),
   );
+  // La solicitud ya existe: un archivo que falla se avisa, pero no la bota
+  // (reintentar el formulario la duplicaría).
+  const files = formData.getAll("file").filter((f): f is File => f instanceof File && f.size > 0);
+  const stored = await Promise.all(
+    files.map((f) =>
+      storeUploadedFile(req.id, f).catch((e) => {
+        console.error("Adjunto de solicitud", req.key, e);
+        return null;
+      }),
+    ),
+  );
+  const failedFiles = stored.filter((s) => !s).length;
   await prisma.activity.create({
     data: {
       requestId: req.id,
@@ -1910,7 +1922,7 @@ export async function submitRequest(formData: FormData) {
     email: emailsRequester(req, sessionUser.email),
   });
   refreshLists();
-  redirect(`/solicitar/gracias?key=${req.key}`);
+  redirect(`/solicitar/gracias?key=${req.key}${failedFiles ? `&adjuntos=${failedFiles}` : ""}`);
 }
 
 // ── Portal del cliente ──────────────────────────────────────────

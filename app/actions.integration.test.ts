@@ -39,6 +39,13 @@ vi.mock("@/lib/session", () => ({
   getSessionUser: async () => currentUser,
 }));
 
+// Storage es externo: la subida se simula, el resto del adjunto corre de verdad.
+const uploadToStorage = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock("@/lib/storage", async (original) => ({
+  ...(await original<typeof import("@/lib/storage")>()),
+  uploadToStorage,
+}));
+
 const { prisma } = await import("@/lib/db");
 const { buildCapabilities } = await import("@/lib/permissions");
 const { seedRoles } = await import("../scripts/seed-roles");
@@ -273,6 +280,47 @@ describe.skipIf(!process.env.RUN_DB_TESTS)(
       expect(await prisma.request.count({ where: { title: `Anonima ${suffix}` } })).toBe(0);
 
       await prisma.request.deleteMany({ where: { id: { in: [withAssignee.id, foreign.id] } } });
+    });
+
+    it("submitRequest: guarda los adjuntos válidos y avisa de los que fallan sin perder la solicitud", async () => {
+      const png = (name: string) =>
+        new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])], name);
+      const form = (title: string, ...files: File[]) => {
+        const fd = new FormData();
+        fd.set("clientId", clientA.id);
+        fd.set("requesterEmail", "pide@test.local");
+        fd.set("title", title);
+        for (const f of files) fd.append("file", f);
+        return fd;
+      };
+      const attachments = async (title: string) =>
+        prisma.attachment.findMany({ where: { request: { title } }, select: { name: true } });
+      currentUser = admin;
+
+      // Campo vacío (así lo envía el navegador sin archivo): no es un fallo.
+      await expect(submitRequest(form(`Sin adjunto ${suffix}`, new File([], "")))).rejects.toThrow(
+        /gracias\?key=[^&]+$/,
+      );
+      expect(await attachments(`Sin adjunto ${suffix}`)).toHaveLength(0);
+
+      await expect(submitRequest(form(`Varios ${suffix}`, png("a.png"), png("b.png")))).rejects.toThrow(
+        /gracias\?key=[^&]+$/,
+      );
+      expect((await attachments(`Varios ${suffix}`)).map((a) => a.name).sort()).toEqual(["a.png", "b.png"]);
+
+      // Tipo no permitido y caída de Storage: la solicitud queda y se avisa.
+      await expect(
+        submitRequest(form(`Tipo ${suffix}`, png("ok.png"), new File(["texto"], "virus.exe"))),
+      ).rejects.toThrow("&adjuntos=1");
+      expect((await attachments(`Tipo ${suffix}`)).map((a) => a.name)).toEqual(["ok.png"]);
+
+      uploadToStorage.mockRejectedValueOnce(new Error("storage caído"));
+      await expect(submitRequest(form(`Caida ${suffix}`, png("c.png")))).rejects.toThrow("&adjuntos=1");
+      expect(await prisma.request.count({ where: { title: `Caida ${suffix}` } })).toBe(1);
+
+      await prisma.request.deleteMany({
+        where: { clientId: clientA.id, title: { in: ["Sin adjunto", "Varios", "Tipo", "Caida"].map((t) => `${t} ${suffix}`) } },
+      });
     });
 
     it("archivar cliente: histórico de solo lectura; reactivarlo restaura en pausa solo ese lote", async () => {

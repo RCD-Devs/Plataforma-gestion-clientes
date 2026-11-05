@@ -25,6 +25,9 @@ const CSP = [
 
 const nextConfig: NextConfig = {
   typescript: { ignoreBuildErrors: false },
+  // Adjuntos en formularios con Server Action (por defecto, 1 MB). Debe cubrir
+  // MAX_FILE_SIZE_BYTES más los demás campos, sin pasar el tope de Vercel.
+  experimental: { serverActions: { bodySizeLimit: "4.5mb" } },
   async headers() {
     return [
       {

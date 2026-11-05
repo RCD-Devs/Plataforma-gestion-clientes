@@ -4,7 +4,8 @@ import { SubmitButton } from "@/components/SubmitButton";
 import { PortalShell, shellProps } from "@/components/portal/PortalShell";
 import { prisma } from "@/lib/db";
 import { requirePortalUser } from "@/lib/portal";
-import { REQUEST_TYPES, PRIORITIES } from "@/lib/constants";
+import { FileInput } from "@/components/FileInput";
+import { REQUEST_TYPES, PRIORITIES, MAX_FILE_SIZE_MB } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -83,11 +84,8 @@ export default async function NuevaSolicitudPage({
               <input name="dueDate" type="date" className={inputCls} />
             </Field>
           </div>
-          <Field label="Archivo adjunto (PDF, PNG, JPG)">
-            <input
-              type="file"
-              name="file"
-              accept=".pdf,.png,.jpg,.jpeg,.gif"
+          <Field label={`Archivo adjunto (PDF, PNG, JPG · hasta ${MAX_FILE_SIZE_MB} MB)`}>
+            <FileInput
               className="w-full text-sm text-[#5d6b77] file:mr-3 file:rounded-lg file:border-0 file:bg-[#e0fbf9] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-[#065f5a]"
             />
           </Field>
