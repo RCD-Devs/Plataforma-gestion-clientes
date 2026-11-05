@@ -6,6 +6,7 @@ import { getSessionUser } from "@/lib/session";
 import { canViewRequest } from "@/lib/authz";
 import { canOnClient, clientScopeWhere } from "@/lib/permissions";
 import { TimeEntryActions } from "@/components/TimeEntryActions";
+import { LogHoursForm } from "@/components/LogHoursForm";
 import {
   StatusSelect,
   AssigneeSelect,
@@ -16,7 +17,6 @@ import {
 import { avatarSrc, Avatar, ClientTag } from "@/components/ui";
 import {
   addUrlAttachment,
-  logHours,
   createSubtask,
   saveCustomFieldValues,
   markCommentsRead,
@@ -608,25 +608,7 @@ export default async function RequestDetail({
                 </div>
               )}
             </div>
-            <form action={logHours} className="mt-3 space-y-2">
-              <input type="hidden" name="requestId" value={req.id} />
-              {/* Las horas salen del rango y quedan como bloque en el
-                  calendario de quien las carga (/perfil). */}
-              <input name="date" type="date" className={inputCls} required aria-label="Fecha" />
-              <div className="flex items-center gap-2">
-                <input name="start" type="time" className={inputCls} required aria-label="Desde" />
-                <span className="text-xs text-[#6b7280]">a</span>
-                <input name="end" type="time" className={inputCls} required aria-label="Hasta" />
-              </div>
-              <input
-                name="note"
-                placeholder="Detalle (opcional)"
-                className={inputCls}
-              />
-              <button className="w-full rounded-lg border border-[#e6e8eb] py-2 text-sm hover:bg-[#f3f4f6]">
-                Cargar horas
-              </button>
-            </form>
+            <LogHoursForm requestId={req.id} />
           </div>
 
           <div className="rounded-xl border border-[#e6e8eb] bg-white p-4">

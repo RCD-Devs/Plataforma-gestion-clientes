@@ -43,3 +43,12 @@ export function hoursLabel(h: number) {
   // 2 decimales: con 1, 45 min (0,75 h) se veía como 0,8 h.
   return `${Math.round(h * 100) / 100} h`;
 }
+
+// Duración escrita a mano ("16" min, "1.5" h) → minutos enteros, o null si no
+// es válida. Menos de un día: el bloque que resulta debe caber en una fecha.
+export function durationToMinutes(value: string, unit: string): number | null {
+  const n = Number(value);
+  if (!Number.isFinite(n) || (unit !== "min" && unit !== "h")) return null;
+  const minutes = Math.round(unit === "min" ? n : n * 60);
+  return minutes >= 1 && minutes < 24 * 60 ? minutes : null;
+}

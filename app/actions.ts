@@ -38,6 +38,7 @@ import { isValidEmail } from "@/lib/validate";
 import { getPortalContext, canActAsClient, PORTAL_CLIENT_COOKIE } from "@/lib/portal";
 import { stageDateIssue } from "@/lib/projectBudget";
 import { parseLocalDate, zonedTimeToUtc, chileDateKey } from "@/lib/dates";
+import { durationToMinutes } from "@/lib/format";
 import { addDaysKey, isDateKey } from "@/lib/followUps";
 import { replanSeries } from "@/lib/dailyPlanner";
 import { overlapsOf } from "@/lib/scheduleBlocks";
@@ -1345,10 +1346,11 @@ export async function setRoleActive(roleId: string, isActive: boolean) {
   revalidatePath("/admin/roles");
 }
 
-// Carga directa desde la ficha: exige el rango horario y deja el bloque en
-// el calendario de la persona ya confirmado (mismo resultado que confirmar
-// un bloque desde /perfil) — antes solo creaba el TimeEntry y esas horas
-// no aparecían en ningún horario del calendario.
+// Carga directa desde la ficha: siempre deja un bloque en el calendario de la
+// persona ya confirmado (mismo resultado que confirmar un bloque desde
+// /perfil) — antes solo creaba el TimeEntry y esas horas no aparecían en
+// ningún horario del calendario. El fin llega escrito ("Hasta") o se calcula
+// desde el inicio y la duración; el bloque no puede pasar a otro día.
 export async function logHours(formData: FormData) {
   const user = await getSessionUser();
   if (!user || !isTeamRole(user.role)) return;
@@ -1356,8 +1358,14 @@ export async function logHours(formData: FormData) {
   const note = String(formData.get("note") || "").trim();
   const dateStr = String(formData.get("date") || "");
   const start = parseDateTimeLocal(`${dateStr}T${formData.get("start") || ""}`);
-  const end = parseDateTimeLocal(`${dateStr}T${formData.get("end") || ""}`);
-  if (!requestId || !start || !end || end <= start) return;
+  let end: Date | null;
+  if (formData.has("duration")) {
+    const minutes = durationToMinutes(String(formData.get("duration")), String(formData.get("unit")));
+    end = start && minutes ? new Date(start.getTime() + minutes * 60_000) : null;
+  } else {
+    end = parseDateTimeLocal(`${dateStr}T${formData.get("end") || ""}`);
+  }
+  if (!requestId || !start || !end || end <= start || chileDateKey(end) !== chileDateKey(start)) return;
   const hours = Math.round(((end.getTime() - start.getTime()) / 3_600_000) * 100) / 100;
   if (await requestLocked(requestId)) return;
   await prisma.timeEntry.create({
