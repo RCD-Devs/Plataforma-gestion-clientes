@@ -60,7 +60,6 @@ export default async function SolicitudesPage({
           </div>
           <Link
             href="/solicitar"
-            target="_blank"
             className="rounded-lg bg-[#0bdbcf] px-3 py-2 text-sm font-semibold text-[#081826] hover:bg-[#09c4ba]"
           >
             + Nueva solicitud

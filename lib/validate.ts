@@ -5,3 +5,9 @@
 export function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
+
+// Lista escrita a mano ("a@x.cl, b@x.cl"): en minúsculas, sin repetidos ni
+// lo que no tenga forma de correo.
+export function parseEmailList(value: string): string[] {
+  return [...new Set(value.toLowerCase().split(/[\s,;]+/).filter(isValidEmail))];
+}

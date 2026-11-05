@@ -18,6 +18,8 @@ export function RequestEditPanel({
   projects,
   stageId,
   stages,
+  requesterEmail,
+  notifyEmails,
 }: {
   requestId: string;
   title: string;
@@ -28,6 +30,8 @@ export function RequestEditPanel({
   projects: { id: string; name: string }[];
   stageId: string | null;
   stages: { id: string; name: string; projectId: string }[];
+  requesterEmail: string;
+  notifyEmails: string[];
 }) {
   const [open, setOpen] = useState(false);
   const [project, setProject] = useState(projectId ?? "");
@@ -138,6 +142,27 @@ export function RequestEditPanel({
           </select>
         </div>
       )}
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-[#6b7280]">
+            Correo del solicitante
+          </label>
+          <input name="requesterEmail" type="email" defaultValue={requesterEmail} className={inputCls} />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-[#6b7280]">
+            Otros correos para avisos de estado
+          </label>
+          <input
+            name="notifyEmails"
+            type="email"
+            multiple
+            defaultValue={notifyEmails.join(", ")}
+            placeholder="separados por coma"
+            className={inputCls}
+          />
+        </div>
+      </div>
       <div className="flex gap-2 pt-1">
         <button
           disabled={pending}

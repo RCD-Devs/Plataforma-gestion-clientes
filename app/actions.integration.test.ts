@@ -65,6 +65,7 @@ const {
   deleteRequest,
   restoreRequest,
   deleteClient,
+  updateRequestDetails,
 } = await import(
   "@/app/actions"
 );
@@ -321,6 +322,62 @@ describe.skipIf(!process.env.RUN_DB_TESTS)(
       await prisma.request.deleteMany({
         where: { clientId: clientA.id, title: { in: ["Sin adjunto", "Varios", "Tipo", "Caida"].map((t) => `${t} ${suffix}`) } },
       });
+    });
+
+    it("submitRequest: los otros correos quedan guardados y reciben la confirmación", async () => {
+      currentUser = admin;
+      const fd = new FormData();
+      fd.set("clientId", clientA.id);
+      fd.set("requesterEmail", "Pide@test.local");
+      fd.set("title", `Con otros ${suffix}`);
+      fd.set("emailRequester", "1");
+      fd.set("notifyEmails", "otra@test.local, pide@test.local");
+      await expect(submitRequest(fd)).rejects.toThrow(RedirectSignal);
+
+      const created = await prisma.request.findFirstOrThrow({ where: { title: `Con otros ${suffix}` } });
+      expect(created.notifyEmails).toEqual(["otra@test.local"]);
+      const sent = await prisma.notification.findMany({ where: { requestId: created.id, channel: "email" } });
+      expect(sent.map((n) => n.recipientEmail).sort()).toEqual(["Pide@test.local", "otra@test.local"]);
+
+      await prisma.notification.deleteMany({ where: { requestId: created.id } });
+      await prisma.request.delete({ where: { id: created.id } });
+    });
+
+    it("correos de aviso: editar solicitante y otros llega a las subtareas y a los avisos de estado", async () => {
+      currentUser = admin;
+      const base = { title: "Avisos", clientId: clientA.id, status: "POR_HACER", requesterEmail: "viejo@test.local" };
+      const parent = await prisma.request.create({ data: { ...base, key: `AVI-${suffix}` } });
+      const sub = await prisma.request.create({ data: { ...base, key: `AVIS-${suffix}`, parentId: parent.id } });
+      const edit = (requester: string, others: string) => {
+        const fd = new FormData();
+        fd.set("title", "Avisos");
+        fd.set("requesterEmail", requester);
+        fd.set("notifyEmails", others);
+        return updateRequestDetails(parent.id, fd);
+      };
+      const read = (id: string) => prisma.request.findUniqueOrThrow({ where: { id } });
+      const mailed = async () =>
+        (await prisma.notification.findMany({ where: { requestId: parent.id, channel: "email" } }))
+          .map((n) => n.recipientEmail)
+          .sort();
+
+      // Sin repetir al solicitante, sin repetidos y sin lo que no es correo.
+      await edit("nuevo@test.local", "Otra@test.local; nuevo@test.local, no-es-correo, otra@test.local");
+      expect(await read(parent.id)).toMatchObject({ requesterEmail: "nuevo@test.local", notifyEmails: ["otra@test.local"] });
+      expect(await read(sub.id)).toMatchObject({ requesterEmail: "nuevo@test.local", notifyEmails: ["otra@test.local"] });
+
+      await changeStatus(parent.id, "FINALIZADA");
+      expect(await mailed()).toEqual(["nuevo@test.local", "otra@test.local"]);
+
+      // Un solicitante inválido se ignora; quien actúa no se manda correo a sí mismo.
+      await prisma.notification.deleteMany({ where: { requestId: parent.id } });
+      await edit("no-es-correo", admin.email);
+      expect((await read(parent.id)).requesterEmail).toBe("nuevo@test.local");
+      await changeStatus(parent.id, "POR_HACER");
+      expect(await mailed()).toEqual(["nuevo@test.local"]);
+
+      await prisma.notification.deleteMany({ where: { requestId: { in: [parent.id, sub.id] } } });
+      await prisma.request.deleteMany({ where: { id: { in: [sub.id, parent.id] } } });
     });
 
     it("archivar cliente: histórico de solo lectura; reactivarlo restaura en pausa solo ese lote", async () => {

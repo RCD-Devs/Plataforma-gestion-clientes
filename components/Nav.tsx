@@ -111,12 +111,11 @@ export function Sidebar({
           <div className="mx-3 my-3 border-t border-white/10" />
           <Link
             href="/solicitar"
-            target="_blank"
             onClick={closeOnNavigate}
             className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/80 hover:bg-white/5 hover:text-white"
           >
-            <span className="w-4 text-center text-base" aria-hidden="true">↗</span>
-            Formulario público
+            <span className="w-4 text-center text-base" aria-hidden="true">+</span>
+            Nueva solicitud
           </Link>
           <Link
             href="/portal"

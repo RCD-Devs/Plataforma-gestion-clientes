@@ -34,7 +34,7 @@ import crypto from "crypto";
 import { notifyClient, notifyTeam, notifyMention, notifyReply } from "@/lib/email";
 import { PRIORITY_MAP } from "@/lib/constants";
 import { getStatusMap, getStatuses } from "@/lib/statuses";
-import { isValidEmail } from "@/lib/validate";
+import { isValidEmail, parseEmailList } from "@/lib/validate";
 import { getPortalContext, canActAsClient, PORTAL_CLIENT_COOKIE } from "@/lib/portal";
 import { stageDateIssue } from "@/lib/projectBudget";
 import { parseLocalDate, zonedTimeToUtc, chileDateKey } from "@/lib/dates";
@@ -339,6 +339,39 @@ function emailsRequester(req: { requesterEmail: string; emailRequester: boolean 
   return req.emailRequester && req.requesterEmail.trim().toLowerCase() !== actorEmail.trim().toLowerCase();
 }
 
+// Avisos de estado (también el de creación): al solicitante y a los correos adicionales.
+async function notifyStatusRecipients(
+  req: { id: string; requesterEmail: string; notifyEmails: string[]; emailRequester: boolean },
+  message: { title: string; body: string },
+  actorEmail: string,
+) {
+  const requester = req.requesterEmail.trim();
+  const others = req.notifyEmails.filter((e) => e !== requester.toLowerCase());
+  for (const to of requester ? [requester, ...others] : others) {
+    await notifyClient({
+      to,
+      requestId: req.id,
+      ...message,
+      email: emailsRequester({ requesterEmail: to, emailRequester: req.emailRequester }, actorEmail),
+    });
+  }
+}
+
+async function notifyStatusChange(
+  req: Parameters<typeof notifyStatusRecipients>[0] & { key: string; title: string; client: { name: string } },
+  label: string,
+  actorEmail: string,
+) {
+  await notifyStatusRecipients(
+    req,
+    {
+      title: `Tu solicitud ${req.key} ahora está "${label}"`,
+      body: `El estado de tu solicitud "${req.title}" (${req.key}) para ${req.client.name} cambió a "${label}".`,
+    },
+    actorEmail,
+  );
+}
+
 async function requestLocked(requestId: string): Promise<boolean> {
   const r = await prisma.request.findUnique({ where: { id: requestId }, select: { archivedAt: true } });
   return !r || !!r.archivedAt;
@@ -378,15 +411,7 @@ export async function changeStatus(
       actorName: user?.name ?? "Sistema",
     },
   });
-  if (req.requesterEmail) {
-    await notifyClient({
-      to: req.requesterEmail,
-      requestId,
-      title: `Tu solicitud ${req.key} ahora está "${label}"`,
-      body: `El estado de tu solicitud "${req.title}" (${req.key}) para ${req.client.name} cambió a "${label}".`,
-      email: emailsRequester(req, user.email),
-    });
-  }
+  await notifyStatusChange(req, label, user.email);
   refreshLists(req.key);
   revalidatePath("/portal");
   return { ok: true };
@@ -544,6 +569,15 @@ export async function updateRequestDetails(requestId: string, formData: FormData
     projectId && stageRaw
       ? await prisma.projectStage.findFirst({ where: { id: stageRaw, projectId }, select: { id: true } })
       : null;
+  // Vacío = sin solicitante (hay solicitudes importadas así); uno inválido
+  // solo llega saltándose el formulario, y se ignora.
+  const rawRequester = String(formData.get("requesterEmail") || "").trim();
+  const requesterEmail = !rawRequester || isValidEmail(rawRequester) ? rawRequester : existing.requesterEmail;
+  const notifyEmails = parseEmailList(String(formData.get("notifyEmails") || "")).filter(
+    (e) => e !== requesterEmail.toLowerCase(),
+  );
+  const recipientsChanged =
+    requesterEmail !== existing.requesterEmail || notifyEmails.join() !== existing.notifyEmails.join();
 
   const req = await prisma.request.update({
     where: { id: requestId },
@@ -554,6 +588,8 @@ export async function updateRequestDetails(requestId: string, formData: FormData
       dueDate: dueStr ? parseLocalDate(dueStr) : null,
       projectId,
       stageId: stage?.id ?? null,
+      requesterEmail,
+      notifyEmails,
     },
   });
   await prisma.activity.create({
@@ -564,6 +600,19 @@ export async function updateRequestDetails(requestId: string, formData: FormData
       actorName: user.name,
     },
   });
+  if (recipientsChanged) {
+    // Las subtareas también avisan al cambiar de estado: sin esto seguirían
+    // escribiéndole al correo anterior.
+    await prisma.request.updateMany({ where: { parentId: requestId }, data: { requesterEmail, notifyEmails } });
+    await prisma.activity.create({
+      data: {
+        requestId,
+        type: "edited",
+        message: `Cambió los correos de aviso: ${[requesterEmail, ...notifyEmails].filter(Boolean).join(", ") || "ninguno"}`,
+        actorName: user.name,
+      },
+    });
+  }
   refreshLists(req.key);
 }
 
@@ -720,6 +769,7 @@ export async function createSubtask(parentId: string, formData: FormData) {
         projectId: parent.projectId,
         parentId: parent.id,
         requesterEmail: parent.requesterEmail,
+        notifyEmails: parent.notifyEmails,
         emailRequester: parent.emailRequester,
         status: "POR_HACER",
       },
@@ -1773,15 +1823,8 @@ export async function handoffRequest(formData: FormData) {
     title: `${user.name} te envió la tarea ${req.key}`,
     body: `"${req.title}" (${req.client.name})${note ? ` — ${note}` : ""}`,
   });
-  if (statusChanges && req.requesterEmail) {
-    const label = statusMap[newStatus]?.label ?? newStatus;
-    await notifyClient({
-      to: req.requesterEmail,
-      requestId,
-      title: `Tu solicitud ${req.key} ahora está "${label}"`,
-      body: `El estado de tu solicitud "${req.title}" (${req.key}) para ${req.client.name} cambió a "${label}".`,
-      email: emailsRequester(req, user.email),
-    });
+  if (statusChanges) {
+    await notifyStatusChange(req, statusMap[newStatus]?.label ?? newStatus, user.email);
   }
   refreshLists(req.key);
   revalidatePath("/portal");
@@ -1873,6 +1916,9 @@ export async function submitRequest(formData: FormData) {
         description,
         priority,
         requesterEmail,
+        notifyEmails: parseEmailList(String(formData.get("notifyEmails") || "")).filter(
+          (e) => e !== requesterEmail.toLowerCase(),
+        ),
         emailRequester,
         clientId,
         projectId: project?.id ?? null,
@@ -1914,13 +1960,14 @@ export async function submitRequest(formData: FormData) {
       },
     });
   }
-  await notifyClient({
-    to: requesterEmail,
-    requestId: req.id,
-    title: `Recibimos tu solicitud ${req.key}`,
-    body: `Recibimos tu solicitud "${title}" para ${req.client.name}. Su folio es ${req.key} y su estado es "Sin triaje". Te avisaremos por correo cada cambio de estado.`,
-    email: emailsRequester(req, sessionUser.email),
-  });
+  await notifyStatusRecipients(
+    req,
+    {
+      title: `Recibimos tu solicitud ${req.key}`,
+      body: `Recibimos tu solicitud "${title}" para ${req.client.name}. Su folio es ${req.key} y su estado es "Sin triaje". Te avisaremos por correo cada cambio de estado.`,
+    },
+    sessionUser.email,
+  );
   refreshLists();
   redirect(`/solicitar/gracias?key=${req.key}${failedFiles ? `&adjuntos=${failedFiles}` : ""}`);
 }

@@ -195,6 +195,8 @@ export default async function RequestDetail({
           projects={projects}
           stageId={req.stageId}
           stages={stages}
+          requesterEmail={req.requesterEmail}
+          notifyEmails={req.notifyEmails}
         />
       </div>
 
@@ -532,8 +534,13 @@ export default async function RequestDetail({
               <Row label="Solicitante">
                 <span className="truncate">{req.requesterEmail || "—"}</span>
               </Row>
-              {req.requesterEmail && (
-                <Row label="Correos al solicitante">
+              {req.notifyEmails.length > 0 && (
+                <Row label="Otros avisos de estado">
+                  <span className="break-all">{req.notifyEmails.join(", ")}</span>
+                </Row>
+              )}
+              {(req.requesterEmail || req.notifyEmails.length > 0) && (
+                <Row label="Avisos por correo">
                   <EmailRequesterToggle requestId={req.id} value={req.emailRequester} />
                 </Row>
               )}

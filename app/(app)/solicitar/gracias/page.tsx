@@ -13,7 +13,7 @@ export default async function GraciasPage({
   if (!user || user.role === "CLIENTE") redirect("/login");
   const { key, adjuntos } = await searchParams;
   return (
-    <div className="flex min-h-screen items-center justify-center p-6">
+    <div className="flex min-h-full items-center justify-center p-6">
       <div className="w-full max-w-md rounded-2xl border border-[#e6e8eb] bg-white p-8 text-center">
         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#e6f7f0] text-2xl text-[#0e9f6e]">
           ✓

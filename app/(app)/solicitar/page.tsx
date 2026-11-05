@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import Image from "next/image";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { submitRequest } from "@/app/actions";
@@ -58,15 +57,12 @@ export default async function SolicitarPage({
   };
 
   return (
-    <div className="min-h-screen bg-[#f4f6f8] py-10">
+    <div className="min-h-full bg-[#f4f6f8] py-10">
       <div className="mx-auto w-full max-w-xl px-4">
-        <div className="mb-6 flex items-center gap-2">
-          <Image src="/brand/logo.png" alt="REVO" width={120} height={53} />
-          <div>
-            <div className="text-lg font-semibold">Nueva solicitud</div>
-            <div className="text-sm text-[#6b7280]">
-              Grupo Revo · Ingreso interno
-            </div>
+        <div className="mb-6">
+          <div className="text-lg font-semibold">Nueva solicitud</div>
+          <div className="text-sm text-[#6b7280]">
+            Grupo Revo · Ingreso interno
           </div>
         </div>
 
@@ -122,6 +118,19 @@ export default async function SolicitarPage({
             />
             Avisar por correo al solicitante (se puede cambiar después en la ficha)
           </label>
+
+          <Field
+            label="Otros correos (opcional)"
+            hint="También recibirán los avisos de estado. Sepáralos por coma."
+          >
+            <input
+              name="notifyEmails"
+              type="email"
+              multiple
+              placeholder="otra@empresa.cl, persona@empresa.cl"
+              className={inputCls}
+            />
+          </Field>
 
           <Field label="Tipo de solicitud">
             <select name="type" className={inputCls} defaultValue={REQUEST_TYPES[0]}>
