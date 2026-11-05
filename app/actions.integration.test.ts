@@ -50,6 +50,7 @@ const { prisma } = await import("@/lib/db");
 const { buildCapabilities } = await import("@/lib/permissions");
 const { seedRoles } = await import("../scripts/seed-roles");
 const { workClientsWhere } = await import("@/lib/authz");
+const { chileDateKey } = await import("@/lib/dates");
 // TestUser tipa capabilities como string[] sueltos; en runtime es lo mismo.
 const asAuthz = (u: TestUser) => u as unknown as Parameters<typeof workClientsWhere>[0];
 const {
@@ -66,6 +67,7 @@ const {
   restoreRequest,
   deleteClient,
   updateRequestDetails,
+  updateScheduleBlock,
 } = await import(
   "@/app/actions"
 );
@@ -378,6 +380,45 @@ describe.skipIf(!process.env.RUN_DB_TESTS)(
 
       await prisma.notification.deleteMany({ where: { requestId: { in: [parent.id, sub.id] } } });
       await prisma.request.deleteMany({ where: { id: { in: [sub.id, parent.id] } } });
+    });
+
+    it("calendario: estirar un bloque registrado ajusta sus horas; moverlo no pisa una corrección", async () => {
+      currentUser = admin;
+      const r = await prisma.request.create({
+        data: { key: `BLQ-${suffix}`, title: "Bloque", clientId: clientA.id, status: "POR_HACER" },
+      });
+      const at = (s: string) => new Date(`${s}:00-03:00`);
+      const entry = await prisma.timeEntry.create({
+        data: { requestId: r.id, userId: admin.id, hours: 2, date: at("2026-10-05T09:00") },
+      });
+      const block = await prisma.scheduleBlock.create({
+        data: {
+          userId: admin.id,
+          requestId: r.id,
+          timeEntryId: entry.id,
+          start: at("2026-10-05T09:00"),
+          end: at("2026-10-05T11:00"),
+        },
+      });
+      const hours = async () => (await prisma.timeEntry.findUniqueOrThrow({ where: { id: entry.id } })).hours;
+
+      expect((await updateScheduleBlock(block.id, "2026-10-05T09:00", "2026-10-05T12:00")).ok).toBe(true);
+      expect(await hours()).toBe(3);
+
+      // Corregida a mano y movida a otro día con la misma duración: conserva las horas y cambia la fecha.
+      await prisma.timeEntry.update({ where: { id: entry.id }, data: { hours: 2.5 } });
+      await updateScheduleBlock(block.id, "2026-10-06T09:00", "2026-10-06T12:00");
+      const moved = await prisma.timeEntry.findUniqueOrThrow({ where: { id: entry.id } });
+      expect(moved.hours).toBe(2.5);
+      expect(chileDateKey(moved.date)).toBe("2026-10-06");
+
+      // Archivada: ni el bloque registrado ni sus horas cambian.
+      await prisma.request.update({ where: { id: r.id }, data: { archivedAt: new Date() } });
+      expect((await updateScheduleBlock(block.id, "2026-10-06T09:00", "2026-10-06T14:00")).ok).toBe(false);
+      expect(await hours()).toBe(2.5);
+
+      await prisma.scheduleBlock.delete({ where: { id: block.id } });
+      await prisma.request.delete({ where: { id: r.id } });
     });
 
     it("archivar cliente: histórico de solo lectura; reactivarlo restaura en pausa solo ese lote", async () => {

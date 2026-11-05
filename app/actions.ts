@@ -2809,8 +2809,32 @@ export async function updateScheduleBlock(blockId: string, start: string, end: s
   const s = parseDateTimeLocal(start);
   const e = parseDateTimeLocal(end);
   if (!s || !e || e <= s) return { ok: false };
+  // Con horas registradas, el bloque y sus horas se mueven juntos; una
+  // archivada es histórico de solo lectura.
+  if (block.timeEntryId && (await requestLocked(block.requestId))) return { ok: false };
 
   await prisma.scheduleBlock.update({ where: { id: blockId }, data: { start: s, end: e } });
+  if (block.timeEntryId) {
+    // Solo si cambió la duración: mover un bloque no pisa horas corregidas a mano.
+    const resized = e.getTime() - s.getTime() !== block.end.getTime() - block.start.getTime();
+    const hours = Math.round(((e.getTime() - s.getTime()) / 3_600_000) * 100) / 100;
+    await prisma.timeEntry.update({
+      where: { id: block.timeEntryId },
+      data: { ...(resized ? { hours } : {}), ...(chileDateKey(s) !== chileDateKey(block.start) ? { date: s } : {}) },
+    });
+    if (resized) {
+      await prisma.activity.create({
+        data: {
+          requestId: block.requestId,
+          type: "time_edited",
+          message: `Ajustó a ${hours} h una carga desde su calendario`,
+          actorName: user.name,
+        },
+      });
+    }
+    revalidatePath("/bolsa");
+    revalidatePath("/dashboard");
+  }
   const overlaps = await overlapWarnings(user.id, s, e, blockId);
   revalidatePath("/perfil");
   return { ok: true, overlaps };

@@ -331,6 +331,9 @@ export function PersonalCalendar({
               const registered = hoursByDay[dayKeys[i]] ?? 0;
               const expected = expectedHours(workHours, dayKeys[i]);
               const extra = extraHours(registered, expected);
+              const unregistered = dayBlocks
+                .filter((b) => !b.confirmed)
+                .reduce((sum, b) => sum + (b.endD.getTime() - b.startD.getTime()) / 3600000, 0);
               return (
                 <div key={i} data-col className="border-r border-[#f1f3f4] last:border-r-0">
                   <div
@@ -339,7 +342,7 @@ export function PersonalCalendar({
                     <span>
                       {WEEKDAY_LABELS[weekdayIndex(dayKeys[i])]} {day.getDate()}
                     </span>
-                    <DayHours registered={registered} expected={expected} extra={extra} />
+                    <DayHours registered={registered} expected={expected} extra={extra} unregistered={unregistered} />
                   </div>
                   <div
                     data-daygrid={i}
@@ -463,9 +466,20 @@ export function PersonalCalendar({
 }
 
 // "9,5/8,5 h" + horas extra si se pasó de la jornada. Se usa también en la
-// vista mensual.
-export function DayHours({ registered, expected, extra }: { registered: number; expected: number; extra: number }) {
-  if (registered === 0 && expected === 0) return null;
+// vista mensual. `unregistered`: bloques que se ven en el calendario pero
+// aún no cuentan, porque falta "Registrar horas".
+export function DayHours({
+  registered,
+  expected,
+  extra,
+  unregistered = 0,
+}: {
+  registered: number;
+  expected: number;
+  extra: number;
+  unregistered?: number;
+}) {
+  if (registered === 0 && expected === 0 && unregistered === 0) return null;
   const done = registered >= expected;
   return (
     <span className="text-[10px] leading-tight" title="Horas registradas / jornada del día">
@@ -473,6 +487,11 @@ export function DayHours({ registered, expected, extra }: { registered: number; 
         {fmtHours(registered)}/{fmtHours(expected)} h
       </span>
       {extra > 0 && <span className="block font-semibold text-[#9a5a25]">+{fmtHours(extra)} h extra</span>}
+      {unregistered > 0 && (
+        <span className="block text-[#9a5a25]" title="Abre cada bloque y usa “Registrar horas” para que cuenten">
+          {fmtHours(unregistered)} h sin registrar
+        </span>
+      )}
     </span>
   );
 }
