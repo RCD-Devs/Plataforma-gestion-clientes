@@ -136,7 +136,7 @@ async function CalendarTab({
     ? clientScopeWhere(capabilities, "clients.view", userId)
     : { OR: [{ accountManagerId: userId }, { members: { some: { userId } } }] };
 
-  const [blocks, myTasks, clients, entries, me, googleLink] = await Promise.all([
+  const [blocks, openTasks, clients, entries, me, googleLink] = await Promise.all([
     prisma.scheduleBlock.findMany({
       where: {
         userId,
@@ -149,8 +149,13 @@ async function CalendarTab({
       orderBy: { start: "asc" },
     }),
     prisma.request.findMany({
+      // Las finalizadas se filtran AQUÍ, no después del take: si no, las 200
+      // más recientes se llenaban de tareas cerradas y quedaban fuera las
+      // abiertas que casi no se tocan (ej. Tareas recurrentes).
       where: {
         archivedAt: null,
+        deletedAt: null,
+        status: { notIn: [...finalCodes] },
         OR: [{ assigneeId: userId }, { collaborators: { some: { userId } } }],
       },
       select: {
@@ -161,7 +166,7 @@ async function CalendarTab({
         client: { select: { name: true } },
       },
       orderBy: { updatedAt: "desc" },
-      take: 200,
+      take: 500,
     }),
     prisma.client.findMany({
       where: { isActive: true, ...clientWhere },
@@ -226,7 +231,6 @@ async function CalendarTab({
       color: statusMap[b.request.status]?.color ?? "#08a89f",
     },
   }));
-  const openTasks = myTasks.filter((t) => !finalCodes.has(t.status));
 
   return (
     <>
