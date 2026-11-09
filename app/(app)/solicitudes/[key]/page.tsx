@@ -60,7 +60,11 @@ export default async function RequestDetail({
       project: true,
       stage: true,
       parent: { select: { key: true, title: true } },
-      subtasks: { where: { deletedAt: null }, orderBy: { createdAt: "asc" }, include: { assignee: true } },
+      subtasks: {
+        where: { deletedAt: null },
+        orderBy: { createdAt: "asc" },
+        include: { assignee: true, timeEntries: { select: { hours: true } } },
+      },
       collaborators: { include: { user: true } },
       customFieldValues: { include: { field: true } },
       attachments: { orderBy: { createdAt: "desc" } },
@@ -122,7 +126,11 @@ export default async function RequestDetail({
   const openComments = req.comments.filter((c) => !c.resolvedAt);
   const shownComments =
     comentarios === "resueltos" ? req.comments.filter((c) => c.resolvedAt) : openComments;
-  const totalHours = req.timeEntries.reduce((a, t) => a + t.hours, 0);
+  // Total mostrado = propias + subtareas (solo visual: cada hora sigue
+  // guardada en su tarea, y bolsa/reportes la cuentan una sola vez).
+  const ownHours = req.timeEntries.reduce((a, t) => a + t.hours, 0);
+  const subtaskHours = req.subtasks.reduce((a, s) => a + s.timeEntries.reduce((b, t) => b + t.hours, 0), 0);
+  const totalHours = ownHours + subtaskHours;
   const customFieldValueMap = new Map(
     req.customFieldValues.map((v) => [v.fieldId, v.value]),
   );
@@ -573,8 +581,13 @@ export default async function RequestDetail({
           <div className="rounded-xl border border-[#e6e8eb] bg-white p-4">
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-sm font-semibold">Horas</h3>
-              <span className="text-sm font-semibold text-[#08a89f]">
+              <span className="text-right text-sm font-semibold text-[#08a89f]">
                 {hoursLabel(totalHours)}
+                {subtaskHours > 0 && (
+                  <span className="block text-[11px] font-normal text-[#6b7280]">
+                    {hoursLabel(ownHours)} propias + {hoursLabel(subtaskHours)} de subtareas
+                  </span>
+                )}
               </span>
             </div>
             <div className="divide-y divide-[#f0f1f3]">
