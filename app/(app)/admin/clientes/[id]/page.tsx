@@ -26,9 +26,9 @@ export default async function EditarClientePage({
 }) {
   const { id } = await params;
   const { error } = await searchParams;
-  const [me, client, users, adjustments, projects, members] = await Promise.all([
+  const [me, client, users, adjustments, projects, members, teams] = await Promise.all([
     getSessionUser(),
-    prisma.client.findUnique({ where: { id } }),
+    prisma.client.findUnique({ where: { id }, include: { teams: { select: { id: true } } } }),
     prisma.user.findMany({
       orderBy: { name: "asc" },
       include: { roles: { include: { role: { include: { permissions: true } } } } },
@@ -36,6 +36,7 @@ export default async function EditarClientePage({
     prisma.hoursAdjustment.findMany({ where: { clientId: id }, orderBy: { createdAt: "desc" } }),
     prisma.project.findMany({ where: { clientId: id }, orderBy: { createdAt: "desc" } }),
     prisma.clientMember.findMany({ where: { clientId: id }, select: { userId: true } }),
+    prisma.team.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
   if (!client) notFound();
   const managers = users
@@ -52,6 +53,8 @@ export default async function EditarClientePage({
         managers={managers.map(pickIdName)}
         teamUsers={users.filter((u) => u.role !== "CLIENTE" && u.isActive).map(pickIdName)}
         memberIds={members.map((m) => m.userId)}
+        teams={teams}
+        teamIds={client.teams.map((t) => t.id)}
         error={error}
         action={updateClient.bind(null, id)}
         submitLabel="Guardar cambios"

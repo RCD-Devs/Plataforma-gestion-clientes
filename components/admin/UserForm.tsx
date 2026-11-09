@@ -32,6 +32,10 @@ export function UserForm({
     teamId: string | null;
     clientId: string | null;
     isActive: boolean;
+    nombres: string | null;
+    apellidos: string | null;
+    perfil: string | null;
+    seniority: number | null;
   };
   // Roles ya asignados a `editing` (vacío/no aplica al crear).
   editingRoleIds?: string[];
@@ -98,6 +102,37 @@ export function UserForm({
           />
         </div>
       </div>
+      <fieldset className="space-y-3 rounded-lg border border-[#e4e8ec] p-3">
+        <legend className="px-1 text-xs font-semibold text-[#5d6b77]">Reporte de dedicación (solo admins)</legend>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className={labelCls}>Nombres</label>
+            <input name="nombres" defaultValue={editing?.nombres ?? ""} className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>Apellidos</label>
+            <input name="apellidos" defaultValue={editing?.apellidos ?? ""} className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>Perfil (cargo)</label>
+            <input name="perfil" defaultValue={editing?.perfil ?? ""} placeholder="Ej. Community Manager" className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>Seniority</label>
+            <input
+              name="seniority"
+              inputMode="decimal"
+              defaultValue={editing?.seniority == null ? "" : String(editing.seniority).replace(".", ",")}
+              placeholder="Ej. 0,6"
+              className={inputCls}
+            />
+          </div>
+        </div>
+        <p className="text-[11px] text-[#6b7280]">
+          El perfil no es un rol de permisos. Perfil y seniority quedan guardados en cada registro de horas: cambiarlos
+          aplica desde ahora, no reescribe lo ya registrado.
+        </p>
+      </fieldset>
       <div>
         <label className={labelCls}>Roles (equipo interno) *</label>
         <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-[#e4e8ec] p-3">

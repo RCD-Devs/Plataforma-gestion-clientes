@@ -15,6 +15,7 @@ export default async function NuevoClientePage({
     orderBy: { name: "asc" },
     include: { roles: { include: { role: { include: { permissions: true } } } } },
   });
+  const teams = await prisma.team.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } });
   const managers = users
     .filter((u) => u.isActive)
     .map(attachCapabilities)
@@ -24,6 +25,7 @@ export default async function NuevoClientePage({
     <ClientForm
       managers={managers.map(pickIdName)}
       teamUsers={users.filter((u) => u.role !== "CLIENTE" && u.isActive).map(pickIdName)}
+      teams={teams}
       error={error}
       action={createClient}
       submitLabel="Crear cliente"

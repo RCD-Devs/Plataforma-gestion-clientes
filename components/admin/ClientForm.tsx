@@ -16,6 +16,8 @@ export function ClientForm({
   managers,
   teamUsers,
   memberIds,
+  teams,
+  teamIds,
   error,
   action,
   submitLabel,
@@ -32,11 +34,15 @@ export function ClientForm({
     color: string | null;
     accountManagerId: string | null;
     isActive: boolean;
+    servicio: string | null;
   };
   managers: { id: string; name: string }[];
   // Equipo interno asignable al cliente y quiénes ya están asignados.
   teamUsers: { id: string; name: string }[];
   memberIds?: string[];
+  // Equipos que atienden al cliente (reporte de dedicación: Continua).
+  teams: { id: string; name: string }[];
+  teamIds?: string[];
   error?: string;
   action: (formData: FormData) => void | Promise<void>;
   submitLabel: string;
@@ -175,6 +181,33 @@ export function ClientForm({
           tiene alcance «Solo sus clientes», ven las solicitudes de este cliente.
         </p>
       </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className={labelCls}>Servicio</label>
+          <input name="servicio" defaultValue={client?.servicio ?? ""} placeholder="Ej. Gestión de RRSS" className={inputCls} />
+        </div>
+        <div>
+          <label className={labelCls}>Equipos que lo atienden</label>
+          <div className="max-h-32 space-y-1 overflow-y-auto rounded-lg border border-[#e4e8ec] p-2">
+            {teams.map((t) => (
+              <label key={t.id} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  name="teamIds"
+                  value={t.id}
+                  defaultChecked={teamIds?.includes(t.id) ?? false}
+                  className="h-4 w-4 accent-[#0bdbcf]"
+                />
+                {t.name}
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+      <p className="-mt-2 text-[11px] text-[#6b7280]">
+        Para el reporte de dedicación: con más de un equipo el cliente sale como «Continuidad»; con uno, como
+        «Rompecabeza» + el equipo.
+      </p>
       <label className="flex items-center gap-2 text-sm">
         <input
           type="checkbox"

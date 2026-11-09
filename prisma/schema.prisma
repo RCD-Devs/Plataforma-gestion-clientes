@@ -23,20 +23,20 @@ datasource db {
 }
 
 model Client {
-  id           String  @id @default(cuid())
-  name         String
+  id              String    @id @default(cuid())
+  name            String
   // URL legible ("clinica-los-coihues"): único, no cambia si se renombra el
   // cliente (evita romper links guardados). Nullable por lo mismo que
   // Project.slug — los clientes existentes lo reciben en el backfill del
   // seed, no en el db push.
-  slug         String? @unique
+  slug            String?   @unique
   // Prefijo de folio de sus solicitudes (ACHS-1, ACHS-2...) — único. Antes
   // era decorativo y nextKey() usaba "MBA" fijo para TODO folio de
   // cualquier cliente; ahora cada cliente tiene su propio contador (ver
   // lib/clientCode.ts). Si se deja vacío al crear, se genera desde el
   // nombre.
-  code         String? @unique
-  contactEmail String?
+  code            String?   @unique
+  contactEmail    String?
   // Horas que otorga cada ciclo de la bolsa (Rec. #36) — no es un total
   // fijo de por vida, se renueva solo cada cycleMonths meses.
   contractedHours Float     @default(0)
@@ -50,16 +50,21 @@ model Client {
   color           String?
   createdAt       DateTime  @default(now())
 
+  // Reporte de dedicación (planilla Sheets): servicio que se le presta y
+  // equipos que lo atienden — más de uno = "Continuidad".
+  servicio String?
+  teams    Team[]  @relation("clientTeams")
+
   accountManagerId String?
   accountManager   User?   @relation("clientAccountManager", fields: [accountManagerId], references: [id])
 
-  requests          Request[]
-  users             User[]            @relation("clientUsers")
-  hoursAdjustments  HoursAdjustment[]
-  projects          Project[]
-  portalViewers     UserClientAccess[]
-  members           ClientMember[]
-  followUps         FollowUp[]
+  requests         Request[]
+  users            User[]             @relation("clientUsers")
+  hoursAdjustments HoursAdjustment[]
+  projects         Project[]
+  portalViewers    UserClientAccess[]
+  members          ClientMember[]
+  followUps        FollowUp[]
 }
 
 // Un cliente puede tener varios proyectos (fusión con Codia Task,
@@ -113,9 +118,24 @@ model ProjectStage {
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  requests Request[]
+  requests    Request[]
+  allocations StageAllocation[]
 
   @@index([projectId])
+}
+
+// Horas cubicadas de una etapa por persona — alimentan la "dedicación
+// vendida" del reporte, repartidas en los meses de la etapa según horas
+// hábiles (lib/dedicacion.ts).
+model StageAllocation {
+  stageId String
+  stage   ProjectStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hours   Float
+
+  @@id([stageId, userId])
+  @@index([userId])
 }
 
 // Ajuste manual a la bolsa de horas de un cliente (Rec. #36) — a
@@ -143,6 +163,7 @@ model Team {
   members  User[]
   requests Request[]
   daily    DailySeries?
+  clients  Client[]     @relation("clientTeams")
   // Personas a cargo (Director/Líder): gestionan su daily aunque su
   // propio User.teamId sea otro. Una persona puede tener varios.
   leads    TeamLead[]
@@ -185,11 +206,19 @@ model User {
   // (ver lib/workSchedule.ts).
   workHours Json?
 
-  isActive              Boolean   @default(true)
-  passwordHash          String?
-  previousPasswordHash  String?
-  mustChangePassword    Boolean   @default(true)
-  passwordChangedAt     DateTime?
+  // Reporte de dedicación: nombre separado (la planilla imprime
+  // "Apellidos Nombres"), cargo (no es un rol de permisos) y seniority
+  // (solo lo ven/editan admins). Los cargan los admins.
+  nombres   String?
+  apellidos String?
+  perfil    String?
+  seniority Float?
+
+  isActive             Boolean   @default(true)
+  passwordHash         String?
+  previousPasswordHash String?
+  mustChangePassword   Boolean   @default(true)
+  passwordChangedAt    DateTime?
 
   teamId String?
   team   Team?   @relation(fields: [teamId], references: [id])
@@ -197,27 +226,28 @@ model User {
   clientId String?
   client   Client? @relation("clientUsers", fields: [clientId], references: [id])
 
-  assigned        Request[]              @relation("assignee")
-  timeEntries     TimeEntry[]
-  scheduleBlocks  ScheduleBlock[]
-  comments        Comment[]
-  resetTokens     PasswordResetToken[]
-  managedClients  Client[]               @relation("clientAccountManager")
-  collaborations  RequestCollaborator[]
-  commentReads    CommentRead[]
-  nudgesShown     NudgeShown[]
-  aiMemoryNotes   AiMemoryNote[]
-  roles           UserRole[]
-  portalAccess    UserClientAccess[]
-  clientMemberships ClientMember[]
-  followUps         FollowUp[]             @relation("followUpOwner")
-  followUpsWaiting  FollowUp[]             @relation("followUpWaitingOn")
-  followUpsAssigned FollowUp[]             @relation("followUpAssignee")
+  assigned               Request[]             @relation("assignee")
+  timeEntries            TimeEntry[]
+  scheduleBlocks         ScheduleBlock[]
+  comments               Comment[]
+  resetTokens            PasswordResetToken[]
+  managedClients         Client[]              @relation("clientAccountManager")
+  collaborations         RequestCollaborator[]
+  commentReads           CommentRead[]
+  nudgesShown            NudgeShown[]
+  aiMemoryNotes          AiMemoryNote[]
+  roles                  UserRole[]
+  portalAccess           UserClientAccess[]
+  clientMemberships      ClientMember[]
+  followUps              FollowUp[]            @relation("followUpOwner")
+  followUpsWaiting       FollowUp[]            @relation("followUpWaitingOn")
+  followUpsAssigned      FollowUp[]            @relation("followUpAssignee")
   followUpParticipations FollowUpParticipant[]
-  meetingsCreated   Meeting[]
-  meetingsLed       Meeting[]              @relation("meetingFacilitator")
-  followUpsResolved FollowUp[]             @relation("followUpResolver")
-  teamsLed          TeamLead[]
+  meetingsCreated        Meeting[]
+  meetingsLed            Meeting[]             @relation("meetingFacilitator")
+  followUpsResolved      FollowUp[]            @relation("followUpResolver")
+  teamsLed               TeamLead[]
+  stageAllocations       StageAllocation[]
 }
 
 // Roles y permisos como datos editables (ADR-011, Nuevo #3, 16 sep 2026).
@@ -400,7 +430,7 @@ model CustomFieldDefinition {
   id         String    @id @default(cuid())
   label      String
   type       String // text | textarea | number | date | select | checkbox
-  options    String[] @default([])
+  options    String[]  @default([])
   sortOrder  Int       @default(0)
   archivedAt DateTime?
 
@@ -484,9 +514,19 @@ model TimeEntry {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
+  // Foto al momento de registrar (reporte de dedicación): cambiar mañana el
+  // seniority o el servicio no reescribe lo ya registrado. null = no había
+  // dato al registrar → el reporte usa el valor actual.
+  snapPerfil    String?
+  snapSeniority Float?
+  snapTeamId    String?
+  snapServicio  String?
+  snapContinua  String?
+  scheduleBlock ScheduleBlock?
+
   @@index([requestId])
   @@index([userId])
-  scheduleBlock ScheduleBlock?
+  @@index([date])
 }
 
 // Perfil personal (etapa 1, 22 sep 2026) — bloque de horario en el
@@ -567,23 +607,23 @@ model Notification {
 // migrarse. isFinal reemplaza la comparación hardcodeada contra el
 // string literal "FINALIZADA" en el cálculo de SLA y los reportes.
 model Status {
-  id         String    @id @default(cuid())
-  code       String    @unique
-  label      String
-  color      String
-  sortOrder  Int       @default(0)
-  isFinal    Boolean   @default(false)
+  id            String    @id @default(cuid())
+  code          String    @unique
+  label         String
+  color         String
+  sortOrder     Int       @default(0)
+  isFinal       Boolean   @default(false)
   // No obligatorio en el flujo (ej. "En pausa", Nuevo #14): las tareas en un
   // estado así no cuentan como vencidas/atrasadas/sin-movimiento en las
   // alertas de SLA ni en los nudges — están pausadas a propósito, no
   // estancadas. isFinal no aplica aquí (una tarea final ya no genera esas
   // alertas por otro motivo).
-  isOptional Boolean   @default(false)
+  isOptional    Boolean   @default(false)
   // La tarea está esperando respuesta/insumos del cliente (ej. "En espera
   // del cliente"): ese tiempo se atribuye al cliente en el comparativo de
   // proyectos (Gantt del portal).
-  waitsOnClient Boolean  @default(false)
-  archivedAt DateTime?
+  waitsOnClient Boolean   @default(false)
+  archivedAt    DateTime?
 }
 
 // Historial de cambios de estado (append-only) — permite saber cuánto
@@ -596,7 +636,7 @@ model StatusChange {
   actorName String?
 
   requestId String
-  request   Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  request   Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
   @@index([requestId])
 }
@@ -763,16 +803,16 @@ model Meeting {
   // Daily planificada (etapa 2): pertenece a la serie de un equipo, con
   // quién la lidera. dayKey = "YYYY-MM-DD" en Chile (único por serie; date
   // depende de la zona del proceso y no sirve para eso).
-  seriesId      String?
-  series        DailySeries? @relation(fields: [seriesId], references: [id], onDelete: Cascade)
-  dayKey        String?
-  time          String? // hora de esa daily ("09:30"); se puede cambiar a mano
-  facilitatorId String?
-  facilitator   User?        @relation("meetingFacilitator", fields: [facilitatorId], references: [id], onDelete: SetNull)
-  cancelledAt   DateTime?
-  cancelReason  String? // "Feriado: Navidad", "Cancelada por …"
+  seriesId            String?
+  series              DailySeries? @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  dayKey              String?
+  time                String? // hora de esa daily ("09:30"); se puede cambiar a mano
+  facilitatorId       String?
+  facilitator         User?        @relation("meetingFacilitator", fields: [facilitatorId], references: [id], onDelete: SetNull)
+  cancelledAt         DateTime?
+  cancelReason        String? // "Feriado: Navidad", "Cancelada por …"
   // Cambio manual (otra persona o cancelada a mano): replanificar no lo pisa.
-  manualAt      DateTime?
+  manualAt            DateTime?
   // Avisos del Cron a quien lidera (se limpian si cambia la persona).
   dayBeforeNotifiedAt DateTime?
   dayOfNotifiedAt     DateTime?

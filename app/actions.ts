@@ -46,6 +46,7 @@ import { decryptToken, revokeToken } from "@/lib/googleCalendar";
 import { uniqueSlug } from "@/lib/slug";
 import { projectHref } from "@/lib/projectInsights";
 import { uniqueClientCode } from "@/lib/clientCode";
+import { timeEntrySnapshot } from "@/lib/dedicacion";
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 // Invitaciones de usuarios nuevos: la persona puede tardar en abrir el correo.
@@ -1177,6 +1178,41 @@ export async function deleteStage(projectId: string, stageId: string) {
   revalidatePath(`/proyectos/${projectId}`);
 }
 
+// Horas cubicadas de la etapa por persona (dedicación vendida del reporte).
+// Reemplaza todo el reparto; una persona repetida suma sus horas. Mismo
+// permiso que editar la etapa.
+export async function saveStageAllocations(projectId: string, stageId: string, formData: FormData) {
+  const user = await getSessionUser();
+  if (!user) return;
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  const stage = await prisma.projectStage.findFirst({ where: { id: stageId, projectId } });
+  if (!project || !stage) return;
+  if (!(await canProjectAction(user, stageAction(project, stage), project.clientId))) return;
+  const userIds = formData.getAll("allocUser").map(String);
+  const hours = formData.getAll("allocHours").map((v) => optHours(v));
+  const byUser = new Map<string, number>();
+  userIds.forEach((id, i) => {
+    if (id && hours[i]) byUser.set(id, (byUser.get(id) ?? 0) + hours[i]!);
+  });
+  const valid = await prisma.user.findMany({
+    where: { id: { in: [...byUser.keys()] }, role: { not: "CLIENTE" } },
+    select: { id: true },
+  });
+  await prisma.$transaction([
+    prisma.stageAllocation.deleteMany({ where: { stageId } }),
+    prisma.stageAllocation.createMany({ data: valid.map((u) => ({ stageId, userId: u.id, hours: byUser.get(u.id)! })) }),
+  ]);
+  if (!stage.isAdditional && project.baselineAt) {
+    await logAudit({
+      type: "project_baseline_stage_changed",
+      actorId: user.id,
+      actorEmail: user.email,
+      detail: `projectId=${projectId}, stageId=${stageId}, reparto por persona`,
+    });
+  }
+  revalidatePath(`/proyectos/${projectId}`);
+}
+
 // Asignar una tarea a una etapa desde la ficha del proyecto.
 export async function setRequestStage(requestId: string, formData: FormData) {
   const user = await getSessionUser();
@@ -1425,6 +1461,7 @@ export async function logHours(formData: FormData) {
       hours,
       note: note || null,
       date: parseLocalDate(dateStr),
+      ...(await timeEntrySnapshot(user.id, requestId)),
       scheduleBlock: { create: { userId: user.id, requestId, start, end, note: note || null } },
     },
   });
@@ -2079,6 +2116,13 @@ async function validMemberIds(formData: FormData) {
   return found.map((u) => u.id);
 }
 
+// Equipos que atienden al cliente (más de uno = "Continuidad" en el reporte).
+async function validTeamIds(formData: FormData) {
+  const ids = formData.getAll("teamIds").map(String).filter(Boolean);
+  if (ids.length === 0) return [];
+  return (await prisma.team.findMany({ where: { id: { in: ids } }, select: { id: true } })).map((t) => t.id);
+}
+
 export async function createClient(formData: FormData) {
   const user = await getSessionUser();
   if (!user || !canManageClients(user)) redirect("/mi-espacio");
@@ -2107,6 +2151,8 @@ export async function createClient(formData: FormData) {
       accountManagerId: String(formData.get("accountManagerId") || "") || null,
       isActive: formData.get("isActive") === "on",
       members: { create: (await validMemberIds(formData)).map((userId) => ({ userId })) },
+      servicio: String(formData.get("servicio") || "").trim() || null,
+      teams: { connect: (await validTeamIds(formData)).map((id) => ({ id })) },
     },
   });
   await logAudit({
@@ -2138,6 +2184,8 @@ export async function updateClient(id: string, formData: FormData) {
     where: { id },
     data: {
       members: { deleteMany: {}, create: memberIds.map((userId) => ({ userId })) },
+      servicio: String(formData.get("servicio") || "").trim() || null,
+      teams: { set: (await validTeamIds(formData)).map((id) => ({ id })) },
       name,
       code: rawCode || undefined,
       contactEmail: String(formData.get("contactEmail") || "").trim() || null,
@@ -2311,6 +2359,19 @@ async function validMemberClientIds(formData: FormData, isClientAccount: boolean
   return found.map((c) => c.id);
 }
 
+// Datos del reporte de dedicación (solo los ve/edita Admin: este formulario
+// vive bajo /admin/(solo-admin)).
+function reportFields(formData: FormData) {
+  const text = (k: string) => String(formData.get(k) || "").trim() || null;
+  const sen = Number(String(formData.get("seniority") || "").replace(",", "."));
+  return {
+    nombres: text("nombres"),
+    apellidos: text("apellidos"),
+    perfil: text("perfil"),
+    seniority: String(formData.get("seniority") || "").trim() && Number.isFinite(sen) ? sen : null,
+  };
+}
+
 export async function createUser(formData: FormData) {
   const user = await getSessionUser();
   if (!user || !user.roleCodes.includes("ADMIN")) redirect("/mi-espacio");
@@ -2345,6 +2406,7 @@ export async function createUser(formData: FormData) {
       // Ya no decide permisos — solo respaldo legible (ver nota en schema).
       role: isClientAccount ? "CLIENTE" : roles[0].code,
       color: String(formData.get("color") || "").trim() || null,
+      ...reportFields(formData),
       teamId: isClientAccount ? null : String(formData.get("teamId") || "") || null,
       clientId,
       isActive: true,
@@ -2411,6 +2473,7 @@ export async function updateUser(id: string, formData: FormData) {
         email,
         role: isClientAccount ? "CLIENTE" : roles[0].code,
         color: String(formData.get("color") || "").trim() || null,
+        ...reportFields(formData),
         teamId: isClientAccount ? null : String(formData.get("teamId") || "") || null,
         clientId,
         isActive: formData.get("isActive") === "on",
@@ -2772,7 +2835,7 @@ async function logBlockHours(
   source: string,
 ) {
   const entry = await prisma.timeEntry.create({
-    data: { requestId, userId: user.id, hours, note: note || null, date },
+    data: { requestId, userId: user.id, hours, note: note || null, date, ...(await timeEntrySnapshot(user.id, requestId)) },
   });
   await prisma.scheduleBlock.update({ where: { id: blockId }, data: { timeEntryId: entry.id } });
   await prisma.activity.create({

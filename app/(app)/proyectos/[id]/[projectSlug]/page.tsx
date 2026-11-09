@@ -6,7 +6,16 @@ import { canOnClient } from "@/lib/permissions";
 import { budgetStatus } from "@/lib/projectBudget";
 import { loadProjectInsights, resolveProjectPath } from "@/lib/projectInsights";
 import { DelayComparison, ProjectGantt, StageComparison } from "@/components/ProjectTimeline";
-import { confirmProjectBudget, reopenProjectBudget, deleteStage, saveStage, setRequestStage, updateProjectBudget } from "@/app/actions";
+import {
+  confirmProjectBudget,
+  reopenProjectBudget,
+  deleteStage,
+  saveStage,
+  saveStageAllocations,
+  setRequestStage,
+  updateProjectBudget,
+} from "@/app/actions";
+import { prisma } from "@/lib/db";
 import { SubmitButton } from "@/components/SubmitButton";
 import { Bar } from "@/components/ui";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -65,6 +74,14 @@ export default async function ProyectoPage({
     endDate: project.endDate,
     done: allDone,
   });
+  const [allocations, teamUsers] = await Promise.all([
+    prisma.stageAllocation.findMany({ where: { stage: { projectId: project.id } } }),
+    prisma.user.findMany({
+      where: { isActive: true, role: { not: "CLIENTE" } },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+  ]);
   const noStage = project.requests.filter((r) => !r.stageId);
   const proposedHours = project.stages.filter((s) => !s.isAdditional).reduce((a, s) => a + (s.estimatedHours ?? 0), 0);
   const frameMin = project.startDate ? toDateInput(project.startDate) : undefined;
@@ -280,6 +297,11 @@ export default async function ProyectoPage({
                         </form>
                       </div>
                     )}
+                    <StageAllocations
+                      allocations={allocations.filter((a) => a.stageId === s.id)}
+                      people={teamUsers}
+                      action={(s.isAdditional ? canManage : canBudget) ? saveStageAllocations.bind(null, project.id, s.id) : null}
+                    />
                   </details>
                 );
               })}
@@ -401,6 +423,65 @@ function StageForm({
         <input name="estimatedHours" type="number" min="0" step="0.5" defaultValue={stage?.estimatedHours ?? ""} className={inputCls} />
       </div>
       <SubmitButton className={btnCls}>{label}</SubmitButton>
+    </form>
+  );
+}
+
+// Horas cubicadas por persona en la etapa: son la "dedicación vendida" del
+// reporte de dedicación (solo cuenta con la cubicación confirmada).
+function StageAllocations({
+  allocations,
+  people,
+  action,
+}: {
+  allocations: { userId: string; hours: number }[];
+  people: { id: string; name: string }[];
+  action: ((formData: FormData) => void | Promise<void>) | null;
+}) {
+  const nameOf = (id: string) => people.find((p) => p.id === id)?.name ?? "—";
+  const total = allocations.reduce((a, x) => a + x.hours, 0);
+  if (!action) {
+    return allocations.length === 0 ? null : (
+      <p className="mt-3 text-xs text-[#5d6b77]">
+        Por persona: {allocations.map((a) => `${nameOf(a.userId)} ${hoursLabel(a.hours)}`).join(" · ")}
+      </p>
+    );
+  }
+  const rows = [...allocations, { userId: "", hours: 0 }, { userId: "", hours: 0 }];
+  return (
+    <form action={action} className="mt-3 border-t border-[#f1f3f4] pt-3">
+      <div className="mb-2 text-xs font-semibold text-[#5d6b77]">
+        Horas por persona{total > 0 && ` · ${hoursLabel(total)}`}
+      </div>
+      <div className="space-y-2">
+        {rows.map((a, i) => (
+          <div key={`${a.userId}-${i}`} className="flex items-center gap-2">
+            <select name="allocUser" defaultValue={a.userId} className={`${inputCls} max-w-xs`}>
+              <option value="">— Persona —</option>
+              {people.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <input
+              name="allocHours"
+              type="number"
+              min="0"
+              step="0.5"
+              defaultValue={a.hours || ""}
+              placeholder="Horas"
+              className={`${inputCls} w-28`}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 flex items-center gap-3">
+        <SubmitButton className={btnCls}>Guardar reparto</SubmitButton>
+        <span className="text-[11px] text-[#7f7f7f]">
+          Para quitar a alguien, deja su fila sin persona. Se reparten en los meses de la etapa según días hábiles.
+        </span>
+      </div>
     </form>
   );
 }
