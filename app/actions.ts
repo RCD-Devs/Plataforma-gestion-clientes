@@ -1560,12 +1560,13 @@ export async function deleteTimeEntry(entryId: string) {
   const entry = await timeEntryForAction(user, entryId);
   if (!entry || entry.request.archivedAt) return;
 
-  // Si nació de un bloque del calendario, se desvincula (el bloque queda
-  // "sin confirmar" otra vez) en vez de quedar apuntando a nada.
+  // Si nació de un bloque del calendario, el bloque se borra con ella: si
+  // quedaba "sin confirmar", al volver a cargar las horas se cruzaba con el nuevo.
   await prisma.$transaction([
-    prisma.scheduleBlock.updateMany({ where: { timeEntryId: entryId }, data: { timeEntryId: null } }),
+    prisma.scheduleBlock.deleteMany({ where: { timeEntryId: entryId } }),
     prisma.timeEntry.delete({ where: { id: entryId } }),
   ]);
+  revalidatePath("/perfil");
   await prisma.activity.create({
     data: {
       requestId: entry.requestId,

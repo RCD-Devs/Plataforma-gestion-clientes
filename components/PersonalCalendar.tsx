@@ -554,14 +554,17 @@ function BlockFormModal({
   const [mode, setMode] = useState<"existing" | "new">(tasks.length > 0 ? "existing" : "new");
   const [clientId, setClientId] = useState("");
   const projects = clients.find((c) => c.id === clientId)?.projects ?? [];
-  // Mismo redondeo al cuarto de hora que ConfirmBlockModal (step="0.25").
-  const durationH = Math.round((end.getTime() - start.getTime()) / 3600000 / 0.25) * 0.25;
+  const durationH = Math.round(((end.getTime() - start.getTime()) / 3600000) * 100) / 100;
+  // Horario editable a mano, al minuto (arrastrar sigue en tramos de 15 min).
+  const day = toLocalInput(start).slice(0, 10);
+  const [startT, setStartT] = useState(toLocalInput(start).slice(11));
+  const [endT, setEndT] = useState(toLocalInput(end).slice(11));
 
   return (
     <Modal title={googleEvent ? "Cargar reunión de Google" : "Nuevo bloque de horario"} onClose={onClose}>
       <form action={onSubmit} className="space-y-3">
-        <input type="hidden" name="start" value={toLocalInput(start)} />
-        <input type="hidden" name="end" value={toLocalInput(end)} />
+        <input type="hidden" name="start" value={googleEvent ? toLocalInput(start) : `${day}T${startT}`} />
+        <input type="hidden" name="end" value={googleEvent ? toLocalInput(end) : `${day}T${endT}`} />
         {googleEvent && <input type="hidden" name="googleEventId" value={googleEvent.id} />}
         <div className="rounded-lg bg-[#f4f6f8] px-3 py-2 text-sm text-[#5d6b77]">
           {googleEvent && <div className="mb-0.5 font-semibold text-[#081826]">{googleEvent.title}</div>}
@@ -570,8 +573,20 @@ function BlockFormModal({
             day: "2-digit",
             month: "long",
           })}{" "}
-          · {fmtTime(start)}–{fmtTime(end)}
+          {googleEvent && <> · {fmtTime(start)}–{fmtTime(end)}</>}
         </div>
+        {!googleEvent && (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>Inicio</label>
+              <input type="time" value={startT} onChange={(e) => setStartT(e.target.value)} required className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Término</label>
+              <input type="time" value={endT} onChange={(e) => setEndT(e.target.value)} min={startT} required className={inputCls} />
+            </div>
+          </div>
+        )}
 
         <div role="tablist" className="inline-flex gap-1 rounded-lg border border-[#e4e8ec] p-1">
           <button
@@ -670,8 +685,8 @@ function BlockFormModal({
               <input
                 name="hours"
                 type="number"
-                step="0.25"
-                min="0.25"
+                step="any"
+                min="0.01"
                 defaultValue={durationH}
                 required
                 className={inputCls}
@@ -728,10 +743,7 @@ function ConfirmBlockModal({
   const [timeError, setTimeError] = useState<string | null>(null);
   const hhmm = (d: Date) => toLocalInput(d).slice(11);
   const router = useRouter();
-  // Redondeado al cuarto de hora (no al décimo): los bloques ya quedan
-  // alineados a 15 min, pero 3.75 h redondeado a 1 decimal da 3.8 — un
-  // valor que el input (step="0.25") rechaza, pidiendo 3.75 o 4.
-  const durationH = Math.round((block.endD.getTime() - block.startD.getTime()) / 3600000 / 0.25) * 0.25;
+  const durationH = Math.round(((block.endD.getTime() - block.startD.getTime()) / 3600000) * 100) / 100;
 
   return (
     <Modal title={`${block.request.key} · ${block.request.title}`} onClose={onClose}>
@@ -762,11 +774,11 @@ function ConfirmBlockModal({
       >
         <div className="flex-1">
           <label className={labelCls}>Inicio</label>
-          <input name="start" type="time" step="900" defaultValue={hhmm(block.startD)} required className={inputCls} />
+          <input name="start" type="time" defaultValue={hhmm(block.startD)} required className={inputCls} />
         </div>
         <div className="flex-1">
           <label className={labelCls}>Término</label>
-          <input name="end" type="time" step="900" defaultValue={hhmm(block.endD)} required className={inputCls} />
+          <input name="end" type="time" defaultValue={hhmm(block.endD)} required className={inputCls} />
         </div>
         <button
           disabled={pending}
@@ -801,8 +813,8 @@ function ConfirmBlockModal({
               <input
                 name="hours"
                 type="number"
-                step="0.25"
-                min="0.25"
+                step="any"
+                min="0.01"
                 defaultValue={durationH}
                 required
                 className={inputCls}
