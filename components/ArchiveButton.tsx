@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { archiveRequest, unarchiveRequest, deleteRequest } from "@/app/actions";
+import { readOrigin } from "./Nav";
 
 export function ArchiveButton({
   requestId,
@@ -50,7 +51,9 @@ export function DeleteRequestButton({ requestId }: { requestId: string }) {
           setError(null);
           startTransition(async () => {
             const res = await deleteRequest(requestId);
-            if (res.ok && res.redirectTo) router.push(res.redirectTo);
+            // Sin tarea padre, vuelve a la vista de origen (Mi espacio, Tablero…).
+            if (res.ok && res.redirectTo)
+              router.push(res.redirectTo === "/solicitudes" ? (readOrigin() ?? res.redirectTo) : res.redirectTo);
             else setError(res.error ?? "No se pudo eliminar.");
           });
         }}

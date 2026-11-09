@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { logout } from "@/app/actions";
 import { Avatar } from "./ui";
 import { hasAccess, canManageClients, type Capabilities } from "@/lib/permissions";
@@ -22,6 +22,34 @@ const items = [
   { href: "/admin", label: "Administración", icon: "⚙", admin: true },
 ];
 
+// Vista de origen de una tarea: la última página (con sus filtros) que no
+// era una ficha de tarea, guardada por pestaña. Así el menú, el breadcrumb
+// y el "eliminar" devuelven a donde estaba la persona, no a Solicitudes.
+const ORIGIN_KEY = "rgc:origen";
+const isTaskPath = (p: string) => /^\/solicitudes\/[^/]+/.test(p);
+export function readOrigin(): string | null {
+  try {
+    return sessionStorage.getItem(ORIGIN_KEY);
+  } catch {
+    return null;
+  }
+}
+const itemFor = (path: string) => items.find((i) => path === i.href || path.startsWith(i.href + "/"));
+
+export function BackLink() {
+  const [back, setBack] = useState({ href: "/solicitudes", label: "Solicitudes" });
+  useEffect(() => {
+    const origin = readOrigin();
+    const it = origin && itemFor(origin.split("?")[0]);
+    if (origin && it) setBack({ href: origin, label: it.label });
+  }, []);
+  return (
+    <Link href={back.href} className="text-xs text-[#6b7280] hover:underline">
+      ← {back.label}
+    </Link>
+  );
+}
+
 export function Sidebar({
   user,
 }: {
@@ -36,6 +64,17 @@ export function Sidebar({
   };
 }) {
   const pathname = usePathname();
+  const search = useSearchParams().toString();
+  const [origin, setOrigin] = useState<string | null>(null);
+  useEffect(() => {
+    if (isTaskPath(pathname)) return setOrigin(readOrigin());
+    const here = search ? `${pathname}?${search}` : pathname;
+    try {
+      sessionStorage.setItem(ORIGIN_KEY, here);
+    } catch {}
+    setOrigin(here);
+  }, [pathname, search]);
+  const activePath = isTaskPath(pathname) && origin ? origin.split("?")[0] : pathname;
   // Rec. #86 — el sidebar fijo de 240px no cabía en tablet/mobile. Bajo
   // el breakpoint md se convierte en un cajón (drawer) que se abre con el
   // botón hamburguesa; desde md hacia arriba vuelve al sidebar estático
@@ -89,7 +128,7 @@ export function Sidebar({
             if (it.cap && !hasAccess(user.capabilities, it.cap)) return null;
             if (it.admin && !canManageClients(user)) return null;
             const active =
-              pathname === it.href || pathname.startsWith(it.href + "/");
+              activePath === it.href || activePath.startsWith(it.href + "/");
             return (
               <Link
                 key={it.href}

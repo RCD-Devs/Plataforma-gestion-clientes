@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { BackLink } from "@/components/Nav";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { canViewRequest } from "@/lib/authz";
@@ -133,12 +134,7 @@ export default async function RequestDetail({
   return (
     <div className="flex h-full flex-col">
       <header className="border-b border-[#e6e8eb] bg-white px-6 py-3">
-        <Link
-          href="/solicitudes"
-          className="text-xs text-[#6b7280] hover:underline"
-        >
-          ← Solicitudes
-        </Link>
+        <BackLink />
         <div className="mt-1 flex items-center gap-2">
           <ClientTag name={req.client.name} />
           <span className="text-xs text-[#6b7280]">{req.key}</span>
