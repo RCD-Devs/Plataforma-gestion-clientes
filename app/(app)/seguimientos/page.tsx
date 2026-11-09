@@ -85,6 +85,7 @@ export default async function SeguimientosPage({
   const include = {
     client: { select: { name: true, code: true } },
     request: { select: { id: true, key: true, title: true, deletedAt: true, client: { select: { name: true } } } },
+    extraRequests: { select: { id: true, key: true, title: true, deletedAt: true, client: { select: { name: true } } } },
     waitingOn: { select: { name: true } },
     owner: person,
     assignee: person,
@@ -187,11 +188,10 @@ export default async function SeguimientosPage({
     waitingOnId: f.waitingOnId,
     clientId: f.clientId,
     meetingId: f.meetingId,
-    request:
-      f.request && !f.request.deletedAt
-        ? { id: f.request.id, key: f.request.key, title: f.request.title, clientName: f.request.client.name }
-        : null,
+    requests: linkedTasks(f).map((r) => ({ id: r.id, key: r.key, title: r.title, clientName: r.client.name })),
   });
+
+  const linkedTasks = (f: Item) => [f.request, ...f.extraRequests].filter((r) => r && !r.deletedAt).map((r) => r!);
 
   const meta = (f: Item, showMeeting: boolean) => {
     const others = f.participants.map((p) => p.user);
@@ -208,13 +208,13 @@ export default async function SeguimientosPage({
           {f.assignee.id === user.id ? "Tú" : f.assignee.name}
           {others.length > 0 && <span className="font-normal text-[#7f7f7f]">+ {others.length === 1 ? others[0].name : `${others.length} personas`}</span>}
         </span>
-        {f.request && !f.request.deletedAt && (
-          <Link href={`/solicitudes/${f.request.key}`} className="inline-flex max-w-[20rem] items-center gap-1.5 hover:text-[#08a89f]">
-            <span className="rounded bg-[#e0fbf9] px-1.5 py-0.5 text-[11px] font-semibold text-[#08766f]">{f.request.key}</span>
-            <span className="truncate">{f.request.title}</span>
+        {linkedTasks(f).map((r) => (
+          <Link key={r.id} href={`/solicitudes/${r.key}`} className="inline-flex max-w-[20rem] items-center gap-1.5 hover:text-[#08a89f]">
+            <span className="rounded bg-[#e0fbf9] px-1.5 py-0.5 text-[11px] font-semibold text-[#08766f]">{r.key}</span>
+            <span className="truncate">{r.title}</span>
           </Link>
-        )}
-        {f.client && !(f.request && !f.request.deletedAt) && <ClientTag name={f.client.code || f.client.name} />}
+        ))}
+        {f.client && linkedTasks(f).length === 0 && <ClientTag name={f.client.code || f.client.name} />}
         {f.waitingOn && (
           <span className="inline-flex items-center gap-1">
             <svg viewBox="0 0 16 16" aria-hidden="true" className="h-3.5 w-3.5">
@@ -581,7 +581,7 @@ export default async function SeguimientosPage({
                         {menu(f, true, canManageFollowUp(user, f))}
                       </div>
                       <span title={longDate(f.doneAt)} className="whitespace-nowrap text-[11px] text-[#9aa3ad]">
-                        Resuelto{f.doneBy && f.doneBy.id !== user.id ? ` por ${f.doneBy.name}` : ""} {relative(f.doneAt!)}
+                        Resuelto{f.doneAuto ? " automáticamente (tareas completadas)" : f.doneBy && f.doneBy.id !== user.id ? ` por ${f.doneBy.name}` : ""} {relative(f.doneAt!)}
                       </span>
                     </div>
                   </li>

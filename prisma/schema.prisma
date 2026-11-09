@@ -400,6 +400,7 @@ model Request {
   scheduleBlocks    ScheduleBlock[]
   statusChanges     StatusChange[]
   followUps         FollowUp[]
+  followUpsExtra    FollowUp[]            @relation("followUpExtraRequests")
 
   @@index([clientId])
   @@index([assigneeId])
@@ -762,10 +763,14 @@ model FollowUp {
   waitingOnId String?
   waitingOn   User?   @relation("followUpWaitingOn", fields: [waitingOnId], references: [id], onDelete: SetNull)
 
-  clientId  String?
-  client    Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  requestId String?
-  request   Request? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+  clientId      String?
+  client        Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  requestId     String?
+  request       Request?  @relation(fields: [requestId], references: [id], onDelete: SetNull)
+  // Más tareas vinculadas (requestId es la primera, de ella sale el cliente).
+  // Con todas finalizadas, el seguimiento se resuelve solo (doneAuto).
+  extraRequests Request[] @relation("followUpExtraRequests")
+  doneAuto      Boolean   @default(false)
 
   // Reunión donde se anotó (cápsula en /seguimientos). Opcional.
   meetingId String?

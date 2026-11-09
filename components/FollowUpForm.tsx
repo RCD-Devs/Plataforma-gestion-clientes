@@ -18,7 +18,7 @@ export type FollowUpInitial = {
   waitingOnId: string | null;
   clientId: string | null;
   meetingId: string | null;
-  request: PickerTask | null;
+  requests: PickerTask[];
 };
 
 const fieldCls =
@@ -92,7 +92,8 @@ function FormBody({
   const [date, setDate] = useState(initial?.dueKey ?? quick[1].key);
   const [assigneeId, setAssigneeId] = useState(initial?.assigneeId ?? meId);
   const [meetingId, setMeetingId] = useState(initial ? (initial.meetingId ?? "") : defaultMeetingId);
-  const [request, setRequest] = useState<PickerTask | null>(initial?.request ?? null);
+  const [requests, setRequests] = useState<PickerTask[]>(initial?.requests ?? []);
+  const request = requests[0] ?? null;
   // La reunión recién creada llega por props después de guardar: los
   // siguientes seguimientos caen en ella sin volver a elegirla.
   useEffect(() => {
@@ -192,13 +193,30 @@ function FormBody({
               <option value="new">+ Nueva reunión…</option>
             </Select>
           </Field>
-          <Field label="Solicitud">
+          <Field label="Solicitudes" hint={requests.length > 0 ? "Se resuelve solo al completarse todas (y sus subtareas)" : undefined}>
+            {requests.map((t) => (
+              <div key={t.id} className="mb-1.5 flex items-center gap-2 rounded-lg border border-[#e4e8ec] px-2.5 py-1.5 text-xs">
+                <input type="hidden" name="requestIds" value={t.id} />
+                <span className="shrink-0 font-semibold text-[#08766f]">{t.key}</span>
+                <span className="min-w-0 flex-1 truncate">{t.title}</span>
+                <button
+                  type="button"
+                  aria-label={`Quitar ${t.key}`}
+                  onClick={() => setRequests((rs) => rs.filter((r) => r.id !== t.id))}
+                  className="text-[#9aa3ad] hover:text-[#d21f3c]"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            {/* key: tras elegir, el buscador vuelve a quedar vacío para sumar otra. */}
             <TaskPicker
+              key={requests.length}
               search={searchRequestsForPicker}
+              name="_pick"
               required={false}
               autoFocus={false}
-              initial={initial?.request ?? null}
-              onChange={setRequest}
+              onChange={(t) => t && setRequests((rs) => (rs.some((r) => r.id === t.id) ? rs : [...rs, t]))}
             />
           </Field>
           <Field label="Cliente" hint={request ? "Se toma de la solicitud" : undefined}>

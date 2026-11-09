@@ -34,6 +34,7 @@ import crypto from "crypto";
 import { notifyClient, notifyTeam, notifyMention, notifyReply, notifyNewTask } from "@/lib/email";
 import { PRIORITY_MAP } from "@/lib/constants";
 import { getStatusMap, getStatuses } from "@/lib/statuses";
+import { autoResolveFollowUps } from "@/lib/followUpAutoResolve";
 import { isValidEmail, parseEmailList } from "@/lib/validate";
 import { getPortalContext, canActAsClient, PORTAL_CLIENT_COOKIE } from "@/lib/portal";
 import { stageDateIssue } from "@/lib/projectBudget";
@@ -413,6 +414,10 @@ export async function changeStatus(
     },
   });
   await notifyStatusChange(req, label, user.email);
+  if (statusMap[status]?.isFinal) {
+    await autoResolveFollowUps([requestId]);
+    revalidateFollowUps();
+  }
   refreshLists(req.key);
   revalidatePath("/portal");
   return { ok: true };
@@ -1011,6 +1016,8 @@ export async function setProjectActive(projectId: string, isActive: boolean) {
           })),
         }),
       ]);
+      await autoResolveFollowUps(ids);
+      revalidateFollowUps();
       finalized = ids.length;
     }
   }
@@ -2319,6 +2326,8 @@ async function archiveClientBatch(clientId: string, actorName: string) {
     prisma.project.updateMany({ where: { clientId, archivedAt: null }, data: { archivedAt: now } }),
     prisma.user.updateMany({ where: { clientId, role: "CLIENTE", isActive: true }, data: { isActive: false } }),
   ]);
+  await autoResolveFollowUps(ids);
+  revalidateFollowUps();
   return { finalizadas: ids.length, archivadas: archived.count, proyectos: projects.count, usuarios_portal: users.count };
 }
 
@@ -3083,16 +3092,19 @@ async function readFollowUpForm(user: NonNullable<Awaited<ReturnType<typeof getS
   if (!text || !isDateKey(date)) return null;
 
   let clientId = String(formData.get("clientId") || "") || null;
-  let requestId = String(formData.get("requestId") || "") || null;
-  if (requestId) {
-    const req = await prisma.request.findUnique({
-      where: { id: requestId },
-      include: { client: true, collaborators: true },
-    });
-    // No se vincula una solicitud que no puede ver; el cliente sale de ella.
-    if (req && canViewRequest(user, req)) clientId = req.clientId;
-    else requestId = null;
-  }
+  // Varias tareas: la primera queda en requestId (de ella sale el cliente).
+  const wanted = [...new Set(formData.getAll("requestIds").map(String).filter(Boolean))].slice(0, 20);
+  const found = await prisma.request.findMany({
+    where: { id: { in: wanted }, deletedAt: null },
+    include: { client: true, collaborators: true },
+  });
+  // No se vincula una solicitud que no puede ver.
+  const linked = wanted
+    .map((id) => found.find((r) => r.id === id))
+    .filter((r): r is (typeof found)[number] => !!r && canViewRequest(user, r));
+  const requestId = linked[0]?.id ?? null;
+  const extraRequestIds = linked.slice(1).map((r) => r.id);
+  if (linked[0]) clientId = linked[0].clientId;
   if (!requestId && clientId && !(await prisma.client.count({ where: { AND: [{ id: clientId }, workClientsWhere(user)] } }))) {
     clientId = null;
   }
@@ -3126,7 +3138,7 @@ async function readFollowUpForm(user: NonNullable<Awaited<ReturnType<typeof getS
     meetingId = null;
   }
 
-  return { text, date, clientId, requestId, assigneeId, waitingOnId, participantIds, meetingId, team };
+  return { text, date, clientId, requestId, extraRequestIds, assigneeId, waitingOnId, participantIds, meetingId, team };
 }
 
 // Aviso inmediato (solo campana) a quien recién queda involucrado; el
@@ -3167,6 +3179,7 @@ export async function createFollowUp(formData: FormData) {
       assigneeId: f.assigneeId,
       clientId: f.clientId,
       requestId: f.requestId,
+      extraRequests: { connect: f.extraRequestIds.map((id) => ({ id })) },
       waitingOnId: f.waitingOnId,
       meetingId: f.meetingId,
       participants: { create: f.participantIds.map((userId) => ({ userId })) },
@@ -3196,6 +3209,7 @@ export async function updateFollowUp(formData: FormData) {
         assigneeId: f.assigneeId,
         clientId: f.clientId,
         requestId: f.requestId,
+        extraRequests: { set: f.extraRequestIds.map((id) => ({ id })) },
         waitingOnId: f.waitingOnId,
         meetingId: f.meetingId,
       },
@@ -3260,7 +3274,7 @@ export async function setFollowUpDone(formData: FormData) {
   const done = formData.get("done") === "1";
   await prisma.followUp.updateMany({
     where: { id, ownerId: user.id },
-    data: done ? { doneAt: new Date(), doneById: user.id } : { doneAt: null, doneById: null },
+    data: done ? { doneAt: new Date(), doneById: user.id, doneAuto: false } : { doneAt: null, doneById: null, doneAuto: false },
   });
   revalidateFollowUps();
 }
@@ -3276,7 +3290,7 @@ export async function postponeFollowUp(formData: FormData) {
       ? addDaysKey(chileDateKey(new Date()), days)
       : String(formData.get("date") || "");
   if (!isDateKey(key)) return;
-  await prisma.followUp.update({ where: { id }, data: { ...followUpDate(key), doneAt: null } });
+  await prisma.followUp.update({ where: { id }, data: { ...followUpDate(key), doneAt: null, doneAuto: false } });
   revalidateFollowUps();
 }
 
