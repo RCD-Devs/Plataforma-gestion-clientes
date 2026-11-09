@@ -1525,6 +1525,22 @@ export async function updateTimeEntry(entryId: string, formData: FormData) {
     where: { id: entryId },
     data: { hours, note: note || null, ...(dateStr ? { date: parseLocalDate(dateStr) } : {}) },
   });
+  // Si nació de un bloque del calendario, el bloque acompaña la corrección:
+  // mismo inicio (en el nuevo día, si cambió la fecha) y término = inicio + horas.
+  // Inversa de updateScheduleBlock, que ajusta las horas al estirar el bloque.
+  const block = await prisma.scheduleBlock.findFirst({ where: { timeEntryId: entryId } });
+  if (block) {
+    const dayDiff = dateStr
+      ? Math.round((Date.parse(dateStr) - Date.parse(chileDateKey(block.start))) / 86_400_000)
+      : 0;
+    // ponytail: corrimiento de días exactos; un cambio de horario (DST) entre medio lo corre 1 h.
+    const start = new Date(block.start.getTime() + dayDiff * 86_400_000);
+    await prisma.scheduleBlock.update({
+      where: { id: block.id },
+      data: { start, end: new Date(start.getTime() + hours * 3_600_000) },
+    });
+    revalidatePath("/perfil");
+  }
   await prisma.activity.create({
     data: {
       requestId: entry.requestId,
