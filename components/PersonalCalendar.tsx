@@ -253,6 +253,17 @@ export function PersonalCalendar({
     }
   }
 
+  // Editar horario desde el popup: misma acción que arrastrar el bloque.
+  async function onReschedule(id: string, start: string, end: string) {
+    const res = await updateScheduleBlock(id, start, end);
+    if (res.ok) {
+      setPanel(null);
+      showOverlaps(res.overlaps);
+      router.refresh();
+    }
+    return res.ok;
+  }
+
   async function onDelete(id: string) {
     setPanel(null);
     await deleteScheduleBlock(id);
@@ -459,7 +470,7 @@ export function PersonalCalendar({
         />
       )}
       {panel?.kind === "confirm" && (
-        <ConfirmBlockModal block={panel.block} onClose={() => setPanel(null)} onDelete={onDelete} />
+        <ConfirmBlockModal block={panel.block} onClose={() => setPanel(null)} onDelete={onDelete} onReschedule={onReschedule} />
       )}
     </div>
   );
@@ -699,6 +710,7 @@ function ConfirmBlockModal({
   block,
   onClose,
   onDelete,
+  onReschedule,
 }: {
   block: {
     id: string;
@@ -710,8 +722,11 @@ function ConfirmBlockModal({
   };
   onClose: () => void;
   onDelete: (id: string) => void;
+  onReschedule: (id: string, start: string, end: string) => Promise<boolean>;
 }) {
   const [pending, startTransition] = useTransition();
+  const [timeError, setTimeError] = useState<string | null>(null);
+  const hhmm = (d: Date) => toLocalInput(d).slice(11);
   const router = useRouter();
   // Redondeado al cuarto de hora (no al décimo): los bloques ya quedan
   // alineados a 15 min, pero 3.75 h redondeado a 1 decimal da 3.8 — un
@@ -730,6 +745,37 @@ function ConfirmBlockModal({
       >
         Ver tarea →
       </Link>
+
+      <form
+        action={(fd) =>
+          startTransition(async () => {
+            const day = toLocalInput(block.startD).slice(0, 10);
+            const start = String(fd.get("start"));
+            const end = String(fd.get("end"));
+            if (!start || !end || end <= start) return setTimeError("El término debe ser después del inicio.");
+            setTimeError(null);
+            if (!(await onReschedule(block.id, `${day}T${start}`, `${day}T${end}`)))
+              setTimeError("No se pudo cambiar el horario.");
+          })
+        }
+        className="mb-4 flex items-end gap-2"
+      >
+        <div className="flex-1">
+          <label className={labelCls}>Inicio</label>
+          <input name="start" type="time" step="900" defaultValue={hhmm(block.startD)} required className={inputCls} />
+        </div>
+        <div className="flex-1">
+          <label className={labelCls}>Término</label>
+          <input name="end" type="time" step="900" defaultValue={hhmm(block.endD)} required className={inputCls} />
+        </div>
+        <button
+          disabled={pending}
+          className="rounded-md border border-[#e4e8ec] px-3 py-2 text-sm font-semibold hover:bg-[#f3f4f6] disabled:opacity-50"
+        >
+          Cambiar horario
+        </button>
+      </form>
+      {timeError && <p className="-mt-2 mb-3 text-xs text-[#d21f3c]">{timeError}</p>}
 
       {block.confirmed ? (
         <p className="rounded-lg bg-[#e3f6ee] px-3 py-2 text-sm text-[#0a7a52]">
