@@ -31,7 +31,7 @@ import { storeUploadedFile } from "@/lib/attachments";
 import { sniffFile } from "@/lib/files";
 import { deleteFromStorage } from "@/lib/storage";
 import crypto from "crypto";
-import { notifyClient, notifyTeam, notifyMention, notifyReply } from "@/lib/email";
+import { notifyClient, notifyTeam, notifyMention, notifyReply, notifyNewTask } from "@/lib/email";
 import { PRIORITY_MAP } from "@/lib/constants";
 import { getStatusMap, getStatuses } from "@/lib/statuses";
 import { isValidEmail, parseEmailList } from "@/lib/validate";
@@ -428,13 +428,25 @@ export async function assignRequest(
   const assignee = assigneeId
     ? await prisma.user.findUnique({ where: { id: assigneeId } })
     : null;
+  const before = await prisma.request.findUnique({ where: { id: requestId }, select: { assigneeId: true } });
   const req = await prisma.request.update({
     where: { id: requestId },
     data: {
       assigneeId: assigneeId || null,
       teamId: assignee?.teamId ?? undefined,
     },
+    include: { client: { select: { name: true } } },
   });
+  // Aviso al nuevo responsable (no si se la asigna a sí mismo ni si no cambió).
+  if (assignee && assignee.id !== user.id && before?.assigneeId !== assignee.id) {
+    await notifyNewTask({
+      to: assignee.email,
+      requestId,
+      requestKey: req.key,
+      title: `Tienes una nueva tarea: ${req.key}`,
+      body: `${user.name} te asignó "${req.title}" (${req.client.name}).`,
+    });
+  }
   await prisma.activity.create({
     data: {
       requestId,
@@ -1939,7 +1951,7 @@ export async function submitRequest(formData: FormData) {
             isActive: true,
             OR: [{ managedClients: { some: { id: clientId } } }, { clientMemberships: { some: { clientId } } }],
           },
-          select: { id: true, name: true, teamId: true },
+          select: { id: true, name: true, email: true, teamId: true },
         })
       : null;
 
@@ -1996,6 +2008,15 @@ export async function submitRequest(formData: FormData) {
         actorName: sessionUser.name,
       },
     });
+    if (assignee.id !== sessionUser.id) {
+      await notifyNewTask({
+        to: assignee.email,
+        requestId: req.id,
+        requestKey: req.key,
+        title: `Tienes una nueva tarea: ${req.key}`,
+        body: `${sessionUser.name} creó "${title}" (${req.client.name}) y te la asignó.`,
+      });
+    }
   }
   await notifyStatusRecipients(
     req,
@@ -2080,6 +2101,20 @@ export async function submitClientRequest(formData: FormData) {
       actorName: email,
     },
   });
+  // Llega sin responsable: avisa a los encargados de cuenta para que la asignen.
+  const managers = await prisma.user.findMany({
+    where: { isActive: true, managedClients: { some: { id: client.id } } },
+    select: { email: true },
+  });
+  for (const m of managers) {
+    await notifyNewTask({
+      to: m.email,
+      requestId: req.id,
+      requestKey: req.key,
+      title: `Nueva solicitud de ${client.name}: ${req.key}`,
+      body: `${email} ingresó "${req.title}" desde el portal. Está sin asignar.`,
+    });
+  }
   await notifyClient({
     to: email,
     requestId: req.id,

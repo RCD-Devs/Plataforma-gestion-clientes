@@ -164,6 +164,18 @@ export async function notifyReply(opts: {
   await notifyComment({ ...opts, title: `${opts.authorName} respondió tu comentario en ${opts.requestKey}` });
 }
 
+// Tarea nueva o asignada (Rec. avisos al responsable): campana + correo,
+// mismo trato que una mención — es trabajo que le llega a alguien.
+export async function notifyNewTask(opts: {
+  to: string;
+  requestId: string;
+  requestKey: string;
+  title: string;
+  body: string;
+}) {
+  await notifyComment(opts);
+}
+
 async function notifyComment(opts: {
   to: string;
   requestId: string;
