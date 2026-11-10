@@ -9,7 +9,7 @@ import { avatarSrc, Avatar } from "@/components/ui";
 import { AvatarUpload } from "@/components/AvatarUpload";
 import { PersonalCalendar, DayHours } from "@/components/PersonalCalendar";
 import { SubmitButton } from "@/components/SubmitButton";
-import { disconnectGoogleCalendar, updateWorkHours } from "@/app/actions";
+import { disconnectGoogleCalendar, launchDedicacionSync, updateWorkHours } from "@/app/actions";
 import { fetchGoogleEvents, googleConfigured, type GoogleFetchResult } from "@/lib/googleCalendar";
 import {
   calendarDays,
@@ -38,13 +38,14 @@ export default async function PerfilPage({
     view?: string;
     tab?: string;
     google?: string;
+    planilla?: string;
   }>;
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
   if (user.role === "CLIENTE") redirect("/portal");
 
-  const { week, date, view, tab, google } = await searchParams;
+  const { week, date, view, tab, google, planilla } = await searchParams;
   // `week` = enlaces viejos (?week=YYYY-MM-DD).
   const calDate = date ?? week ?? "";
   const activeTab = tab === "calendario" ? "calendario" : "resumen";
@@ -62,6 +63,21 @@ export default async function PerfilPage({
             <AvatarUpload hasPhoto={Boolean(user.avatarUpdatedAt)} />
           </div>
         </div>
+        {user.roleCodes.includes("ADMIN") && (
+          <form action={launchDedicacionSync} className="flex items-center gap-3">
+            {planilla && (
+              <span className="text-xs text-[#5d6b77]">
+                {/^\d+$/.test(planilla) ? `Planilla actualizada: ${planilla} filas` : `Planilla: ${planilla}`}
+              </span>
+            )}
+            <SubmitButton
+              pendingLabel="Lanzando…"
+              className="rounded-lg border border-[#e4e8ec] px-3 py-1.5 text-xs font-semibold text-[#081826] hover:bg-[#f4f6f8]"
+            >
+              Lanzar CRON Planilla
+            </SubmitButton>
+          </form>
+        )}
       </header>
 
       <div className="border-b border-[#e4e8ec] bg-white px-6">

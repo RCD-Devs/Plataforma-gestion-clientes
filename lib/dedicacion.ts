@@ -1,5 +1,6 @@
 import { prisma } from "./db";
 import { chileDateKey } from "./dates";
+import { replaceSheetTab } from "./googleSheets";
 
 // Reporte de dedicación (planilla de Google Sheets que empuja el cron
 // diario): una fila por persona × cliente × mes, del equipo Experiencia
@@ -137,4 +138,19 @@ export async function loadDedicacionRows(now = new Date()): Promise<Cell[][]> {
     people,
     clients: new Map(clients.map((c) => [c.id, c.nombreReporte || c.name])),
   });
+}
+
+// Sin las variables no hace nada. Si falla, la planilla queda con los datos
+// del día anterior y el error queda en los logs — no corta lo demás.
+export async function syncDedicacion(): Promise<number | "sin configurar" | "error"> {
+  const sheetId = process.env.DEDICACION_SHEET_ID;
+  if (!sheetId || !process.env.GOOGLE_SERVICE_ACCOUNT_JSON) return "sin configurar";
+  try {
+    const rows = await loadDedicacionRows();
+    await replaceSheetTab(sheetId, process.env.DEDICACION_SHEET_TAB || "Dedicación", [REPORT_HEADER, ...rows]);
+    return rows.length;
+  } catch (err) {
+    console.error("[dedicación] planilla de dedicación:", err);
+    return "error";
+  }
 }

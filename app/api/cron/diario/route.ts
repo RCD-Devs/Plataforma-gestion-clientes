@@ -1,8 +1,7 @@
 import { fillAllSeries } from "@/lib/dailyPlanner";
 import { notifyDailyFacilitators } from "@/lib/dailyAlerts";
 import { alertDueFollowUps } from "@/lib/followUpAlerts";
-import { loadDedicacionRows, REPORT_HEADER } from "@/lib/dedicacion";
-import { replaceSheetTab } from "@/lib/googleSheets";
+import { syncDedicacion } from "@/lib/dedicacion";
 
 export const dynamic = "force-dynamic";
 
@@ -23,19 +22,4 @@ export async function GET(req: Request) {
   await alertDueFollowUps();
   const dedicacion = await syncDedicacion();
   return Response.json({ ok: true, planned, dailyAlerts, dedicacion });
-}
-
-// Sin las variables no hace nada. Si falla, la planilla queda con los datos
-// del día anterior y el error queda en los logs — no corta lo demás.
-async function syncDedicacion() {
-  const sheetId = process.env.DEDICACION_SHEET_ID;
-  if (!sheetId || !process.env.GOOGLE_SERVICE_ACCOUNT_JSON) return "sin configurar";
-  try {
-    const rows = await loadDedicacionRows();
-    await replaceSheetTab(sheetId, process.env.DEDICACION_SHEET_TAB || "Dedicación", [REPORT_HEADER, ...rows]);
-    return rows.length;
-  } catch (err) {
-    console.error("[cron] planilla de dedicación:", err);
-    return "error";
-  }
 }

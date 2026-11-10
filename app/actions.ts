@@ -47,7 +47,7 @@ import { decryptToken, revokeToken } from "@/lib/googleCalendar";
 import { uniqueSlug } from "@/lib/slug";
 import { projectHref } from "@/lib/projectInsights";
 import { uniqueClientCode } from "@/lib/clientCode";
-import { timeEntrySnapshot } from "@/lib/dedicacion";
+import { syncDedicacion, timeEntrySnapshot } from "@/lib/dedicacion";
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 // Invitaciones de usuarios nuevos: la persona puede tardar en abrir el correo.
@@ -2964,6 +2964,15 @@ export async function updateScheduleBlock(blockId: string, start: string, end: s
   const overlaps = await overlapWarnings(user.id, s, e, blockId);
   revalidatePath("/perfil");
   return { ok: true, overlaps };
+}
+
+// Botón de /perfil (solo ADMIN): reescribe la planilla de dedicación ya,
+// sin el resto del cron diario (que manda avisos).
+export async function launchDedicacionSync(): Promise<void> {
+  const user = await getSessionUser();
+  if (!user?.roleCodes.includes("ADMIN")) return;
+  const result = await syncDedicacion();
+  redirect(`/perfil?planilla=${encodeURIComponent(String(result))}`);
 }
 
 // Jornada laboral propia (horas netas por día, lun..dom) — solo afecta la
