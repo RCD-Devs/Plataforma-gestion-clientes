@@ -2211,6 +2211,7 @@ export async function createClient(formData: FormData) {
       isActive: formData.get("isActive") === "on",
       members: { create: (await validMemberIds(formData)).map((userId) => ({ userId })) },
       servicio: String(formData.get("servicio") || "").trim() || null,
+      nombreReporte: String(formData.get("nombreReporte") || "").trim() || null,
       teams: { connect: (await validTeamIds(formData)).map((id) => ({ id })) },
     },
   });
@@ -2244,6 +2245,7 @@ export async function updateClient(id: string, formData: FormData) {
     data: {
       members: { deleteMany: {}, create: memberIds.map((userId) => ({ userId })) },
       servicio: String(formData.get("servicio") || "").trim() || null,
+      nombreReporte: String(formData.get("nombreReporte") || "").trim() || null,
       teams: { set: (await validTeamIds(formData)).map((id) => ({ id })) },
       name,
       code: rawCode || undefined,

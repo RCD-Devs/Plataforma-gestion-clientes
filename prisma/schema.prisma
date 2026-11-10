@@ -53,6 +53,8 @@ model Client {
   // Reporte de dedicación (planilla Sheets): servicio que se le presta y
   // equipos que lo atienden — más de uno = "Continuidad".
   servicio String?
+  // Nombre del cliente en la planilla (si difiere del de RGC).
+  nombreReporte String?
   teams    Team[]  @relation("clientTeams")
 
   accountManagerId String?

@@ -35,6 +35,7 @@ export function ClientForm({
     accountManagerId: string | null;
     isActive: boolean;
     servicio: string | null;
+    nombreReporte: string | null;
   };
   managers: { id: string; name: string }[];
   // Equipo interno asignable al cliente y quiénes ya están asignados.
@@ -185,6 +186,8 @@ export function ClientForm({
         <div>
           <label className={labelCls}>Servicio</label>
           <input name="servicio" defaultValue={client?.servicio ?? ""} placeholder="Ej. Gestión de RRSS" className={inputCls} />
+          <label className={`${labelCls} mt-3`}>Nombre en reporte de dedicación</label>
+          <input name="nombreReporte" defaultValue={client?.nombreReporte ?? ""} placeholder="Vacío = nombre del cliente" className={inputCls} />
         </div>
         <div>
           <label className={labelCls}>Equipos que lo atienden</label>
