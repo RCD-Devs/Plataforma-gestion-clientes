@@ -18,8 +18,31 @@ const ahead = (d: number) => new Date(now + d * DAY);
 // mustChangePassword: true, así que es solo para el primer ingreso.
 const DEMO_PASSWORD = "Revo1234!";
 
+// Nombre de cada cliente en la planilla de dedicación (lo pidió gerencia).
+// Corre en cada deploy y solo llena los vacíos: lo editado a mano en la
+// ficha del cliente se respeta.
+const REPORT_NAMES: Record<string, string> = {
+  ACHS: "ACHS Salud",
+  "Afp Habitat": "Habitat",
+  "Agencia HERA": "HERA",
+  Cristalchile: "Cristal Chile",
+  Fanatiz: "FANATIZ 1190",
+  "FSC Chile": "FSC",
+  "Grupo Revo": "Revo",
+  JACFORKLIFT: "Jacforklift",
+  "Nuva Oxi": "NUVA OXI",
+  "Phitec AIG": "PhitecAIG",
+  "Salmón Chile": "Salmon Chile",
+  Soul: "SOUL",
+  "Te Pillé": "TePillé",
+  VRAEA: "UdeC",
+};
+
 async function main() {
   await seedStatuses(prisma);
+  for (const [name, nombreReporte] of Object.entries(REPORT_NAMES)) {
+    await prisma.client.updateMany({ where: { name, nombreReporte: null }, data: { nombreReporte } });
+  }
 
   const existing = await prisma.user.count();
   if (existing > 0) {
